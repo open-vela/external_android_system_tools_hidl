@@ -24,28 +24,25 @@
 namespace android {
 
 struct FQName {
-    __attribute__((warn_unused_result)) static bool parse(const std::string& s, FQName* into);
-
     explicit FQName();
+    explicit FQName(const std::string &s);
 
-    FQName(const std::string& package, const std::string& version, const std::string& name = "",
-           const std::string& valueName = "");
+    FQName(const std::string &package,
+           const std::string &version,
+           const std::string &name,
+           const std::string &valueName = "");
 
     FQName(const FQName& other);
 
+    bool isValid() const;
     bool isIdentifier() const;
-
-    // Returns false if string isn't a valid FQName object.
-    __attribute__((warn_unused_result)) bool setTo(const std::string& s);
-    __attribute__((warn_unused_result)) bool setTo(const std::string& package, size_t majorVer,
-                                                   size_t minorVer, const std::string& name = "",
-                                                   const std::string& valueName = "");
+    bool setTo(const std::string &s);
 
     void applyDefaults(
             const std::string &defaultPackage,
             const std::string &defaultVersion);
 
-    const std::string& package() const;
+    std::string package() const;
     // Return version in the form "@1.0" if it is present, otherwise empty string.
     std::string atVersion() const;
     // Return version in the form "1.0" if it is present, otherwise empty string.
@@ -54,10 +51,6 @@ struct FQName {
     std::string sanitizedVersion() const;
     // Return true only if version is present.
     bool hasVersion() const;
-    // Return pair of (major, minor) version. Defaults to 0, 0.
-    std::pair<size_t, size_t> getVersion() const;
-
-    FQName withVersion(size_t major, size_t minor) const;
 
     // The next two methods return the name part of the FQName, that is, the
     // part after the version field.  For example:
@@ -83,13 +76,13 @@ struct FQName {
     // FQName::name() will return "IFoo.bar.baz". FQName::names() will return
     // std::vector<std::string>{"IFoo","bar","baz"}
 
-    const std::string& name() const;
+    std::string name() const;
     std::vector<std::string> names() const;
 
     // The next two methods returns two parts of the FQName, that is,
     // the first part package + version + name, the second part valueName.
     FQName typeName() const;
-    const std::string& valueName() const;
+    std::string valueName() const;
 
     // has package version and name
     bool isFullyQualified() const;
@@ -121,7 +114,7 @@ struct FQName {
     // Must be called on an interface
     // android.hardware.foo@1.0::IBar
     // -> IBar
-    const std::string& getInterfaceName() const;
+    std::string getInterfaceName() const;
 
     // Must be called on an interface
     // android.hardware.foo@1.0::IBar
@@ -225,7 +218,8 @@ struct FQName {
     // minor-- if result doesn't underflow, else abort.
     FQName downRev() const;
 
-   private:
+private:
+    bool mValid;
     bool mIsIdentifier;
     std::string mPackage;
     // mMajor == 0 means empty.
@@ -234,25 +228,15 @@ struct FQName {
     std::string mName;
     std::string mValueName;
 
-    void clear();
-
-    __attribute__((warn_unused_result)) bool setVersion(const std::string& v);
-    __attribute__((warn_unused_result)) bool parseVersion(const std::string& majorStr,
-                                                          const std::string& minorStr);
-    __attribute__((warn_unused_result)) static bool parseVersion(const std::string& majorStr,
-                                                                 const std::string& minorStr,
-                                                                 size_t* majorVer,
-                                                                 size_t* minorVer);
-    __attribute__((warn_unused_result)) static bool parseVersion(const std::string& v,
-                                                                 size_t* majorVer,
-                                                                 size_t* minorVer);
-    static void clearVersion(size_t* majorVer, size_t* minorVer);
-
+    void setVersion(const std::string &v);
     void clearVersion();
+    void parseVersion(const std::string &majorStr, const std::string &minorStr);
 };
 
-extern const FQName gIBaseFqName;
-extern const FQName gIManagerFqName;
+static const FQName gIBaseFqName = FQName{"android.hidl.base@1.0::IBase"};
+static const FQName gIBasePackageFqName = FQName{"android.hidl.base"};
+static const FQName gIManagerFqName = FQName{"android.hidl.manager@1.0::IServiceManager"};
+static const FQName gIManagerPackageFqName = FQName{"android.hidl.manager"};
 
 }  // namespace android
 

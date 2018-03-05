@@ -21,7 +21,6 @@
 #include <android-base/logging.h>
 #include <hidl-util/FQName.h>
 
-#include "DocComment.h"
 #include "Location.h"
 
 namespace android {
@@ -113,7 +112,7 @@ struct Reference {
         // Valid only while not resolved to prevent confusion when
         // ref.hasLookupFqName() is false while ref,get()->fqName is valid.
         CHECK(!isResolved());
-        return mFqName != FQName();
+        return mFqName.isValid();
     }
 
     template <class OtherT>
@@ -121,7 +120,7 @@ struct Reference {
 };
 
 template <class T>
-struct NamedReference : public Reference<T>, DocCommentable {
+struct NamedReference : public Reference<T> {
     NamedReference(const std::string& name, const Reference<T>& reference, const Location& location)
         : Reference<T>(reference, location), mName(name) {}
 

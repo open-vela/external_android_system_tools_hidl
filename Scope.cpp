@@ -75,13 +75,12 @@ NamedType *Scope::lookupType(const FQName &fqName) const {
     Scope *outerScope = static_cast<Scope *>(outerType);
     // *slowly* pop first element
     names.erase(names.begin());
-    FQName innerName;
-    CHECK(FQName::parse(StringHelper::JoinStrings(names, "."), &innerName));
+    FQName innerName(StringHelper::JoinStrings(names, "."));
     return outerScope->lookupType(innerName);
 }
 
 LocalIdentifier *Scope::lookupIdentifier(const std::string & /*name*/) const {
-    return nullptr;
+    return NULL;
 }
 
 bool Scope::isScope() const {
@@ -93,10 +92,10 @@ Interface *Scope::getInterface() const {
         return static_cast<Interface *>(mTypes[0]);
     }
 
-    return nullptr;
+    return NULL;
 }
 
-bool Scope::definesInterfaces() const {
+bool Scope::containsInterfaces() const {
     for (const NamedType *type : mTypes) {
         if (type->isInterface()) {
             return true;
@@ -160,7 +159,6 @@ void Scope::emitTypeDeclarations(Formatter& out) const {
     }
 
     for (const Type* type : mTypes) {
-        type->emitDocComment(out);
         type->emitTypeDeclarations(out);
     }
 }
@@ -177,12 +175,6 @@ void Scope::emitPackageTypeDeclarations(Formatter& out) const {
     }
 }
 
-void Scope::emitPackageTypeHeaderDefinitions(Formatter& out) const {
-    for (const Type* type : mTypes) {
-        type->emitPackageTypeHeaderDefinitions(out);
-    }
-}
-
 void Scope::emitPackageHwDeclarations(Formatter& out) const {
     for (const Type* type : mTypes) {
         type->emitPackageHwDeclarations(out);
@@ -195,7 +187,6 @@ void Scope::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
     }
 
     for (const Type* type : mTypes) {
-        type->emitDocComment(out);
         type->emitJavaTypeDeclarations(out, atTopLevel);
     }
 }
