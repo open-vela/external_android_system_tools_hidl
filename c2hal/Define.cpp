@@ -53,7 +53,7 @@ void Define::processContents(AST &ast) {
     }
 
     mExpression = ast.getExpression();
-    ast.setExpression(nullptr);
+    ast.setExpression(NULL);
 
     mExpressionType = mExpression->getType(ast);
 

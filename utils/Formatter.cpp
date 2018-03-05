@@ -22,10 +22,10 @@
 
 namespace android {
 
-Formatter::Formatter() : mFile(nullptr /* invalid */), mIndentDepth(0), mAtStartOfLine(true) {}
+Formatter::Formatter() : mFile(NULL /* invalid */), mIndentDepth(0), mAtStartOfLine(true) {}
 
 Formatter::Formatter(FILE* file, size_t spacesPerIndent)
-    : mFile(file == nullptr ? stdout : file),
+    : mFile(file == NULL ? stdout : file),
       mIndentDepth(0),
       mSpacesPerIndent(spacesPerIndent),
       mAtStartOfLine(true) {}
@@ -34,7 +34,7 @@ Formatter::~Formatter() {
     if (mFile != stdout) {
         fclose(mFile);
     }
-    mFile = nullptr;
+    mFile = NULL;
 }
 
 void Formatter::indent(size_t level) {
@@ -123,8 +123,8 @@ Formatter &Formatter::operator<<(const std::string &out) {
 
         if (pos == std::string::npos) {
             if (mAtStartOfLine) {
-                fprintf(mFile, "%*s", (int)(mSpacesPerIndent * mIndentDepth), "");
                 fprintf(mFile, "%s", mLinePrefix.c_str());
+                fprintf(mFile, "%*s", (int)(mSpacesPerIndent * mIndentDepth), "");
                 mAtStartOfLine = false;
             }
 
@@ -132,16 +132,17 @@ Formatter &Formatter::operator<<(const std::string &out) {
             break;
         }
 
-        if (mAtStartOfLine && (pos > start || !mLinePrefix.empty())) {
-            fprintf(mFile, "%*s", (int)(mSpacesPerIndent * mIndentDepth), "");
-            fprintf(mFile, "%s", mLinePrefix.c_str());
-        }
-
         if (pos == start) {
             fprintf(mFile, "\n");
             mAtStartOfLine = true;
         } else if (pos > start) {
+            if (mAtStartOfLine) {
+                fprintf(mFile, "%s", mLinePrefix.c_str());
+                fprintf(mFile, "%*s", (int)(mSpacesPerIndent * mIndentDepth), "");
+            }
+
             output(out.substr(start, pos - start + 1));
+
             mAtStartOfLine = true;
         }
 

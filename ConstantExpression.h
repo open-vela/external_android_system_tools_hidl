@@ -60,9 +60,6 @@ struct ConstantExpression {
                            std::unordered_set<const ConstantExpression*>* visited,
                            bool processBeforeDependencies) const;
 
-    // If this object is in an invalid state.
-    virtual status_t validate() const;
-
     // Evaluates current constant expression
     // Doesn't call recursive evaluation, so must be called after dependencies
     virtual void evaluate() = 0;
@@ -72,9 +69,6 @@ struct ConstantExpression {
 
     std::vector<Reference<LocalIdentifier>*> getReferences();
     virtual std::vector<const Reference<LocalIdentifier>*> getReferences() const;
-
-    std::vector<Reference<Type>*> getTypeReferences();
-    virtual std::vector<const Reference<Type>*> getTypeReferences() const;
 
     // Recursive tree pass checkAcyclic return type.
     // Stores cycle end for nice error messages.
@@ -99,11 +93,11 @@ struct ConstantExpression {
 
     /* Returns true iff the value has already been evaluated. */
     bool isEvaluated() const;
-    /* Evaluated result in a string form with comment if applicable. */
+    /* Evaluated result in a string form. */
     std::string value() const;
-    /* Evaluated result in a string form with comment if applicable. */
+    /* Evaluated result in a string form. */
     std::string cppValue() const;
-    /* Evaluated result in a string form with comment if applicable. */
+    /* Evaluated result in a string form. */
     std::string javaValue() const;
     /* Evaluated result in a string form, with given contextual kind. */
     std::string value(ScalarType::Kind castKind) const;
@@ -111,10 +105,10 @@ struct ConstantExpression {
     std::string cppValue(ScalarType::Kind castKind) const;
     /* Evaluated result in a string form, with given contextual kind. */
     std::string javaValue(ScalarType::Kind castKind) const;
-
-    /* The expression representing this value for use in comments when the value is not needed */
-    const std::string& expression() const;
-
+    /* Formatted expression with type. */
+    const std::string& description() const;
+    /* See mTrivialDescription */
+    bool descriptionIsTrivial() const;
     /* Return a ConstantExpression that is 1 plus the original. */
     std::unique_ptr<ConstantExpression> addOne(ScalarType::Kind baseKind);
 
@@ -123,14 +117,6 @@ struct ConstantExpression {
     // Marks that package proceeding is completed
     // Post parse passes must be proceeded during owner package parsin
     void setPostParseCompleted();
-
-    /*
-     * Helper function for all cpp/javaValue methods.
-     * Returns a plain string (without any prefixes or suffixes, just the
-     * digits) converted from mValue.
-     */
-    std::string rawValue() const;
-    std::string rawValue(ScalarType::Kind castKind) const;
 
    private:
     /* If the result value has been evaluated. */
@@ -147,9 +133,11 @@ struct ConstantExpression {
     bool mIsPostParseCompleted = false;
 
     /*
-     * Helper function, gives suffix comment to add to value/cppValue/javaValue
+     * Helper function for all cpp/javaValue methods.
+     * Returns a plain string (without any prefixes or suffixes, just the
+     * digits) converted from mValue.
      */
-    std::string descriptionSuffix() const;
+    std::string rawValue(ScalarType::Kind castKind) const;
 
     /*
      * Return the value casted to the given type.
@@ -164,16 +152,17 @@ struct ConstantExpression {
     friend struct BinaryConstantExpression;
     friend struct TernaryConstantExpression;
     friend struct ReferenceConstantExpression;
-    friend struct AttributeConstantExpression;
 };
 
 struct LiteralConstantExpression : public ConstantExpression {
     LiteralConstantExpression(ScalarType::Kind kind, uint64_t value);
-    LiteralConstantExpression(ScalarType::Kind kind, uint64_t value, const std::string& expr);
     void evaluate() override;
     std::vector<const ConstantExpression*> getConstantExpressions() const override;
 
     static LiteralConstantExpression* tryParse(const std::string& value);
+
+private:
+    LiteralConstantExpression(ScalarType::Kind kind, uint64_t value, const std::string& expr);
 };
 
 struct UnaryConstantExpression : public ConstantExpression {
@@ -220,22 +209,6 @@ struct ReferenceConstantExpression : public ConstantExpression {
 
    private:
     Reference<LocalIdentifier> mReference;
-};
-
-// This constant expression is a compile-time calculatable expression based on another type
-struct AttributeConstantExpression : public ConstantExpression {
-    AttributeConstantExpression(const Reference<Type>& value, const std::string& fqname,
-                                const std::string& tag);
-
-    status_t validate() const override;
-    void evaluate() override;
-
-    std::vector<const ConstantExpression*> getConstantExpressions() const override;
-    std::vector<const Reference<Type>*> getTypeReferences() const override;
-
-   private:
-    Reference<Type> mReference;
-    const std::string mTag;
 };
 
 }  // namespace android

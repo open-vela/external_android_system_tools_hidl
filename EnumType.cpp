@@ -49,14 +49,6 @@ void EnumType::forEachValueFromRoot(const std::function<void(EnumValue*)> f) con
     }
 }
 
-size_t EnumType::numValueNames() const {
-    size_t count = 0;
-    for (const auto it : typeChain()) {
-        count += it->values().size();
-    }
-    return count;
-}
-
 void EnumType::addValue(EnumValue* value) {
     CHECK(value != nullptr);
     mValues.push_back(value);
@@ -176,8 +168,8 @@ std::string EnumType::getJavaSuffix() const {
     return mStorageType->resolveToScalarType()->getJavaSuffix();
 }
 
-std::string EnumType::getJavaTypeClass() const {
-    return mStorageType->resolveToScalarType()->getJavaTypeClass();
+std::string EnumType::getJavaWrapperType() const {
+    return mStorageType->resolveToScalarType()->getJavaWrapperType();
 }
 
 std::string EnumType::getVtsType() const {
@@ -193,8 +185,8 @@ std::string EnumType::getBitfieldJavaType(bool forInitializer) const {
     return resolveToScalarType()->getJavaType(forInitializer);
 }
 
-std::string EnumType::getBitfieldJavaTypeClass() const {
-    return resolveToScalarType()->getJavaTypeClass();
+std::string EnumType::getBitfieldJavaWrapperType() const {
+    return resolveToScalarType()->getJavaWrapperType();
 }
 
 LocalIdentifier *EnumType::lookupIdentifier(const std::string &name) const {
@@ -218,7 +210,7 @@ void EnumType::emitReaderWriter(
         bool isReader,
         ErrorMode mode) const {
     const ScalarType *scalarType = mStorageType->resolveToScalarType();
-    CHECK(scalarType != nullptr);
+    CHECK(scalarType != NULL);
 
     scalarType->emitReaderWriterWithCast(
             out,
@@ -262,13 +254,20 @@ void EnumType::emitTypeDeclarations(Formatter& out) const {
         const auto &type = *it;
 
         for (const auto &entry : type->values()) {
-            entry->emitDocComment(out);
-
             out << entry->name();
 
             std::string value = entry->cppValue(scalarType->getKind());
             CHECK(!value.empty()); // use autofilled values for c++.
-            out << " = " << value << ",\n";
+            out << " = " << value;
+
+            out << ",";
+
+            std::string comment = entry->comment();
+            if (!comment.empty()) {
+                out << " // " << comment;
+            }
+
+            out << "\n";
         }
     }
 
@@ -289,17 +288,27 @@ void EnumType::emitIteratorDeclaration(Formatter& out) const {
         elementCount += type->mValues.size();
     }
 
-    out << "template<> constexpr std::array<" << getCppStackType() << ", " << elementCount
-        << "> hidl_enum_values<" << getCppStackType() << "> = ";
+    out << "template<> struct hidl_enum_iterator<" << getCppStackType() << ">\n";
     out.block([&] {
-        auto enumerators = typeChain();
-        std::reverse(enumerators.begin(), enumerators.end());
-        for (const auto* type : enumerators) {
-            for (const auto* enumValue : type->mValues) {
-                out << fullName() << "::" << enumValue->name() << ",\n";
-            }
-        }
-    }) << ";\n";
+        out << "const " << getCppStackType() << "* begin() { return static_begin(); }\n";
+        out << "const " << getCppStackType() << "* end() { return begin() + " << elementCount
+            << "; }\n";
+        out << "private:\n";
+        out << "static const " << getCppStackType() << "* static_begin() ";
+        out.block([&] {
+            out << "static const " << getCppStackType() << " kVals[" << elementCount << "] ";
+            out.block([&] {
+                auto enumerators = typeChain();
+                std::reverse(enumerators.begin(), enumerators.end());
+                for (const auto* type : enumerators) {
+                    for (const auto* enumValue : type->mValues) {
+                        out << fullName() << "::" << enumValue->name() << ",\n";
+                    }
+                }
+            }) << ";\n";
+            out << "return &kVals[0];\n";
+        });
+    }) << ";\n\n";
 }
 
 void EnumType::emitEnumBitwiseOperator(
@@ -345,7 +354,7 @@ void EnumType::emitEnumBitwiseOperator(
         out << ");\n";
     });
 
-    out << "}\n";
+    out << "}\n\n";
 }
 
 void EnumType::emitBitFieldBitwiseAssignmentOperator(
@@ -364,27 +373,20 @@ void EnumType::emitBitFieldBitwiseAssignmentOperator(
         out << "return v;\n";
     });
 
-    out << "}\n";
+    out << "}\n\n";
 }
 
 void EnumType::emitGlobalTypeDeclarations(Formatter& out) const {
     out << "namespace android {\n";
     out << "namespace hardware {\n";
-    out << "namespace details {\n";
 
     emitIteratorDeclaration(out);
 
-    out << "}  // namespace details\n";
     out << "}  // namespace hardware\n";
-    out << "}  // namespace android\n\n";
+    out << "}  // namespace android\n";
 }
 
 void EnumType::emitPackageTypeDeclarations(Formatter& out) const {
-    out << "template<typename>\n"
-        << "static inline std::string toString(" << resolveToScalarType()->getCppArgumentType()
-        << " o);\n";
-    out << "static inline std::string toString(" << getCppArgumentType() << " o);\n\n";
-
     emitEnumBitwiseOperator(out, true  /* lhsIsEnum */, true  /* rhsIsEnum */, "|");
     emitEnumBitwiseOperator(out, false /* lhsIsEnum */, true  /* rhsIsEnum */, "|");
     emitEnumBitwiseOperator(out, true  /* lhsIsEnum */, false /* rhsIsEnum */, "|");
@@ -395,13 +397,29 @@ void EnumType::emitPackageTypeDeclarations(Formatter& out) const {
     emitBitFieldBitwiseAssignmentOperator(out, "|");
     emitBitFieldBitwiseAssignmentOperator(out, "&");
 
-    out.endl();
-}
+    // TODO(b/65200821): remove these ifndefs
+    out << "#ifdef REALLY_IS_HIDL_INTERNAL_LIB" << gCurrentCompileName << "\n";
+        // toString for bitfields, equivalent to dumpBitfield in Java
+        out << "template<typename>\n"
+            << "std::string toString("
+            << resolveToScalarType()->getCppArgumentType()
+            << " o);\n";
+        out << "template<>\n"
+            << "std::string toString<" << getCppStackType() << ">("
+            << resolveToScalarType()->getCppArgumentType()
+            << " o);\n\n";
 
-void EnumType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
+        // toString for enum itself
+        out << "std::string toString("
+            << getCppArgumentType()
+            << " o);\n\n";
+    out << "#else\n";
     const ScalarType *scalarType = mStorageType->resolveToScalarType();
-    CHECK(scalarType != nullptr);
+    CHECK(scalarType != NULL);
 
+    out << "template<typename>\n"
+        << "static inline std::string toString(" << resolveToScalarType()->getCppArgumentType()
+        << " o);\n";
     out << "template<>\n"
         << "inline std::string toString<" << getCppStackType() << ">("
         << scalarType->getCppArgumentType() << " o) ";
@@ -411,6 +429,63 @@ void EnumType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
             << "std::string os;\n"
             << getBitfieldCppType(StorageMode_Stack) << " flipped = 0;\n"
             << "bool first = true;\n";
+        for (EnumValue *value : values()) {
+            std::string valueName = fullName() + "::" + value->name();
+            out.sIf("(o & " + valueName + ")" +
+                    " == static_cast<" + scalarType->getCppStackType() +
+                    ">(" + valueName + ")", [&] {
+                out << "os += (first ? \"\" : \" | \");\n"
+                    << "os += \"" << value->name() << "\";\n"
+                    << "first = false;\n"
+                    << "flipped |= " << valueName << ";\n";
+            }).endl();
+        }
+        // put remaining bits
+        out.sIf("o != flipped", [&] {
+            out << "os += (first ? \"\" : \" | \");\n";
+            scalarType->emitHexDump(out, "os", "o & (~flipped)");
+        });
+        out << "os += \" (\";\n";
+        scalarType->emitHexDump(out, "os", "o");
+        out << "os += \")\";\n";
+
+        out << "return os;\n";
+    }).endl().endl();
+
+    out << "static inline std::string toString(" << getCppArgumentType() << " o) ";
+
+    out.block([&] {
+        out << "using ::android::hardware::details::toHexString;\n";
+        for (EnumValue *value : values()) {
+            out.sIf("o == " + fullName() + "::" + value->name(), [&] {
+                out << "return \"" << value->name() << "\";\n";
+            }).endl();
+        }
+        out << "std::string os;\n";
+        scalarType->emitHexDump(out, "os",
+            "static_cast<" + scalarType->getCppStackType() + ">(o)");
+        out << "return os;\n";
+    }).endl().endl();
+    out << "#endif  // REALLY_IS_HIDL_INTERNAL_LIB\n";
+}
+
+void EnumType::emitTypeDefinitions(Formatter& out, const std::string& /* prefix */) const {
+    // TODO(b/65200821): remove toString from .cpp once all prebuilts are rebuilt
+
+    const ScalarType *scalarType = mStorageType->resolveToScalarType();
+    CHECK(scalarType != NULL);
+
+    out << "template<>\n"
+        << "std::string toString<" << getCppStackType() << ">("
+        << scalarType->getCppArgumentType()
+        << " o) ";
+    out.block([&] {
+        // include toHexString for scalar types
+        out << "using ::android::hardware::details::toHexString;\n"
+            << "std::string os;\n"
+            << getBitfieldCppType(StorageMode_Stack) << " flipped = 0;\n"
+            << "bool first = true;\n";
+
         forEachValueFromRoot([&](EnumValue* value) {
             std::string valueName = fullName() + "::" + value->name();
             out.sIf("(o & " + valueName + ")" +
@@ -434,15 +509,19 @@ void EnumType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
         out << "return os;\n";
     }).endl().endl();
 
-    out << "static inline std::string toString(" << getCppArgumentType() << " o) ";
+    out << "std::string toString("
+        << getCppArgumentType()
+        << " o) ";
 
     out.block([&] {
         out << "using ::android::hardware::details::toHexString;\n";
+
         forEachValueFromRoot([&](EnumValue* value) {
             out.sIf("o == " + fullName() + "::" + value->name(), [&] {
                 out << "return \"" << value->name() << "\";\n";
             }).endl();
         });
+
         out << "std::string os;\n";
         scalarType->emitHexDump(out, "os",
             "static_cast<" + scalarType->getCppStackType() + ">(o)");
@@ -452,7 +531,7 @@ void EnumType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
 
 void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
     const ScalarType *scalarType = mStorageType->resolveToScalarType();
-    CHECK(scalarType != nullptr);
+    CHECK(scalarType != NULL);
 
     out << "public "
         << (atTopLevel ? "" : "static ")
@@ -471,8 +550,6 @@ void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
         const auto &type = *it;
 
         for (const auto &entry : type->values()) {
-            entry->emitDocComment(out);
-
             out << "public static final "
                 << typeName
                 << " "
@@ -482,7 +559,16 @@ void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
             // javaValue will make the number signed.
             std::string value = entry->javaValue(scalarType->getKind());
             CHECK(!value.empty()); // use autofilled values for java.
-            out << value << ";\n";
+            out << value;
+
+            out << ";";
+
+            std::string comment = entry->comment();
+            if (!comment.empty()) {
+                out << " // " << comment;
+            }
+
+            out << "\n";
         }
     }
 
@@ -500,6 +586,7 @@ void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
     }).endl();
 
     auto bitfieldType = getBitfieldJavaType(false /* forInitializer */);
+    auto bitfieldWrapperType = getBitfieldJavaWrapperType();
     out << "\n"
         << "public static final String dumpBitfield("
         << bitfieldType << " o) ";
@@ -550,7 +637,7 @@ void EnumType::emitVtsTypeDeclarations(Formatter& out) const {
             out << "scalar_value: {\n";
             out.indent();
             // use autofilled values for vts.
-            std::string value = entry->rawValue(scalarType->getKind());
+            std::string value = entry->value(scalarType->getKind());
             CHECK(!value.empty());
             out << mStorageType->resolveToScalarType()->getVtsScalarType()
                 << ": "
@@ -691,7 +778,16 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
                 // javaValue will make the number signed.
                 std::string value = entry->javaValue(scalarType->getKind());
                 CHECK(!value.empty()); // use autofilled values for java.
-                out << value << ";\n";
+                out << value;
+
+                out << ";";
+
+                std::string comment = entry->comment();
+                if (!comment.empty()) {
+                    out << " // " << comment;
+                }
+
+                out << "\n";
             }
         }
 
@@ -720,7 +816,16 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
 
             std::string value = entry->cppValue(scalarType->getKind());
             CHECK(!value.empty()); // use autofilled values for c++.
-            out << " = " << value << ",\n";
+            out << " = " << value;
+
+            out << ",";
+
+            std::string comment = entry->comment();
+            if (!comment.empty()) {
+                out << " // " << comment;
+            }
+
+            out << "\n";
         }
     }
 
@@ -743,9 +848,9 @@ std::string EnumValue::name() const {
     return mName;
 }
 
-std::string EnumValue::rawValue(ScalarType::Kind castKind) const {
+std::string EnumValue::value(ScalarType::Kind castKind) const {
     CHECK(mValue != nullptr);
-    return mValue->rawValue(castKind);
+    return mValue->value(castKind);
 }
 
 std::string EnumValue::cppValue(ScalarType::Kind castKind) const {
@@ -755,6 +860,12 @@ std::string EnumValue::cppValue(ScalarType::Kind castKind) const {
 std::string EnumValue::javaValue(ScalarType::Kind castKind) const {
     CHECK(mValue != nullptr);
     return mValue->javaValue(castKind);
+}
+
+std::string EnumValue::comment() const {
+    CHECK(mValue != nullptr);
+    if (mValue->descriptionIsTrivial()) return "";
+    return mValue->description();
 }
 
 ConstantExpression *EnumValue::constExpr() const {
@@ -829,8 +940,8 @@ std::string BitFieldType::getJavaSuffix() const {
     return resolveToScalarType()->getJavaSuffix();
 }
 
-std::string BitFieldType::getJavaTypeClass() const {
-    return getElementEnumType()->getBitfieldJavaTypeClass();
+std::string BitFieldType::getJavaWrapperType() const {
+    return getElementEnumType()->getBitfieldJavaWrapperType();
 }
 
 std::string BitFieldType::getVtsType() const {
