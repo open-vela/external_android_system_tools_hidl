@@ -47,7 +47,6 @@ type ccProperties struct {
 	Export_shared_lib_headers []string
 	Export_static_lib_headers []string
 	Export_generated_headers  []string
-	Double_loadable           *bool
 }
 
 type javaProperties struct {
