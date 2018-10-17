@@ -996,7 +996,7 @@ bool Interface::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) c
         }
     }
 
-    return Scope::deepIsJavaCompatible(visited);
+    return Scope::isJavaCompatible(visited);
 }
 
 bool Interface::isNeverStrongReference() const {
