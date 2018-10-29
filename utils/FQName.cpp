@@ -450,10 +450,6 @@ bool FQName::hasVersion() const {
     return mMajor > 0;
 }
 
-std::pair<size_t, size_t> FQName::getVersion() const {
-    return {mMajor, mMinor};
-}
-
 FQName FQName::withVersion(size_t major, size_t minor) const {
     FQName ret(*this);
     ret.mMajor = major;
