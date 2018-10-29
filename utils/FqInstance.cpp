@@ -39,7 +39,7 @@ size_t FqInstance::getMinorVersion() const {
 }
 
 std::pair<size_t, size_t> FqInstance::getVersion() const {
-    return mFqName.getVersion();
+    return {getMajorVersion(), getMinorVersion()};
 }
 
 bool FqInstance::hasVersion() const {
