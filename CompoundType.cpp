@@ -18,82 +18,61 @@
 
 #include "ArrayType.h"
 #include "VectorType.h"
-
-#include <android-base/logging.h>
 #include <hidl-util/Formatter.h>
-#include <iostream>
-#include <unordered_set>
+#include <android-base/logging.h>
 
 namespace android {
 
-CompoundType::CompoundType(Style style, const char* localName, const FQName& fullName,
-                           const Location& location, Scope* parent)
-    : Scope(localName, fullName, location, parent), mStyle(style), mFields(NULL) {}
+CompoundType::CompoundType(Style style, const char* localName, const Location& location,
+                           Scope* parent)
+    : Scope(localName, location, parent), mStyle(style), mFields(NULL) {}
 
 CompoundType::Style CompoundType::style() const {
     return mStyle;
 }
 
-void CompoundType::setFields(std::vector<NamedReference<Type>*>* fields) {
+bool CompoundType::setFields(
+        std::vector<CompoundField *> *fields, std::string *errorMsg) {
     mFields = fields;
-}
 
-std::vector<const Reference<Type>*> CompoundType::getReferences() const {
-    std::vector<const Reference<Type>*> ret;
-    ret.insert(ret.begin(), mFields->begin(), mFields->end());
-    return ret;
-}
+    for (const auto &field : *fields) {
+        const Type &type = field->type();
 
-status_t CompoundType::validate() const {
-    for (const auto* field : *mFields) {
-        const Type& type = field->type();
+        if (type.isBinder()
+                || (type.isVector()
+                    && static_cast<const VectorType *>(
+                        &type)->isVectorOfBinders())) {
+            *errorMsg =
+                "Structs/Unions must not contain references to interfaces.";
 
-        if ((type.isVector() && static_cast<const VectorType*>(&type)->isVectorOfBinders())) {
-            std::cerr << "ERROR: Struct/Union must not contain references to interfaces at "
-                      << field->location() << "\n";
-            return UNKNOWN_ERROR;
+            return false;
         }
 
         if (mStyle == STYLE_UNION) {
             if (type.needsEmbeddedReadWrite()) {
-                std::cerr << "ERROR: Union must not contain any types that need fixup at "
-                          << field->location() << "\n";
-                return UNKNOWN_ERROR;
+                // Can't have those in a union.
+
+                *errorMsg =
+                    "Unions must not contain any types that need fixup.";
+
+                return false;
             }
         }
     }
 
-    status_t err = validateUniqueNames();
-    if (err != OK) return err;
-
-    return Scope::validate();
-}
-
-status_t CompoundType::validateUniqueNames() const {
-    std::unordered_set<std::string> names;
-
-    for (const auto* field : *mFields) {
-        if (names.find(field->name()) != names.end()) {
-            std::cerr << "ERROR: Redefinition of field '" << field->name() << "' at "
-                      << field->location() << "\n";
-            return UNKNOWN_ERROR;
-        }
-        names.insert(field->name());
-    }
-
-    return OK;
+    return true;
 }
 
 bool CompoundType::isCompoundType() const {
     return true;
 }
 
-bool CompoundType::deepCanCheckEquality(std::unordered_set<const Type*>* visited) const {
+bool CompoundType::canCheckEquality() const {
     if (mStyle == STYLE_UNION) {
         return false;
     }
-    for (const auto* field : *mFields) {
-        if (!field->get()->canCheckEquality(visited)) {
+    for (const auto &field : *mFields) {
+        if (!field->type().canCheckEquality()) {
             return false;
         }
     }
@@ -125,7 +104,7 @@ std::string CompoundType::getCppType(
             return "const " + base + "&";
 
         case StorageMode_Result:
-            return base + (containsInterface()?"":"*");
+            return "const " + base + "*";
     }
 }
 
@@ -147,22 +126,6 @@ std::string CompoundType::getVtsType() const {
     CHECK(!"Should not be here");
 }
 
-bool CompoundType::containsInterface() const {
-    for (const auto& field : *mFields) {
-        if (field->type().isCompoundType()) {
-            const Type& t = field->type();
-            const CompoundType* ct = static_cast<const CompoundType*>(&t);
-            if (ct->containsInterface()) {
-                return true;
-            }
-        }
-        if (field->type().isInterface()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void CompoundType::emitReaderWriter(
         Formatter &out,
         const std::string &name,
@@ -170,47 +133,57 @@ void CompoundType::emitReaderWriter(
         bool parcelObjIsPointer,
         bool isReader,
         ErrorMode mode) const {
+    const std::string parentName = "_hidl_" + name + "_parent";
+
+    out << "size_t " << parentName << ";\n\n";
 
     const std::string parcelObjDeref =
         parcelObj + (parcelObjIsPointer ? "->" : ".");
 
-    if(containsInterface()){
-        for (const auto& field : *mFields) {
-            field->type().emitReaderWriter(out, name + "." + field->name(),
-                                               parcelObj, parcelObjIsPointer, isReader, mode);
-        }
+    if (isReader) {
+        out << "_hidl_err = "
+            << parcelObjDeref
+            << "readBuffer("
+            << "sizeof(*"
+            << name
+            << "), &"
+            << parentName
+            << ", "
+            << " reinterpret_cast<const void **>("
+            << "&" << name
+            << "));\n";
+
+        handleError(out, mode);
     } else {
-        const std::string parentName = "_hidl_" + name + "_parent";
+        out << "_hidl_err = "
+            << parcelObjDeref
+            << "writeBuffer(&"
+            << name
+            << ", sizeof("
+            << name
+            << "), &"
+            << parentName
+            << ");\n";
 
-        out << "size_t " << parentName << ";\n\n";
-
-        if (isReader) {
-            out << "_hidl_err = " << parcelObjDeref << "readBuffer("
-                << "sizeof(*" << name << "), &" << parentName << ", "
-                << " const_cast<const void**>(reinterpret_cast<void **>("
-                << "&" << name << ")));\n";
-            handleError(out, mode);
-        } else {
-            out << "_hidl_err = "
-                << parcelObjDeref
-                << "writeBuffer(&"
-                << name
-                << ", sizeof("
-                << name
-                << "), &"
-                << parentName
-                << ");\n";
-            handleError(out, mode);
-        }
-        if (mStyle != STYLE_STRUCT) {
-            return;
-        }
-        if (needsEmbeddedReadWrite()) {
-            emitReaderWriterEmbedded(out, 0 /* depth */, name, name, /* sanitizedName */
-                                     isReader /* nameIsPointer */, parcelObj, parcelObjIsPointer,
-                                     isReader, mode, parentName, "0 /* parentOffset */");
-        }
+        handleError(out, mode);
     }
+
+    if (mStyle != STYLE_STRUCT || !needsEmbeddedReadWrite()) {
+        return;
+    }
+
+    emitReaderWriterEmbedded(
+            out,
+            0 /* depth */,
+            name,
+            name, /* sanitizedName */
+            isReader /* nameIsPointer */,
+            parcelObj,
+            parcelObjIsPointer,
+            isReader,
+            mode,
+            parentName,
+            "0 /* parentOffset */");
 }
 
 void CompoundType::emitReaderWriterEmbedded(
@@ -374,7 +347,7 @@ void CompoundType::emitResolveReferencesEmbedded(
     handleError(out, mode);
 }
 
-void CompoundType::emitTypeDeclarations(Formatter& out) const {
+status_t CompoundType::emitTypeDeclarations(Formatter &out) const {
     out << ((mStyle == STYLE_STRUCT) ? "struct" : "union")
         << " "
         << localName()
@@ -386,7 +359,6 @@ void CompoundType::emitTypeDeclarations(Formatter& out) const {
 
     if (containsPointer()) {
         for (const auto &field : *mFields) {
-            field->emitDocComment(out);
             out << field->type().getCppStackType()
                 << " "
                 << field->name()
@@ -396,7 +368,7 @@ void CompoundType::emitTypeDeclarations(Formatter& out) const {
         out.unindent();
         out << "};\n\n";
 
-        return;
+        return OK;
     }
 
     for (int pass = 0; pass < 2; ++pass) {
@@ -452,62 +424,32 @@ void CompoundType::emitTypeDeclarations(Formatter& out) const {
         << ") == "
         << structAlign
         << ", \"wrong alignment\");\n\n";
+
+    return OK;
 }
 
-void CompoundType::emitTypeForwardDeclaration(Formatter& out) const {
-    out << ((mStyle == STYLE_STRUCT) ? "struct" : "union") << " " << localName() << ";\n";
-}
 
-void CompoundType::emitPackageTypeDeclarations(Formatter& out) const {
-    Scope::emitPackageTypeDeclarations(out);
+status_t CompoundType::emitGlobalTypeDeclarations(Formatter &out) const {
+    Scope::emitGlobalTypeDeclarations(out);
 
-    out << "static inline std::string toString("
+    out << "std::string toString("
         << getCppArgumentType()
-        << (mFields->empty() ? "" : " o")
-        << ") ";
-
-    out.block([&] {
-        // include toString for scalar types
-        out << "using ::android::hardware::toString;\n"
-            << "std::string os;\n";
-        out << "os += \"{\";\n";
-
-        for (const NamedReference<Type>* field : *mFields) {
-            out << "os += \"";
-            if (field != *(mFields->begin())) {
-                out << ", ";
-            }
-            out << "." << field->name() << " = \";\n";
-            field->type().emitDump(out, "os", "o." + field->name());
-        }
-
-        out << "os += \"}\"; return os;\n";
-    }).endl().endl();
+        << ");\n\n";
 
     if (canCheckEquality()) {
-        out << "static inline bool operator==("
-            << getCppArgumentType() << " " << (mFields->empty() ? "/* lhs */" : "lhs") << ", "
-            << getCppArgumentType() << " " << (mFields->empty() ? "/* rhs */" : "rhs") << ") ";
-        out.block([&] {
-            for (const auto &field : *mFields) {
-                out.sIf("lhs." + field->name() + " != rhs." + field->name(), [&] {
-                    out << "return false;\n";
-                }).endl();
-            }
-            out << "return true;\n";
-        }).endl().endl();
+        out << "bool operator==("
+            << getCppArgumentType() << ", " << getCppArgumentType() << ");\n\n";
 
-        out << "static inline bool operator!=("
-            << getCppArgumentType() << " lhs," << getCppArgumentType() << " rhs)";
-        out.block([&] {
-            out << "return !(lhs == rhs);\n";
-        }).endl().endl();
+        out << "bool operator!=("
+            << getCppArgumentType() << ", " << getCppArgumentType() << ");\n\n";
     } else {
         out << "// operator== and operator!= are not generated for " << localName() << "\n\n";
     }
+
+    return OK;
 }
 
-void CompoundType::emitPackageHwDeclarations(Formatter& out) const {
+status_t CompoundType::emitGlobalHwDeclarations(Formatter &out) const  {
     if (needsEmbeddedReadWrite()) {
         out << "::android::status_t readEmbeddedFromParcel(\n";
 
@@ -546,11 +488,18 @@ void CompoundType::emitPackageHwDeclarations(Formatter& out) const {
             << "size_t parentHandle, size_t parentOffset);\n\n";
         out.unindent(2);
     }
+
+    return OK;
 }
 
-void CompoundType::emitTypeDefinitions(Formatter& out, const std::string& prefix) const {
+status_t CompoundType::emitTypeDefinitions(
+        Formatter &out, const std::string prefix) const {
     std::string space = prefix.empty() ? "" : (prefix + "::");
-    Scope::emitTypeDefinitions(out, space + localName());
+    status_t err = Scope::emitTypeDefinitions(out, space + localName());
+
+    if (err != OK) {
+        return err;
+    }
 
     if (needsEmbeddedReadWrite()) {
         emitStructReaderWriter(out, prefix, true /* isReader */);
@@ -561,9 +510,57 @@ void CompoundType::emitTypeDefinitions(Formatter& out, const std::string& prefix
         emitResolveReferenceDef(out, prefix, true /* isReader */);
         emitResolveReferenceDef(out, prefix, false /* isReader */);
     }
+
+    out << "std::string toString("
+        << getCppArgumentType()
+        << (mFields->empty() ? "" : " o")
+        << ") ";
+
+    out.block([&] {
+        // include toString for scalar types
+        out << "using ::android::hardware::toString;\n"
+            << "std::string os;\n";
+        out << "os += \"{\";\n";
+
+        for (const CompoundField *field : *mFields) {
+            out << "os += \"";
+            if (field != *(mFields->begin())) {
+                out << ", ";
+            }
+            out << "." << field->name() << " = \";\n";
+            field->type().emitDump(out, "os", "o." + field->name());
+        }
+
+        out << "os += \"}\"; return os;\n";
+    }).endl().endl();
+
+    if (canCheckEquality()) {
+        out << "bool operator==("
+            << getCppArgumentType() << " " << (mFields->empty() ? "/* lhs */" : "lhs") << ", "
+            << getCppArgumentType() << " " << (mFields->empty() ? "/* rhs */" : "rhs") << ") ";
+        out.block([&] {
+            for (const auto &field : *mFields) {
+                out.sIf("lhs." + field->name() + " != rhs." + field->name(), [&] {
+                    out << "return false;\n";
+                }).endl();
+            }
+            out << "return true;\n";
+        }).endl().endl();
+
+        out << "bool operator!=("
+            << getCppArgumentType() << " lhs," << getCppArgumentType() << " rhs)";
+        out.block([&] {
+            out << "return !(lhs == rhs);\n";
+        }).endl().endl();
+    } else {
+        out << "// operator== and operator!= are not generated for " << localName() << "\n";
+    }
+
+    return OK;
 }
 
-void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
+status_t CompoundType::emitJavaTypeDeclarations(
+        Formatter &out, bool atTopLevel) const {
     out << "public final ";
 
     if (!atTopLevel) {
@@ -578,9 +575,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
 
     Scope::emitJavaTypeDeclarations(out, false /* atTopLevel */);
 
-    for (const auto& field : *mFields) {
-        field->emitDocComment(out);
-
+    for (const auto &field : *mFields) {
         out << "public ";
 
         field->type().emitJavaFieldInitializer(out, field->name());
@@ -656,16 +651,9 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
 
     out << "public final void readFromParcel(android.os.HwParcel parcel) {\n";
     out.indent();
-    if (containsInterface()) {
-        for (const auto& field : *mFields) {
-            out << field->name() << " = ";
-            field->type().emitJavaReaderWriter(out, "parcel", field->name(), true);
-        }
-    } else {
-        out << "android.os.HwBlob blob = parcel.readBuffer(";
-        out << structSize << "/* size */);\n";
-        out << "readEmbeddedFromParcel(parcel, blob, 0 /* parentOffset */);\n";
-    }
+    out << "android.os.HwBlob blob = parcel.readBuffer(";
+    out << structSize << "/* size */);\n";
+    out << "readEmbeddedFromParcel(parcel, blob, 0 /* parentOffset */);\n";
     out.unindent();
     out << "}\n\n";
 
@@ -674,75 +662,77 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
     size_t vecAlign, vecSize;
     VectorType::getAlignmentAndSizeStatic(&vecAlign, &vecSize);
 
-    out << "public static final java.util.ArrayList<" << localName()
+    out << "public static final java.util.ArrayList<"
+        << localName()
         << "> readVectorFromParcel(android.os.HwParcel parcel) {\n";
     out.indent();
 
-    out << "java.util.ArrayList<" << localName() << "> _hidl_vec = new java.util.ArrayList();\n";
+    out << "java.util.ArrayList<"
+        << localName()
+        << "> _hidl_vec = new java.util.ArrayList();\n";
 
-    if (containsInterface()) {
-        out << "int size = parcel.readInt32();\n";
-        out << "for(int i = 0 ; i < size; i ++) {\n";
-        out.indent();
-        out << fullJavaName() << " tmp = ";
-        emitJavaReaderWriter(out, "parcel", "tmp", true);
-        out << "_hidl_vec.add(tmp);\n";
-        out.unindent();
-        out << "}\n";
-    } else {
-        out << "android.os.HwBlob _hidl_blob = parcel.readBuffer(";
-        out << vecSize << " /* sizeof hidl_vec<T> */);\n\n";
+    out << "android.os.HwBlob _hidl_blob = parcel.readBuffer(";
+    out << vecSize << " /* sizeof hidl_vec<T> */);\n\n";
 
-        VectorType::EmitJavaFieldReaderWriterForElementType(out, 0 /* depth */, this, "parcel",
-                                                            "_hidl_blob", "_hidl_vec", "0",
-                                                            true /* isReader */);
-    }
+    VectorType::EmitJavaFieldReaderWriterForElementType(
+            out,
+            0 /* depth */,
+            this,
+            "parcel",
+            "_hidl_blob",
+            "_hidl_vec",
+            "0",
+            true /* isReader */);
+
     out << "\nreturn _hidl_vec;\n";
+
     out.unindent();
     out << "}\n\n";
+
     ////////////////////////////////////////////////////////////////////////////
-    if (containsInterface()) {
-        out << "// readEmbeddedFromParcel is not generated()\n";
-    } else {
-        out << "public final void readEmbeddedFromParcel(\n";
-        out.indent(2);
-        out << "android.os.HwParcel parcel, android.os.HwBlob _hidl_blob, long _hidl_offset) {\n";
-        out.unindent();
-        size_t offset = 0;
-        for (const auto& field : *mFields) {
-            size_t fieldAlign, fieldSize;
-            field->type().getAlignmentAndSize(&fieldAlign, &fieldSize);
 
-            size_t pad = offset % fieldAlign;
-            if (pad > 0) {
-                offset += fieldAlign - pad;
-            }
+    out << "public final void readEmbeddedFromParcel(\n";
+    out.indent(2);
+    out << "android.os.HwParcel parcel, android.os.HwBlob _hidl_blob, long _hidl_offset) {\n";
+    out.unindent();
 
-            field->type().emitJavaFieldReaderWriter(
-                out, 0 /* depth */, "parcel", "_hidl_blob", field->name(),
-                "_hidl_offset + " + std::to_string(offset), true /* isReader */);
-            offset += fieldSize;
+    size_t offset = 0;
+    for (const auto &field : *mFields) {
+        size_t fieldAlign, fieldSize;
+        field->type().getAlignmentAndSize(&fieldAlign, &fieldSize);
+
+        size_t pad = offset % fieldAlign;
+        if (pad > 0) {
+            offset += fieldAlign - pad;
         }
-        out.unindent();
-        out << "}\n\n";
+
+        field->type().emitJavaFieldReaderWriter(
+                out,
+                0 /* depth */,
+                "parcel",
+                "_hidl_blob",
+                field->name(),
+                "_hidl_offset + " + std::to_string(offset),
+                true /* isReader */);
+
+        offset += fieldSize;
     }
+
+    out.unindent();
+    out << "}\n\n";
 
     ////////////////////////////////////////////////////////////////////////////
 
     out << "public final void writeToParcel(android.os.HwParcel parcel) {\n";
     out.indent();
 
-    if (containsInterface()) {
-        for (const auto& field : *mFields) {
-            field->type().emitJavaReaderWriter(out, "parcel", field->name(), false);
-        }
-    } else {
-        out << "android.os.HwBlob _hidl_blob = new android.os.HwBlob(" << structSize
-            << " /* size */);\n";
+    out << "android.os.HwBlob _hidl_blob = new android.os.HwBlob("
+        << structSize
+        << " /* size */);\n";
 
-        out << "writeEmbeddedToBlob(_hidl_blob, 0 /* parentOffset */);\n"
-            << "parcel.writeBuffer(_hidl_blob);\n";
-    }
+    out << "writeEmbeddedToBlob(_hidl_blob, 0 /* parentOffset */);\n"
+        << "parcel.writeBuffer(_hidl_blob);\n";
+
     out.unindent();
     out << "}\n\n";
 
@@ -750,56 +740,65 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
 
     out << "public static final void writeVectorToParcel(\n";
     out.indent(2);
-    out << "android.os.HwParcel parcel, java.util.ArrayList<" << localName() << "> _hidl_vec) {\n";
+    out << "android.os.HwParcel parcel, java.util.ArrayList<"
+        << localName()
+        << "> _hidl_vec) {\n";
     out.unindent();
 
-    if (containsInterface()) {
-        out << "parcel.writeInt32(_hidl_vec.size());\n";
-        out << "for(" << fullJavaName() << " tmp: _hidl_vec)\n";
-        out.indent();
-        emitJavaReaderWriter(out, "parcel", "tmp", false);
-        out.unindent();
-    } else {
-        out << "android.os.HwBlob _hidl_blob = new android.os.HwBlob(" << vecSize
-            << " /* sizeof(hidl_vec<T>) */);\n";
+    out << "android.os.HwBlob _hidl_blob = new android.os.HwBlob("
+        << vecSize << " /* sizeof(hidl_vec<T>) */);\n";
 
-        VectorType::EmitJavaFieldReaderWriterForElementType(out, 0 /* depth */, this, "parcel",
-                                                            "_hidl_blob", "_hidl_vec", "0",
-                                                            false /* isReader */);
+    VectorType::EmitJavaFieldReaderWriterForElementType(
+            out,
+            0 /* depth */,
+            this,
+            "parcel",
+            "_hidl_blob",
+            "_hidl_vec",
+            "0",
+            false /* isReader */);
 
-        out << "\nparcel.writeBuffer(_hidl_blob);\n";
-    }
+    out << "\nparcel.writeBuffer(_hidl_blob);\n";
+
     out.unindent();
     out << "}\n\n";
+
     ////////////////////////////////////////////////////////////////////////////
 
-    if (containsInterface()) {
-        out << "// writeEmbeddedFromParcel() is not generated\n";
-    } else {
-        out << "public final void writeEmbeddedToBlob(\n";
-        out.indent(2);
-        out << "android.os.HwBlob _hidl_blob, long _hidl_offset) {\n";
-        out.unindent();
-        size_t offset = 0;
-        for (const auto& field : *mFields) {
-            size_t fieldAlign, fieldSize;
-            field->type().getAlignmentAndSize(&fieldAlign, &fieldSize);
-            size_t pad = offset % fieldAlign;
-            if (pad > 0) {
-                offset += fieldAlign - pad;
-            }
-            field->type().emitJavaFieldReaderWriter(
-                out, 0 /* depth */, "parcel", "_hidl_blob", field->name(),
-                "_hidl_offset + " + std::to_string(offset), false /* isReader */);
-            offset += fieldSize;
+    out << "public final void writeEmbeddedToBlob(\n";
+    out.indent(2);
+    out << "android.os.HwBlob _hidl_blob, long _hidl_offset) {\n";
+    out.unindent();
+
+    offset = 0;
+    for (const auto &field : *mFields) {
+        size_t fieldAlign, fieldSize;
+        field->type().getAlignmentAndSize(&fieldAlign, &fieldSize);
+
+        size_t pad = offset % fieldAlign;
+        if (pad > 0) {
+            offset += fieldAlign - pad;
         }
 
-        out.unindent();
-        out << "}\n";
+        field->type().emitJavaFieldReaderWriter(
+                out,
+                0 /* depth */,
+                "parcel",
+                "_hidl_blob",
+                field->name(),
+                "_hidl_offset + " + std::to_string(offset),
+                false /* isReader */);
+
+        offset += fieldSize;
     }
+
+    out.unindent();
+    out << "}\n";
 
     out.unindent();
     out << "};\n\n";
+
+    return OK;
 }
 
 void CompoundType::emitStructReaderWriter(
@@ -873,8 +872,8 @@ void CompoundType::emitStructReaderWriter(
     out << "}\n\n";
 }
 
-void CompoundType::emitResolveReferenceDef(Formatter& out, const std::string& prefix,
-                                           bool isReader) const {
+void CompoundType::emitResolveReferenceDef(
+        Formatter &out, const std::string prefix, bool isReader) const {
     out << "::android::status_t ";
     const std::string space(prefix.empty() ? "" : (prefix + "::"));
 
@@ -963,25 +962,25 @@ bool CompoundType::needsEmbeddedReadWrite() const {
     return false;
 }
 
-bool CompoundType::deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const {
+bool CompoundType::needsResolveReferences() const {
     if (mStyle != STYLE_STRUCT) {
         return false;
     }
 
     for (const auto &field : *mFields) {
-        if (field->type().needsResolveReferences(visited)) {
+        if (field->type().needsResolveReferences()) {
             return true;
         }
     }
 
-    return Scope::deepNeedsResolveReferences(visited);
+    return false;
 }
 
 bool CompoundType::resultNeedsDeref() const {
-    return !containsInterface() ;
+    return true;
 }
 
-void CompoundType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t CompoundType::emitVtsTypeDeclarations(Formatter &out) const {
     out << "name: \"" << fullName() << "\"\n";
     out << "type: " << getVtsType() << "\n";
 
@@ -1000,7 +999,10 @@ void CompoundType::emitVtsTypeDeclarations(Formatter& out) const {
             }
         }
         out.indent();
-        type->emitVtsTypeDeclarations(out);
+        status_t status(type->emitVtsTypeDeclarations(out));
+        if (status != OK) {
+            return status;
+        }
         out.unindent();
         out << "}\n";
     }
@@ -1021,39 +1023,49 @@ void CompoundType::emitVtsTypeDeclarations(Formatter& out) const {
         }
         out.indent();
         out << "name: \"" << field->name() << "\"\n";
-        field->type().emitVtsAttributeType(out);
+        status_t status = field->type().emitVtsAttributeType(out);
+        if (status != OK) {
+            return status;
+        }
         out.unindent();
         out << "}\n";
     }
+
+    return OK;
 }
 
-void CompoundType::emitVtsAttributeType(Formatter& out) const {
+status_t CompoundType::emitVtsAttributeType(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
     out << "predefined_type: \"" << fullName() << "\"\n";
+    return OK;
 }
 
-bool CompoundType::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const {
-    if (mStyle != STYLE_STRUCT) {
+bool CompoundType::isJavaCompatible() const {
+    if (mStyle != STYLE_STRUCT || !Scope::isJavaCompatible()) {
         return false;
     }
 
-    for (const auto* field : *mFields) {
-        if (!field->get()->isJavaCompatible(visited)) {
+    for (const auto &field : *mFields) {
+        if (!field->type().isJavaCompatible()) {
             return false;
         }
     }
 
-    return Scope::deepIsJavaCompatible(visited);
+    return true;
 }
 
-bool CompoundType::deepContainsPointer(std::unordered_set<const Type*>* visited) const {
-    for (const auto* field : *mFields) {
-        if (field->get()->containsPointer(visited)) {
+bool CompoundType::containsPointer() const {
+    if (Scope::containsPointer()) {
+        return true;
+    }
+
+    for (const auto &field : *mFields) {
+        if (field->type().containsPointer()) {
             return true;
         }
     }
 
-    return Scope::deepContainsPointer(visited);
+    return false;
 }
 
 void CompoundType::getAlignmentAndSize(size_t *align, size_t *size) const {
@@ -1099,6 +1111,21 @@ void CompoundType::getAlignmentAndSize(size_t *align, size_t *size) const {
         // An empty struct still occupies a byte of space in C++.
         *size = 1;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+CompoundField::CompoundField(const char *name, Type *type)
+    : mName(name),
+      mType(type) {
+}
+
+std::string CompoundField::name() const {
+    return mName;
+}
+
+const Type &CompoundField::type() const {
+    return *mType;
 }
 
 }  // namespace android

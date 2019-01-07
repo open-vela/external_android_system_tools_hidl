@@ -16,23 +16,21 @@
 
 #include "ConstantExpression.h"
 
-#include <android-base/logging.h>
-#include <android-base/parseint.h>
 #include <stdio.h>
-#include <algorithm>
-#include <iostream>
-#include <sstream>
 #include <string>
+#include <android-base/parseint.h>
+#include <android-base/logging.h>
+#include <sstream>
 
 #include "EnumType.h"
-#include "Scope.h"  // LocalIdentifier
 
 // The macros are really nasty here. Consider removing
 // as many macros as possible.
 
-#define OPEQ(__y__) (std::string(mOp) == std::string(__y__))
-#define COMPUTE_UNARY(__op__)  if (op == std::string(#__op__)) return __op__ val;
-#define COMPUTE_BINARY(__op__) if (op == std::string(#__op__)) return lval __op__ rval;
+#define STREQ(__x__, __y__) (strcmp((__x__), (__y__)) == 0)
+#define OPEQ(__y__) STREQ(op, __y__)
+#define COMPUTE_UNARY(__op__)  if(OPEQ(#__op__)) return __op__ val;
+#define COMPUTE_BINARY(__op__) if(OPEQ(#__op__)) return lval __op__ rval;
 #define OP_IS_BIN_ARITHMETIC  (OPEQ("+") || OPEQ("-") || OPEQ("*") || OPEQ("/") || OPEQ("%"))
 #define OP_IS_BIN_BITFLIP     (OPEQ("|") || OPEQ("^") || OPEQ("&"))
 #define OP_IS_BIN_COMP        (OPEQ("<") || OPEQ(">") || OPEQ("<=") || OPEQ(">=") || OPEQ("==") || OPEQ("!="))
@@ -41,7 +39,6 @@
 #define SK(__x__) ScalarType::Kind::KIND_##__x__
 #define SHOULD_NOT_REACH() CHECK(false) << __LINE__ << ": should not reach here: "
 
-// NOLINT to suppress missing parentheses warnings about __def__.
 #define SWITCH_KIND(__cond__, __action__, __def__)           \
         switch(__cond__) {                                        \
             case SK(BOOL): __action__(bool)                         \
@@ -53,13 +50,13 @@
             case SK(INT32): __action__(int32_t)                     \
             case SK(UINT64): __action__(uint64_t)                   \
             case SK(INT64): __action__(int64_t)                     \
-            default: __def__                        /* NOLINT */    \
-        }
+            default: __def__                                        \
+        }                                                         \
 
 namespace android {
 
 static inline bool isSupported(ScalarType::Kind kind) {
-    return SK(BOOL) == kind || ScalarType(kind, nullptr /* parent */).isValidEnumStorageType();
+    return SK(BOOL) == kind || ScalarType(kind).isValidEnumStorageType();
 }
 
 /* See docs at the end for details on integral promotion. */
@@ -87,7 +84,8 @@ ScalarType::Kind usualArithmeticConversion(ScalarType::Kind lft,
 
     // Although there is such rule to return "the unsigned counterpart of
     // the signed operand", it should not reach here in our HIDL grammar.
-    CHECK(false) << "Could not do usual arithmetic conversion for type " << lft << "and" << rgt;
+    LOG(FATAL) << "Could not do usual arithmetic conversion for type "
+               << lft << "and" << rgt;
     switch(signedRank) {
         case SK(INT8):  return SK(UINT8);
         case SK(INT16): return SK(UINT16);
@@ -98,7 +96,7 @@ ScalarType::Kind usualArithmeticConversion(ScalarType::Kind lft,
 }
 
 template <class T>
-T handleUnary(const std::string& op, T val) {
+T handleUnary(const char *op, T val) {
     COMPUTE_UNARY(+)
     COMPUTE_UNARY(-)
     COMPUTE_UNARY(!)
@@ -109,7 +107,7 @@ T handleUnary(const std::string& op, T val) {
 }
 
 template <class T>
-T handleBinaryCommon(T lval, const std::string& op, T rval) {
+T handleBinaryCommon(T lval, const char *op, T rval) {
     COMPUTE_BINARY(+)
     COMPUTE_BINARY(-)
     COMPUTE_BINARY(*)
@@ -132,182 +130,173 @@ T handleBinaryCommon(T lval, const std::string& op, T rval) {
 }
 
 template <class T>
-T handleShift(T lval, const std::string& op, int64_t rval) {
+T handleShift(T lval, const char *op, int64_t rval) {
     // just cast rval to int64_t and it should fit.
     COMPUTE_BINARY(>>)
     COMPUTE_BINARY(<<)
     // Should not reach here.
-    SHOULD_NOT_REACH() << "Could not handleShift for "
+    SHOULD_NOT_REACH() << "Could not handleShift for"
                        << lval << " " << op << " " << rval;
     return static_cast<T>(0xdeadbeef);
 }
 
-bool handleLogical(bool lval, const std::string& op, bool rval) {
+bool handleLogical(bool lval, const char *op, bool rval) {
     COMPUTE_BINARY(||);
     COMPUTE_BINARY(&&);
     // Should not reach here.
-    SHOULD_NOT_REACH() << "Could not handleLogical for "
+    SHOULD_NOT_REACH() << "Could not handleLogical for"
                        << lval << " " << op << " " << rval;
     return false;
 }
 
-std::unique_ptr<ConstantExpression> ConstantExpression::Zero(ScalarType::Kind kind) {
-    return ValueOf(kind, 0);
+ConstantExpression::ConstantExpression() {
 }
 
-std::unique_ptr<ConstantExpression> ConstantExpression::One(ScalarType::Kind kind) {
-    return ValueOf(kind, 1);
+ConstantExpression ConstantExpression::Zero(ScalarType::Kind kind) {
+    ConstantExpression ce = ValueOf(kind, 0);
+    ce.mExpr = "0";
+    return ce;
 }
 
-std::unique_ptr<ConstantExpression> ConstantExpression::ValueOf(ScalarType::Kind kind,
-                                                                uint64_t value) {
-    return std::make_unique<LiteralConstantExpression>(kind, value);
+ConstantExpression ConstantExpression::One(ScalarType::Kind kind) {
+    ConstantExpression ce = ValueOf(kind, 1);
+    ce.mExpr = "1";
+    return ce;
 }
 
-bool ConstantExpression::isEvaluated() const {
-    return mIsEvaluated;
-}
-
-LiteralConstantExpression::LiteralConstantExpression(
-    ScalarType::Kind kind, uint64_t value, const std::string& expr) {
-
-    CHECK(!expr.empty());
+ConstantExpression ConstantExpression::ValueOf(ScalarType::Kind kind, uint64_t value) {
+    ConstantExpression ce;
     CHECK(isSupported(kind));
-    mTrivialDescription = true;
-    mExpr = expr;
-    mValueKind = kind;
-    mValue = value;
-    mIsEvaluated = true;
+
+    ce.mExpr = "";
+    ce.mType = kConstExprLiteral;
+    ce.mValueKind = kind;
+    ce.mValue = value;
+    ce.mTrivialDescription = true;
+    return ce;
+}
+ConstantExpression::ConstantExpression(const ConstantExpression& other) {
+    *this = other;
 }
 
-LiteralConstantExpression::LiteralConstantExpression(ScalarType::Kind kind, uint64_t value)
-  : LiteralConstantExpression(kind, value, std::to_string(value)) {}
+/* Copy constructor, with the expr overriden and treated non-trivial */
+ConstantExpression::ConstantExpression(const ConstantExpression& other, std::string expr) {
+    *this = other;
+    mExpr = expr;
+    mTrivialDescription = false;
+}
 
-LiteralConstantExpression* LiteralConstantExpression::tryParse(const std::string& value) {
-    CHECK(!value.empty());
+ConstantExpression& ConstantExpression::operator=(const ConstantExpression& other) {
+    mType = other.mType;
+    mValueKind = other.mValueKind;
+    mValue = other.mValue;
+    mExpr = other.mExpr;
+    mTrivialDescription = other.mTrivialDescription;
+    return *this;
+}
 
+/* Literals. */
+ConstantExpression::ConstantExpression(const char *value)
+        : mExpr(value), mType(kConstExprLiteral), mTrivialDescription(true) {
+    const char* head = value, *tail = head + strlen(value) - 1;
     bool isLong = false, isUnsigned = false;
-    bool isHex = (value[0] == '0' && value.length() > 1 && (value[1] == 'x' || value[1] == 'X'));
-
-    auto rbegin = value.rbegin();
-    auto rend = value.rend();
-    for (; rbegin != rend && (*rbegin == 'u' || *rbegin == 'U' || *rbegin == 'l' || *rbegin == 'L');
-         ++rbegin) {
-        isUnsigned |= (*rbegin == 'u' || *rbegin == 'U');
-        isLong |= (*rbegin == 'l' || *rbegin == 'L');
+    bool isHex = (value[0] == '0' && (value[1] == 'x' || value[1] == 'X'));
+    while(tail >= head && (*tail == 'u' || *tail == 'U' || *tail == 'l' || *tail == 'L')) {
+        isUnsigned |= (*tail == 'u' || *tail == 'U');
+        isLong     |= (*tail == 'l' || *tail == 'L');
+        tail--;
     }
-    std::string newVal(value.begin(), rbegin.base());
-    CHECK(!newVal.empty());
-
-    uint64_t rawValue = 0;
-
-    bool parseOK = base::ParseUint(newVal, &rawValue);
-    if (!parseOK) {
-        return nullptr;
-    }
-
-    ScalarType::Kind kind;
+    char *newVal = strndup(value, tail - head + 1);
+    bool parseOK = base::ParseUint(newVal, &mValue);
+    free(newVal);
+    CHECK(parseOK) << "Could not parse as integer: " << value;
 
     // guess literal type.
     if(isLong) {
         if(isUnsigned) // ul
-            kind = SK(UINT64);
+            mValueKind = SK(UINT64);
         else // l
-            kind = SK(INT64);
+            mValueKind = SK(INT64);
     } else { // no l suffix
         if(isUnsigned) { // u
-            if(rawValue <= UINT32_MAX)
-                kind = SK(UINT32);
+            if(mValue <= UINT32_MAX)
+                mValueKind = SK(UINT32);
             else
-                kind = SK(UINT64);
+                mValueKind = SK(UINT64);
         } else { // no suffix
             if(isHex) {
-                if(rawValue <= INT32_MAX) // rawValue always >= 0
-                    kind = SK(INT32);
-                else if(rawValue <= UINT32_MAX)
-                    kind = SK(UINT32);
-                else if(rawValue <= INT64_MAX) // rawValue always >= 0
-                    kind = SK(INT64);
-                else if(rawValue <= UINT64_MAX)
-                    kind = SK(UINT64);
-                else
-                    return nullptr;
+                if(mValue <= INT32_MAX) // mValue always >= 0
+                    mValueKind = SK(INT32);
+                else if(mValue <= UINT32_MAX)
+                    mValueKind = SK(UINT32);
+                else if(mValue <= INT64_MAX) // mValue always >= 0
+                    mValueKind = SK(INT64);
+                else if(mValue <= UINT64_MAX)
+                    mValueKind = SK(UINT64);
             } else {
-                if(rawValue <= INT32_MAX) // rawValue always >= 0
-                    kind = SK(INT32);
+                if(mValue <= INT32_MAX) // mValue always >= 0
+                    mValueKind = SK(INT32);
                 else
-                    kind = SK(INT64);
+                    mValueKind = SK(INT64);
             }
         }
     }
-
-    return new LiteralConstantExpression(kind, rawValue, value);
 }
 
-void LiteralConstantExpression::evaluate() {
-    // Evaluated in constructor
-    CHECK(isEvaluated());
-}
+/* Unary operations. */
+ConstantExpression::ConstantExpression(const char *op,
+                                       const ConstantExpression *value)
+        : mExpr(std::string("(") + op + value->mExpr + ")"),
+          mType(kConstExprUnary),
+          mValueKind(value->mValueKind) {
 
-void UnaryConstantExpression::evaluate() {
-    if (isEvaluated()) return;
-    CHECK(mUnary->isEvaluated());
-    mIsEvaluated = true;
-
-    mExpr = std::string("(") + mOp + mUnary->description() + ")";
-    mValueKind = mUnary->mValueKind;
-
-#define CASE_UNARY(__type__)                                          \
-    mValue = handleUnary(mOp, static_cast<__type__>(mUnary->mValue)); \
-    return;
+#define CASE_UNARY(__type__)\
+            mValue = handleUnary(op, static_cast<__type__>(value->mValue)); return;
 
     SWITCH_KIND(mValueKind, CASE_UNARY, SHOULD_NOT_REACH(); return;)
 }
 
-void BinaryConstantExpression::evaluate() {
-    if (isEvaluated()) return;
-    CHECK(mLval->isEvaluated());
-    CHECK(mRval->isEvaluated());
-    mIsEvaluated = true;
-
-    mExpr = std::string("(") + mLval->description() + " " + mOp + " " + mRval->description() + ")";
+/* Binary operations. */
+ConstantExpression::ConstantExpression(const ConstantExpression *lval,
+                                       const char *op,
+                                       const ConstantExpression* rval)
+        : mExpr(std::string("(") + lval->mExpr + " " + op + " " + rval->mExpr + ")"),
+          mType(kConstExprBinary)
+{
 
     bool isArithmeticOrBitflip = OP_IS_BIN_ARITHMETIC || OP_IS_BIN_BITFLIP;
 
     // CASE 1: + - *  / % | ^ & < > <= >= == !=
     if(isArithmeticOrBitflip || OP_IS_BIN_COMP) {
         // promoted kind for both operands.
-        ScalarType::Kind promoted = usualArithmeticConversion(integralPromotion(mLval->mValueKind),
-                                                              integralPromotion(mRval->mValueKind));
+        ScalarType::Kind promoted = usualArithmeticConversion(
+                integralPromotion(lval->mValueKind),
+                integralPromotion(rval->mValueKind));
         // result kind.
         mValueKind = isArithmeticOrBitflip
                     ? promoted // arithmetic or bitflip operators generates promoted type
                     : SK(BOOL); // comparison operators generates bool
 
-#define CASE_BINARY_COMMON(__type__)                                       \
-    mValue = handleBinaryCommon(static_cast<__type__>(mLval->mValue), mOp, \
-                                static_cast<__type__>(mRval->mValue));     \
-    return;
+#define CASE_BINARY_COMMON(__type__)\
+            mValue = handleBinaryCommon(static_cast<__type__>(lval->mValue), op, static_cast<__type__>(rval->mValue)); return;
 
         SWITCH_KIND(promoted, CASE_BINARY_COMMON, SHOULD_NOT_REACH(); return;)
     }
 
     // CASE 2: << >>
-    std::string newOp = mOp;
     if(OP_IS_BIN_SHIFT) {
-        mValueKind = integralPromotion(mLval->mValueKind);
+        mValueKind = integralPromotion(lval->mValueKind);
         // instead of promoting rval, simply casting it to int64 should also be good.
-        int64_t numBits = mRval->cast<int64_t>();
+        int64_t numBits = rval->cast<int64_t>();
         if(numBits < 0) {
             // shifting with negative number of bits is undefined in C. In HIDL it
             // is defined as shifting into the other direction.
-            newOp = OPEQ("<<") ? std::string(">>") : std::string("<<");
+            op = OPEQ("<<") ? ">>" : "<<";
             numBits = -numBits;
         }
 
-#define CASE_SHIFT(__type__)                                                    \
-    mValue = handleShift(static_cast<__type__>(mLval->mValue), newOp, numBits); \
-    return;
+#define CASE_SHIFT(__type__)\
+            mValue = handleShift(static_cast<__type__>(lval->mValue), op, numBits); return;
 
         SWITCH_KIND(mValueKind, CASE_SHIFT, SHOULD_NOT_REACH(); return;)
     }
@@ -316,79 +305,63 @@ void BinaryConstantExpression::evaluate() {
     if(OP_IS_BIN_LOGICAL) {
         mValueKind = SK(BOOL);
         // easy; everything is bool.
-        mValue = handleLogical(mLval->mValue, mOp, mRval->mValue);
+        mValue = handleLogical(lval->mValue, op, rval->mValue);
         return;
     }
 
     SHOULD_NOT_REACH();
 }
 
-void TernaryConstantExpression::evaluate() {
-    if (isEvaluated()) return;
-    CHECK(mCond->isEvaluated());
-    CHECK(mTrueVal->isEvaluated());
-    CHECK(mFalseVal->isEvaluated());
-    mIsEvaluated = true;
+/* Ternary ?: operation. */
+ConstantExpression::ConstantExpression(const ConstantExpression *cond,
+                                       const ConstantExpression *trueVal,
+                                       const ConstantExpression *falseVal)
+        : mExpr(std::string("(") + cond->mExpr + "?" + trueVal->mExpr
+                + ":" + falseVal->mExpr + ")"),
+          mType(kConstExprTernary) {
 
-    mExpr = std::string("(") + mCond->description() + "?" + mTrueVal->description() + ":" +
-            mFalseVal->description() + ")";
+    // note: for ?:, unlike arithmetic ops, integral promotion is not necessary.
+    mValueKind = usualArithmeticConversion(trueVal->mValueKind,
+                                           falseVal->mValueKind);
 
-    // note: for ?:, unlike arithmetic ops, integral promotion is not processed.
-    mValueKind = usualArithmeticConversion(mTrueVal->mValueKind, mFalseVal->mValueKind);
-
-#define CASE_TERNARY(__type__)                                           \
-    mValue = mCond->mValue ? (static_cast<__type__>(mTrueVal->mValue))   \
-                           : (static_cast<__type__>(mFalseVal->mValue)); \
-    return;
+#define CASE_TERNARY(__type__)\
+        mValue = cond->mValue ? (static_cast<__type__>(trueVal->mValue)) : (static_cast<__type__>(falseVal->mValue)); return;
 
     SWITCH_KIND(mValueKind, CASE_TERNARY, SHOULD_NOT_REACH(); return;)
 }
 
-void ReferenceConstantExpression::evaluate() {
-    if (isEvaluated()) return;
-    CHECK(mReference->constExpr() != nullptr);
-
-    ConstantExpression* expr = mReference->constExpr();
-    CHECK(expr->isEvaluated());
-
-    mValueKind = expr->mValueKind;
-    mValue = expr->mValue;
-    mIsEvaluated = true;
+ConstantExpression ConstantExpression::addOne() const {
+    ConstantExpression myOne = ConstantExpression::One(mValueKind);
+    return ConstantExpression(this, "+", &myOne).toLiteral();
 }
 
-std::unique_ptr<ConstantExpression> ConstantExpression::addOne(ScalarType::Kind baseKind) {
-    auto ret = std::make_unique<BinaryConstantExpression>(
-        this, "+", ConstantExpression::One(baseKind).release());
-    return ret;
+ConstantExpression &ConstantExpression::toLiteral() {
+    mExpr = value();
+    mType = kConstExprLiteral;
+    return *this;
 }
 
-const std::string& ConstantExpression::description() const {
-    CHECK(isEvaluated());
+const std::string &ConstantExpression::description() const {
     return mExpr;
 }
 
 bool ConstantExpression::descriptionIsTrivial() const {
-    CHECK(isEvaluated());
     return mTrivialDescription;
 }
 
 std::string ConstantExpression::value() const {
-    CHECK(isEvaluated());
     return rawValue(mValueKind);
 }
 
 std::string ConstantExpression::value(ScalarType::Kind castKind) const {
-    CHECK(isEvaluated());
     return rawValue(castKind);
 }
 
 std::string ConstantExpression::cppValue() const {
-    CHECK(isEvaluated());
     return cppValue(mValueKind);
 }
 
 std::string ConstantExpression::cppValue(ScalarType::Kind castKind) const {
-    CHECK(isEvaluated());
     std::string literal(rawValue(castKind));
     // this is a hack to translate
     //       enum x : int64_t {  y = 1l << 63 };
@@ -399,9 +372,9 @@ std::string ConstantExpression::cppValue(ScalarType::Kind castKind) const {
     // -(uint64_t)9223372036854775808 == 9223372036854775808 could not
     // be narrowed to int64_t.
     if(castKind == SK(INT64) && (int64_t)mValue == INT64_MIN) {
-        return "static_cast<" +
-               ScalarType(SK(INT64), nullptr /* parent */).getCppStackType()  // "int64_t"
-               + ">(" + literal + "ull)";
+        return strdup(("static_cast<"
+            + ScalarType(SK(INT64)).getCppStackType() // "int64_t"
+            + ">(" + literal + "ull)").c_str());
     }
 
     // add suffix if necessary.
@@ -411,12 +384,10 @@ std::string ConstantExpression::cppValue(ScalarType::Kind castKind) const {
 }
 
 std::string ConstantExpression::javaValue() const {
-    CHECK(isEvaluated());
     return javaValue(mValueKind);
 }
 
 std::string ConstantExpression::javaValue(ScalarType::Kind castKind) const {
-    CHECK(isEvaluated());
     switch(castKind) {
         case SK(UINT64): return rawValue(SK(INT64)) + "L";
         case SK(INT64):  return rawValue(SK(INT64)) + "L";
@@ -424,14 +395,13 @@ std::string ConstantExpression::javaValue(ScalarType::Kind castKind) const {
         case SK(UINT16): return rawValue(SK(INT16));
         case SK(UINT8) : return rawValue(SK(INT8));
         case SK(BOOL)  :
-            return this->cast<bool>() ? "true" : "false";
+            return this->cast<bool>() ? strdup("true") : strdup("false");
         default: break;
     }
     return rawValue(castKind);
 }
 
 std::string ConstantExpression::rawValue(ScalarType::Kind castKind) const {
-    CHECK(isEvaluated());
 
 #define CASE_STR(__type__) return std::to_string(this->cast<__type__>());
 
@@ -440,7 +410,6 @@ std::string ConstantExpression::rawValue(ScalarType::Kind castKind) const {
 
 template<typename T>
 T ConstantExpression::cast() const {
-    CHECK(isEvaluated());
 
 #define CASE_CAST_T(__type__) return static_cast<T>(static_cast<__type__>(mValue));
 
@@ -448,211 +417,7 @@ T ConstantExpression::cast() const {
 }
 
 size_t ConstantExpression::castSizeT() const {
-    CHECK(isEvaluated());
     return this->cast<size_t>();
-}
-
-bool ConstantExpression::isReferenceConstantExpression() const {
-    return false;
-}
-
-std::vector<ConstantExpression*> ConstantExpression::getConstantExpressions() {
-    const auto& constRet = static_cast<const ConstantExpression*>(this)->getConstantExpressions();
-    std::vector<ConstantExpression*> ret(constRet.size());
-    std::transform(constRet.begin(), constRet.end(), ret.begin(),
-                   [](const auto* ce) { return const_cast<ConstantExpression*>(ce); });
-    return ret;
-}
-
-std::vector<Reference<LocalIdentifier>*> ConstantExpression::getReferences() {
-    const auto& constRet = static_cast<const ConstantExpression*>(this)->getReferences();
-    std::vector<Reference<LocalIdentifier>*> ret(constRet.size());
-    std::transform(constRet.begin(), constRet.end(), ret.begin(),
-                   [](const auto* ce) { return const_cast<Reference<LocalIdentifier>*>(ce); });
-    return ret;
-}
-
-std::vector<const Reference<LocalIdentifier>*> ConstantExpression::getReferences() const {
-    return {};
-}
-
-status_t ConstantExpression::recursivePass(const std::function<status_t(ConstantExpression*)>& func,
-                                           std::unordered_set<const ConstantExpression*>* visited,
-                                           bool processBeforeDependencies) {
-    if (mIsPostParseCompleted) return OK;
-
-    if (visited->find(this) != visited->end()) return OK;
-    visited->insert(this);
-
-    if (processBeforeDependencies) {
-        status_t err = func(this);
-        if (err != OK) return err;
-    }
-
-    for (auto* nextCE : getConstantExpressions()) {
-        status_t err = nextCE->recursivePass(func, visited, processBeforeDependencies);
-        if (err != OK) return err;
-    }
-
-    for (auto* nextRef : getReferences()) {
-        auto* nextCE = nextRef->shallowGet()->constExpr();
-        CHECK(nextCE != nullptr) << "Local identifier is not a constant expression";
-        status_t err = nextCE->recursivePass(func, visited, processBeforeDependencies);
-        if (err != OK) return err;
-    }
-
-    if (!processBeforeDependencies) {
-        status_t err = func(this);
-        if (err != OK) return err;
-    }
-
-    return OK;
-}
-
-status_t ConstantExpression::recursivePass(
-    const std::function<status_t(const ConstantExpression*)>& func,
-    std::unordered_set<const ConstantExpression*>* visited, bool processBeforeDependencies) const {
-    if (mIsPostParseCompleted) return OK;
-
-    if (visited->find(this) != visited->end()) return OK;
-    visited->insert(this);
-
-    if (processBeforeDependencies) {
-        status_t err = func(this);
-        if (err != OK) return err;
-    }
-
-    for (const auto* nextCE : getConstantExpressions()) {
-        status_t err = nextCE->recursivePass(func, visited, processBeforeDependencies);
-        if (err != OK) return err;
-    }
-
-    for (const auto* nextRef : getReferences()) {
-        const auto* nextCE = nextRef->shallowGet()->constExpr();
-        CHECK(nextCE != nullptr) << "Local identifier is not a constant expression";
-        status_t err = nextCE->recursivePass(func, visited, processBeforeDependencies);
-        if (err != OK) return err;
-    }
-
-    if (!processBeforeDependencies) {
-        status_t err = func(this);
-        if (err != OK) return err;
-    }
-
-    return OK;
-}
-
-ConstantExpression::CheckAcyclicStatus::CheckAcyclicStatus(
-    status_t status, const ConstantExpression* cycleEnd,
-    const ReferenceConstantExpression* lastReference)
-    : status(status), cycleEnd(cycleEnd), lastReference(lastReference) {
-    CHECK(cycleEnd == nullptr || status != OK);
-    CHECK((cycleEnd == nullptr) == (lastReference == nullptr));
-}
-
-ConstantExpression::CheckAcyclicStatus ConstantExpression::checkAcyclic(
-    std::unordered_set<const ConstantExpression*>* visited,
-    std::unordered_set<const ConstantExpression*>* stack) const {
-    if (stack->find(this) != stack->end()) {
-        CHECK(isReferenceConstantExpression())
-            << "Only reference constant expression could be the cycle end";
-
-        std::cerr << "ERROR: Cyclic declaration:\n";
-        return CheckAcyclicStatus(UNKNOWN_ERROR, this,
-                                  static_cast<const ReferenceConstantExpression*>(this));
-    }
-
-    if (visited->find(this) != visited->end()) return CheckAcyclicStatus(OK);
-    visited->insert(this);
-    stack->insert(this);
-
-    for (const auto* nextCE : getConstantExpressions()) {
-        auto err = nextCE->checkAcyclic(visited, stack);
-        if (err.status != OK) {
-            return err;
-        }
-    }
-
-    for (const auto* nextRef : getReferences()) {
-        const auto* nextCE = nextRef->shallowGet()->constExpr();
-        CHECK(nextCE != nullptr) << "Local identifier is not a constant expression";
-        auto err = nextCE->checkAcyclic(visited, stack);
-
-        if (err.status != OK) {
-            if (err.cycleEnd == nullptr) return err;
-
-            // Only ReferenceConstantExpression has references,
-            CHECK(isReferenceConstantExpression())
-                << "Only reference constant expression could have refereneces";
-
-            // mExpr is defined explicitly before evaluation
-            std::cerr << "  '" << err.lastReference->mExpr << "' in '" << mExpr << "' at "
-                      << nextRef->location() << "\n";
-
-            if (err.cycleEnd == this) {
-                return CheckAcyclicStatus(err.status);
-            }
-            return CheckAcyclicStatus(err.status, err.cycleEnd,
-                                      static_cast<const ReferenceConstantExpression*>(this));
-        }
-    }
-
-    CHECK(stack->find(this) != stack->end());
-    stack->erase(this);
-    return CheckAcyclicStatus(OK);
-}
-
-void ConstantExpression::setPostParseCompleted() {
-    CHECK(!mIsPostParseCompleted);
-    mIsPostParseCompleted = true;
-}
-
-std::vector<const ConstantExpression*> LiteralConstantExpression::getConstantExpressions() const {
-    return {};
-}
-
-UnaryConstantExpression::UnaryConstantExpression(const std::string& op, ConstantExpression* value)
-    : mUnary(value), mOp(op) {}
-
-std::vector<const ConstantExpression*> UnaryConstantExpression::getConstantExpressions() const {
-    return {mUnary};
-}
-
-BinaryConstantExpression::BinaryConstantExpression(ConstantExpression* lval, const std::string& op,
-                                                   ConstantExpression* rval)
-    : mLval(lval), mRval(rval), mOp(op) {}
-
-std::vector<const ConstantExpression*> BinaryConstantExpression::getConstantExpressions() const {
-    return {mLval, mRval};
-}
-
-TernaryConstantExpression::TernaryConstantExpression(ConstantExpression* cond,
-                                                     ConstantExpression* trueVal,
-                                                     ConstantExpression* falseVal)
-    : mCond(cond), mTrueVal(trueVal), mFalseVal(falseVal) {}
-
-std::vector<const ConstantExpression*> TernaryConstantExpression::getConstantExpressions() const {
-    return {mCond, mTrueVal, mFalseVal};
-}
-
-ReferenceConstantExpression::ReferenceConstantExpression(const Reference<LocalIdentifier>& value,
-                                                         const std::string& expr)
-    : mReference(value) {
-    mExpr = expr;
-    mTrivialDescription = mExpr.empty();
-}
-
-bool ReferenceConstantExpression::isReferenceConstantExpression() const {
-    return true;
-}
-
-std::vector<const ConstantExpression*> ReferenceConstantExpression::getConstantExpressions() const {
-    // Returns reference instead
-    return {};
-}
-
-std::vector<const Reference<LocalIdentifier>*> ReferenceConstantExpression::getReferences() const {
-    return {&mReference};
 }
 
 /*
