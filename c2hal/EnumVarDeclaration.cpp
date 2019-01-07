@@ -43,7 +43,7 @@ Expression *EnumVarDeclaration::getExpression() const {
 void EnumVarDeclaration::generateSource(Formatter &out) const {
     out << getName();
 
-    if(mExpression != nullptr) {
+    if(mExpression != NULL) {
         out << " = " << mExpression->toString(StringHelper::kUpperSnakeCase);
     }
 
