@@ -38,6 +38,7 @@ size_t HidlTypeAssertion::size() const {
     return mSize;
 }
 
+// static
 void HidlTypeAssertion::EmitAll(Formatter &out) {
     std::sort(
             registry().begin(),

@@ -25,6 +25,10 @@ namespace android {
 
 MemoryType::MemoryType() {}
 
+void MemoryType::addNamedTypesToSet(std::set<const FQName> &) const {
+    // do nothing
+}
+
 std::string MemoryType::getCppType(StorageMode mode,
                                    bool specifyNamespaces) const {
     const std::string base =
@@ -41,10 +45,6 @@ std::string MemoryType::getCppType(StorageMode mode,
         case StorageMode_Result:
             return "const " + base + "*";
     }
-}
-
-std::string MemoryType::typeName() const {
-    return "memory";
 }
 
 std::string MemoryType::getVtsType() const {
