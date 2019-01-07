@@ -25,6 +25,8 @@ namespace android {
 struct DeathRecipientType : public Type {
     DeathRecipientType();
 
+    void addNamedTypesToSet(std::set<const FQName> &set) const override;
+
     std::string getCppType(
             StorageMode mode,
             bool specifyNamespaces) const override;
@@ -32,7 +34,6 @@ struct DeathRecipientType : public Type {
     std::string getJavaType(bool forInitializer) const override;
 
     std::string getVtsType() const override;
-    std::string typeName() const override;
 
     void emitReaderWriter(
             Formatter &out,

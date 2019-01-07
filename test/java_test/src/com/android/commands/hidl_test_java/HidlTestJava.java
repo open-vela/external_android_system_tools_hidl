@@ -28,7 +28,6 @@ import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.NoSuchElementException;
 
 public final class HidlTestJava {
     private static final String TAG = "HidlTestJava";
@@ -236,14 +235,6 @@ public final class HidlTestJava {
                      new ArrayList[]{new ArrayList(Arrays.asList(1,2)),
                                      new ArrayList(Arrays.asList(3,4))});
 
-        {
-            // Test proper exceptions are thrown
-            try {
-                IBase proxy = IBase.getService("this-doesn't-exist");
-            } catch (Exception e) {
-                ExpectTrue(e instanceof NoSuchElementException);
-            }
-        }
 
         {
             // Test access through base interface binder.
@@ -897,11 +888,12 @@ public final class HidlTestJava {
     }
 
     private void server() throws RemoteException {
-        HwBinder.configureRpcThreadpool(1, true);
-
         Baz baz = new Baz();
         baz.registerAsService("baz");
 
-        HwBinder.joinRpcThreadpool();
+        try {
+            Thread.sleep(20000);
+        } catch (InterruptedException e) {
+        }
     }
 }

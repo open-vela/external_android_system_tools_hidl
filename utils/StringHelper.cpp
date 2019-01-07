@@ -31,6 +31,7 @@ static const std::regex kStartCapcase("^" CAPCASE);
 
 namespace android {
 
+// static
 std::string StringHelper::Uppercase(const std::string &in) {
     std::string out{in};
 
@@ -41,6 +42,7 @@ std::string StringHelper::Uppercase(const std::string &in) {
     return out;
 }
 
+// static
 std::string StringHelper::Lowercase(const std::string &in) {
     std::string out{in};
 
@@ -51,6 +53,7 @@ std::string StringHelper::Lowercase(const std::string &in) {
     return out;
 }
 
+// static
 std::string StringHelper::Capitalize(const std::string &in) {
     std::string out{in};
 
@@ -61,6 +64,7 @@ std::string StringHelper::Capitalize(const std::string &in) {
     return out;
 }
 
+// static
 void StringHelper::Tokenize(const std::string &in,
         std::vector<std::string> *vec) {
 
@@ -98,6 +102,7 @@ void StringHelper::Tokenize(const std::string &in,
     }
 }
 
+// static
 std::string StringHelper::ToCamelCase(const std::string &in) {
     std::vector<std::string> components;
     Tokenize(in, &components);
@@ -113,6 +118,7 @@ std::string StringHelper::ToCamelCase(const std::string &in) {
     return JoinStrings(components, "");
 }
 
+// static
 std::string StringHelper::ToPascalCase(const std::string &in) {
     std::vector<std::string> components;
     Tokenize(in, &components);
@@ -122,6 +128,7 @@ std::string StringHelper::ToPascalCase(const std::string &in) {
     return JoinStrings(components, "");
 }
 
+// static
 std::string StringHelper::ToUpperSnakeCase(const std::string &in) {
     std::vector<std::string> components;
     Tokenize(in, &components);
@@ -131,6 +138,7 @@ std::string StringHelper::ToUpperSnakeCase(const std::string &in) {
     return JoinStrings(components, "_");
 }
 
+// static
 std::string StringHelper::ToLowerSnakeCase(const std::string &in) {
     std::vector<std::string> components;
     Tokenize(in, &components);
@@ -140,6 +148,7 @@ std::string StringHelper::ToLowerSnakeCase(const std::string &in) {
     return JoinStrings(components, "_");
 }
 
+// static
 std::string StringHelper::ToCase(StringHelper::Case c, const std::string &in) {
     switch(c) {
     case kCamelCase:
@@ -157,16 +166,19 @@ std::string StringHelper::ToCase(StringHelper::Case c, const std::string &in) {
     return in;
 }
 
+// static
 bool StringHelper::EndsWith(const std::string &in, const std::string &suffix) {
     return in.size() >= suffix.size() &&
            in.substr(in.size() - suffix.size()) == suffix;
 }
 
+// static
 bool StringHelper::StartsWith(const std::string &in, const std::string &prefix) {
     return in.size() >= prefix.size() &&
            in.substr(0, prefix.size()) == prefix;
 }
 
+// static
 std::string StringHelper::RTrim(const std::string &in, const std::string &suffix) {
     if (EndsWith(in, suffix)) {
         return in.substr(0, in.size() - suffix.size());
@@ -175,6 +187,7 @@ std::string StringHelper::RTrim(const std::string &in, const std::string &suffix
     return in;
 }
 
+// static
 std::string StringHelper::LTrim(const std::string &in, const std::string &prefix) {
     if (StartsWith(in, prefix)) {
         return in.substr(prefix.size());
@@ -183,6 +196,7 @@ std::string StringHelper::LTrim(const std::string &in, const std::string &prefix
     return in;
 }
 
+// static
 std::string StringHelper::RTrimAll(const std::string &in, const std::string &suffix) {
     std::string copy(in);
     while (EndsWith(copy, suffix)) {
@@ -192,6 +206,7 @@ std::string StringHelper::RTrimAll(const std::string &in, const std::string &suf
     return copy;
 }
 
+// static
 std::string StringHelper::LTrimAll(const std::string &in, const std::string &prefix) {
     std::string copy(in);
     while (StartsWith(copy, prefix)) {
@@ -201,6 +216,7 @@ std::string StringHelper::LTrimAll(const std::string &in, const std::string &pre
     return copy;
 }
 
+// static
 void StringHelper::SplitString(
         const std::string &s, char c, std::vector<std::string> *components) {
     components->clear();
@@ -217,6 +233,7 @@ void StringHelper::SplitString(
     }
 }
 
+// static
 std::string StringHelper::JoinStrings(
         const std::vector<std::string> &components,
         const std::string &separator) {

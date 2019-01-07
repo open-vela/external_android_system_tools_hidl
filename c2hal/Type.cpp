@@ -60,6 +60,7 @@ const std::string Type::decorateName(const std::string &name) const {
     return ss.str();
 }
 
+// static
 std::map<std::string, std::string> Type::kSignedToUnsignedMap = {
     { "char", "uint8_t" },
     { "short", "uint16_t" },
@@ -71,6 +72,7 @@ std::map<std::string, std::string> Type::kSignedToUnsignedMap = {
     { "int64_t", "uint64_t" },
 };
 
+// static
 const std::string Type::signedToUnsigned(const std::string &signedType) {
     auto it = kSignedToUnsignedMap.find(signedType);
 
@@ -81,6 +83,7 @@ const std::string Type::signedToUnsigned(const std::string &signedType) {
     return (*it).second;
 }
 
+// static
 std::map<std::string, std::string> Type::kCToHidlMap = {
     { "char", "int8_t /* NOTE: char */" },
     { "short", "int16_t" },
@@ -104,6 +107,7 @@ std::map<std::string, std::string> Type::kCToHidlMap = {
     // { "hidl_vec", "vec"},
 };
 
+// static
 const std::string Type::cToHidlType(const std::string &cType) {
     auto it = kCToHidlMap.find(cType);
 
