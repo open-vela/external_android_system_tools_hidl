@@ -2,8 +2,6 @@ cc_test {
     name: "hidl_test_java_native",
     srcs: ["hidl_test_java_native.cpp"],
 
-    cflags: ["-Wall", "-Werror"],
-
     shared_libs: [
         "libbase",
         "libhidlbase",

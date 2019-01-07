@@ -23,18 +23,15 @@
 namespace android {
 
 struct Hash {
-    static const std::vector<uint8_t> kEmptyHash;
-
     // path to .hal file
     static const Hash &getHash(const std::string &path);
-    static void clearHash(const std::string& path);
 
     // returns matching hashes of interfaceName in path
     // path is something like hardware/interfaces/current.txt
     // interfaceName is something like android.hardware.foo@1.0::IFoo
-    static std::vector<std::string> lookupHash(const std::string& path,
-                                               const std::string& interfaceName, std::string* err,
-                                               bool* fileExists = nullptr);
+    static std::vector<std::string> lookupHash(const std::string &path,
+                                               const std::string &interfaceName,
+                                               std::string *err);
 
     static std::string hexString(const std::vector<uint8_t> &hash);
     std::string hexString() const;
@@ -45,10 +42,8 @@ struct Hash {
 private:
     Hash(const std::string &path);
 
-    static Hash& getMutableHash(const std::string& path);
-
     const std::string mPath;
-    std::vector<uint8_t> mHash;
+    const std::vector<uint8_t> mHash;
 };
 
 }  // namespace android
