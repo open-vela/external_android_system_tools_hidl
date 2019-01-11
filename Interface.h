@@ -18,13 +18,8 @@
 
 #define INTERFACE_H_
 
-#include <vector>
-
-#include <hidl-hash/Hash.h>
-
-#include "ConstantExpression.h"
-#include "Reference.h"
 #include "Scope.h"
+#include <vector>
 
 namespace android {
 
@@ -32,23 +27,21 @@ struct Method;
 struct InterfaceAndMethod;
 
 struct Interface : public Scope {
-    const static std::unique_ptr<ConstantExpression> FLAG_ONE_WAY;
-
-    Interface(const char* localName, const FQName& fullName, const Location& location,
-              Scope* parent, const Reference<Type>& superType, const Hash* fileHash);
-
-    const Hash* getFileHash() const;
+    Interface(const char *localName, const Location &location, Interface *super);
 
     bool addMethod(Method *method);
     bool addAllReservedMethods();
 
     bool isElidableType() const override;
     bool isInterface() const override;
+    bool isBinder() const override;
+    bool isRootType() const { return mSuperType == nullptr; }
     bool isIBase() const { return fqName() == gIBaseFqName; }
     std::string typeName() const override;
 
-    const Interface* superType() const;
+    const Interface *superType() const;
 
+    Method *lookupMethod(std::string name) const;
     // Super type chain to root type.
     // First element is superType().
     std::vector<const Interface *> superTypeChain() const;
@@ -72,12 +65,8 @@ struct Interface : public Scope {
     // this->hidlReservedMethods()
     std::vector<InterfaceAndMethod> allMethodsFromRoot() const;
 
-    // allMethodsFromRoot for parent
-    std::vector<InterfaceAndMethod> allSuperMethodsFromRoot() const;
-
     // aliases for corresponding methods in this->fqName()
     std::string getBaseName() const;
-    std::string getAdapterName() const;
     std::string getProxyName() const;
     std::string getStubName() const;
     std::string getPassthroughName() const;
@@ -93,16 +82,6 @@ struct Interface : public Scope {
     std::string getJavaType(bool forInitializer) const override;
     std::string getVtsType() const override;
 
-    std::vector<const Reference<Type>*> getReferences() const override;
-    std::vector<const Reference<Type>*> getStrongReferences() const override;
-
-    std::vector<const ConstantExpression*> getConstantExpressions() const override;
-
-    status_t resolveInheritance() override;
-    status_t validate() const override;
-    status_t validateUniqueNames() const;
-    status_t validateAnnotations() const;
-
     void emitReaderWriter(
             Formatter &out,
             const std::string &name,
@@ -111,50 +90,40 @@ struct Interface : public Scope {
             bool isReader,
             ErrorMode mode) const override;
 
-    void emitPackageTypeDeclarations(Formatter& out) const override;
-    void emitPackageTypeHeaderDefinitions(Formatter& out) const override;
-    void emitTypeDefinitions(Formatter& out, const std::string& prefix) const override;
+    status_t emitGlobalTypeDeclarations(Formatter &out) const override;
+    status_t emitTypeDefinitions(
+            Formatter &out, const std::string prefix) const override;
 
-    void getAlignmentAndSize(size_t* align, size_t* size) const override;
     void emitJavaReaderWriter(
             Formatter &out,
             const std::string &parcelObj,
             const std::string &argName,
             bool isReader) const override;
 
-    void emitVtsAttributeType(Formatter& out) const override;
+    status_t emitVtsAttributeType(Formatter &out) const override;
 
-    void emitVtsAttributeDeclaration(Formatter& out) const;
-    void emitVtsMethodDeclaration(Formatter& out, bool isInherited) const;
+    status_t emitVtsAttributeDeclaration(Formatter &out) const;
+    status_t emitVtsMethodDeclaration(Formatter &out) const;
 
     bool hasOnewayMethods() const;
 
-    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
+    bool isJavaCompatible() const override;
 
-    bool isNeverStrongReference() const override;
-
-   private:
-    Reference<Type> mSuperType;
-
-    std::vector<Method*> mUserMethods;
-    std::vector<Method*> mReservedMethods;
-
-    const Hash* mFileHash;
-
-    bool fillPingMethod(Method* method) const;
-    bool fillDescriptorChainMethod(Method* method) const;
-    bool fillGetDescriptorMethod(Method* method) const;
-    bool fillHashChainMethod(Method* method) const;
-    bool fillSyspropsChangedMethod(Method* method) const;
-    bool fillLinkToDeathMethod(Method* method) const;
-    bool fillUnlinkToDeathMethod(Method* method) const;
-    bool fillSetHALInstrumentationMethod(Method* method) const;
-    bool fillGetDebugInfoMethod(Method* method) const;
-    bool fillDebugMethod(Method* method) const;
-
-    void emitDigestChain(
-        Formatter& out, const std::string& prefix, const std::vector<const Interface*>& chain,
-        std::function<std::string(std::unique_ptr<ConstantExpression>)> byteToString) const;
+private:
+    Interface *mSuperType;
+    std::vector<Method *> mUserMethods;
+    std::vector<Method *> mReservedMethods;
+    mutable bool mIsJavaCompatibleInProgress;
+    bool fillPingMethod(Method *method) const;
+    bool fillDescriptorChainMethod(Method *method) const;
+    bool fillGetDescriptorMethod(Method *method) const;
+    bool fillHashChainMethod(Method *method) const;
+    bool fillSyspropsChangedMethod(Method *method) const;
+    bool fillLinkToDeathMethod(Method *method) const;
+    bool fillUnlinkToDeathMethod(Method *method) const;
+    bool fillSetHALInstrumentationMethod(Method *method) const;
+    bool fillGetDebugInfoMethod(Method *method) const;
+    bool fillDebugMethod(Method *method) const;
 
     DISALLOW_COPY_AND_ASSIGN(Interface);
 };
@@ -166,8 +135,7 @@ struct InterfaceAndMethod {
           mMethod(method) {}
     Method *method() const { return mMethod; }
     const Interface *interface() const { return mInterface; }
-
-   private:
+private:
     // do not own these objects.
     const Interface *mInterface;
     Method *mMethod;

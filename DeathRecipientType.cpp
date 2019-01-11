@@ -21,11 +21,7 @@
 
 namespace android {
 
-DeathRecipientType::DeathRecipientType(Scope* parent) : Type(parent) {}
-
-std::string DeathRecipientType::typeName() const {
-    return "death recipient";
-}
+DeathRecipientType::DeathRecipientType() {}
 
 std::string DeathRecipientType::getCppType(StorageMode mode,
                                    bool specifyNamespaces) const {
@@ -74,12 +70,17 @@ bool DeathRecipientType::resultNeedsDeref() const {
     return true;
 }
 
+bool DeathRecipientType::isJavaCompatible() const {
+    return true;
+}
+
 void DeathRecipientType::getAlignmentAndSize(size_t *align, size_t *size) const {
     *align = *size = 0; // this object should only be used in passthrough mode
 }
 
-void DeathRecipientType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t DeathRecipientType::emitVtsTypeDeclarations(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
+    return OK;
 }
 
 }  // namespace android

@@ -37,14 +37,14 @@ struct ScalarType : public Type {
         KIND_DOUBLE,
     };
 
-    ScalarType(Kind kind, Scope* parent);
+    ScalarType(Kind kind);
 
     bool isScalar() const override;
 
     bool isElidableType() const override;
     const ScalarType *resolveToScalarType() const override;
 
-    bool deepCanCheckEquality(std::unordered_set<const Type*>* visited) const override;
+    bool canCheckEquality() const override;
 
     std::string typeName() const override;
     bool isValidEnumStorageType() const;
@@ -54,8 +54,8 @@ struct ScalarType : public Type {
             bool specifyNamespaces) const override;
 
     std::string getJavaType(bool forInitializer) const override;
-    std::string getJavaTypeClass() const override;
 
+    std::string getJavaWrapperType() const override;
     std::string getJavaSuffix() const override;
 
     std::string getVtsType() const override;
@@ -96,7 +96,7 @@ struct ScalarType : public Type {
             const std::string &offset,
             bool isReader) const override;
 
-    void emitVtsTypeDeclarations(Formatter& out) const override;
+    status_t emitVtsTypeDeclarations(Formatter &out) const override;
 
     void getAlignmentAndSize(size_t *align, size_t *size) const override;
 

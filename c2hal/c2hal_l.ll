@@ -50,6 +50,8 @@ using namespace android;
 
 int check_type(yyscan_t yyscanner, struct yyguts_t *yyg);
 
+// TODO convert to parse params/lex params
+
 extern int start_token;
 
 extern std::string last_comment;
@@ -78,7 +80,6 @@ extern bool isOpenGl;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #pragma clang diagnostic ignored "-Wdeprecated-register"
-#pragma clang diagnostic ignored "-Wregister"
 
 %}
 
