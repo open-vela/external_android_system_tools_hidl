@@ -23,11 +23,11 @@
 namespace android {
 
 struct HandleType : public Type {
-    HandleType();
+    HandleType(Scope* parent);
 
     bool isHandle() const override;
 
-    void addNamedTypesToSet(std::set<const FQName> &set) const override;
+    std::string typeName() const override;
 
     std::string getCppType(
             StorageMode mode,
@@ -58,13 +58,13 @@ struct HandleType : public Type {
 
     bool needsEmbeddedReadWrite() const override;
 
-    bool isJavaCompatible() const override;
+    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
 
     bool useNameInEmitReaderWriterEmbedded(bool isReader) const override;
 
     void getAlignmentAndSize(size_t *align, size_t *size) const override;
 
-    status_t emitVtsTypeDeclarations(Formatter &out) const override;
+    void emitVtsTypeDeclarations(Formatter& out) const override;
 };
 
 }  // namespace android

@@ -22,18 +22,18 @@
 
 namespace android {
 
-StringType::StringType() {}
-
-void StringType::addNamedTypesToSet(std::set<const FQName> &) const {
-    // do nothing
-}
+StringType::StringType(Scope* parent) : Type(parent) {}
 
 bool StringType::isString() const {
     return true;
 }
 
-bool StringType::canCheckEquality() const {
+bool StringType::deepCanCheckEquality(std::unordered_set<const Type*>* /* visited */) const {
     return true;
+}
+
+std::string StringType::typeName() const {
+    return "string";
 }
 
 std::string StringType::getCppType(StorageMode mode,
@@ -209,9 +209,8 @@ bool StringType::resultNeedsDeref() const {
     return true;
 }
 
-status_t StringType::emitVtsTypeDeclarations(Formatter &out) const {
+void StringType::emitVtsTypeDeclarations(Formatter& out) const {
     out << "type: " << getVtsType() << "\n";
-    return OK;
 }
 
 static HidlTypeAssertion assertion("hidl_string", 16 /* size */);

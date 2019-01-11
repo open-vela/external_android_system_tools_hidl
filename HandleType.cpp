@@ -23,14 +23,14 @@
 
 namespace android {
 
-HandleType::HandleType() {}
-
-void HandleType::addNamedTypesToSet(std::set<const FQName> &) const {
-    // do nothing
-}
+HandleType::HandleType(Scope* parent) : Type(parent) {}
 
 bool HandleType::isHandle() const {
     return true;
+}
+
+std::string HandleType::typeName() const {
+    return "handle";
 }
 
 std::string HandleType::getCppType(StorageMode mode,
@@ -157,7 +157,7 @@ bool HandleType::needsEmbeddedReadWrite() const {
     return true;
 }
 
-bool HandleType::isJavaCompatible() const {
+bool HandleType::deepIsJavaCompatible(std::unordered_set<const Type*>* /* visited */) const {
     return false;
 }
 
@@ -167,9 +167,8 @@ void HandleType::getAlignmentAndSize(size_t *align, size_t *size) const {
     *size = assertion.size();
 }
 
-status_t HandleType::emitVtsTypeDeclarations(Formatter &out) const {
+void HandleType::emitVtsTypeDeclarations(Formatter& out) const {
     out << "type: " << getVtsType() << "\n";
-    return OK;
 }
 
 }  // namespace android
