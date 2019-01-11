@@ -461,10 +461,11 @@ bool isSystemProcessSupportedPackage(const FQName& fqName) {
            fqName.string() == "android.hardware.graphics.mapper@2.1" ||
            fqName.string() == "android.hardware.renderscript@1.0" ||
            fqName.string() == "android.hidl.memory.token@1.0" ||
-           fqName.string() == "android.hidl.memory@1.0";
+           fqName.string() == "android.hidl.memory@1.0" ||
+           fqName.string() == "android.hidl.safe_union@1.0";
 }
 
-bool isSystemPackage(const FQName &package) {
+bool isCoreAndroidPackage(const FQName& package) {
     return package.inPackage("android.hidl") ||
            package.inPackage("android.system") ||
            package.inPackage("android.frameworks") ||
@@ -534,8 +535,7 @@ static status_t generateAdapterMainSource(Formatter& out, const FQName& packageF
 
 static status_t generateAndroidBpForPackage(Formatter& out, const FQName& packageFQName,
                                             const Coordinator* coordinator) {
-    CHECK(packageFQName.isValid() && !packageFQName.isFullyQualified() &&
-          packageFQName.name().empty());
+    CHECK(!packageFQName.isFullyQualified() && packageFQName.name().empty());
 
     std::vector<FQName> packageInterfaces;
 
@@ -552,7 +552,7 @@ static status_t generateAndroidBpForPackage(Formatter& out, const FQName& packag
     for (const auto& fqName : packageInterfaces) {
         AST* ast = coordinator->parse(fqName);
 
-        if (ast == NULL) {
+        if (ast == nullptr) {
             fprintf(stderr, "ERROR: Could not parse %s. Aborting.\n", fqName.string().c_str());
 
             return UNKNOWN_ERROR;
@@ -579,8 +579,14 @@ static status_t generateAndroidBpForPackage(Formatter& out, const FQName& packag
     err = isTestPackage(packageFQName, coordinator, &generateForTest);
     if (err != OK) return err;
 
-    bool isVndk = !generateForTest && isSystemPackage(packageFQName);
+    bool isCoreAndroid = isCoreAndroidPackage(packageFQName);
+
+    bool isVndk = !generateForTest && isCoreAndroid;
     bool isVndkSp = isVndk && isSystemProcessSupportedPackage(packageFQName);
+
+    // Currently, all platform-provided interfaces are in the VNDK, so if it isn't in the VNDK, it
+    // is device specific and so should be put in the product partition.
+    bool isProduct = !isCoreAndroid;
 
     std::string packageRoot;
     err = coordinator->getPackageRoot(packageFQName, &packageRoot);
@@ -595,9 +601,6 @@ static status_t generateAndroidBpForPackage(Formatter& out, const FQName& packag
             out << "owner: \"" << coordinator->getOwner() << "\",\n";
         }
         out << "root: \"" << packageRoot << "\",\n";
-        if (isHidlTransportPackage(packageFQName)) {
-            out << "core_interface: true,\n";
-        }
         if (isVndk) {
             out << "vndk: ";
             out.block([&]() {
@@ -606,6 +609,9 @@ static status_t generateAndroidBpForPackage(Formatter& out, const FQName& packag
                     out << "support_system_process: true,\n";
                 }
             }) << ",\n";
+        }
+        if (isProduct) {
+            out << "product_specific: true,\n";
         }
         (out << "srcs: [\n").indent([&] {
            for (const auto& fqName : packageInterfaces) {
@@ -667,7 +673,7 @@ static status_t generateAndroidBpImplForPackage(Formatter& out, const FQName& pa
     for (const auto &fqName : packageInterfaces) {
         AST *ast = coordinator->parse(fqName);
 
-        if (ast == NULL) {
+        if (ast == nullptr) {
             fprintf(stderr,
                     "ERROR: Could not parse %s. Aborting.\n",
                     fqName.string().c_str());
@@ -678,6 +684,7 @@ static status_t generateAndroidBpImplForPackage(Formatter& out, const FQName& pa
         ast->getImportedPackages(&importedPackages);
     }
 
+    out << "// FIXME: your file license if you have one\n\n";
     out << "cc_library_shared {\n";
     out.indent([&] {
         out << "// FIXME: this should only be -impl for a passthrough hal.\n"
@@ -785,10 +792,8 @@ bool validateForSource(const FQName& fqName, const Coordinator* coordinator,
 FileGenerator::GenerationFunction generateExportHeaderForPackage(bool forJava) {
     return [forJava](Formatter& out, const FQName& packageFQName,
                      const Coordinator* coordinator) -> status_t {
-        CHECK(packageFQName.isValid()
-                && !packageFQName.package().empty()
-                && !packageFQName.version().empty()
-                && packageFQName.name().empty());
+        CHECK(!packageFQName.package().empty() && !packageFQName.version().empty() &&
+              packageFQName.name().empty());
 
         std::vector<FQName> packageInterfaces;
 
@@ -804,7 +809,7 @@ FileGenerator::GenerationFunction generateExportHeaderForPackage(bool forJava) {
         for (const auto &fqName : packageInterfaces) {
             AST *ast = coordinator->parse(fqName);
 
-            if (ast == NULL) {
+            if (ast == nullptr) {
                 fprintf(stderr,
                         "ERROR: Could not parse %s. Aborting.\n",
                         fqName.string().c_str());
@@ -874,7 +879,7 @@ static status_t generateHashOutput(Formatter& out, const FQName& fqName,
     AST* ast = coordinator->parse(fqName, {} /* parsed */,
                                   Coordinator::Enforce::NO_HASH /* enforcement */);
 
-    if (ast == NULL) {
+    if (ast == nullptr) {
         fprintf(stderr, "ERROR: Could not parse %s. Aborting.\n", fqName.string().c_str());
 
         return UNKNOWN_ERROR;
@@ -1174,13 +1179,28 @@ static const std::vector<OutputHandler> kFormats = {
             },
         }
     },
+    {
+        "dependencies",
+        "Prints all depended types.",
+        OutputMode::NOT_NEEDED,
+        Coordinator::Location::STANDARD_OUT,
+        GenerationGranularity::PER_FILE,
+        validateForSource,
+        {
+            {
+                FileGenerator::alwaysGenerate,
+                nullptr /* file name for fqName */,
+                astGenerationFunction(&AST::generateDependencies),
+            },
+        },
+    },
 };
 // clang-format on
 
 static void usage(const char *me) {
     fprintf(stderr,
             "usage: %s [-p <root path>] -o <output path> -L <language> [-O <owner>] (-r <interface "
-            "root>)+ [-v] [-d <depfile>] FQNAME...\n\n",
+            "root>)+ [-R] [-v] [-d <depfile>] FQNAME...\n\n",
             me);
 
     fprintf(stderr,
@@ -1194,6 +1214,7 @@ static void usage(const char *me) {
     fprintf(stderr, "         -O <owner>: The owner of the module for -Landroidbp(-impl)?.\n");
     fprintf(stderr, "         -o <output path>: Location to output files.\n");
     fprintf(stderr, "         -p <root path>: Android build root, defaults to $ANDROID_BUILD_TOP or pwd.\n");
+    fprintf(stderr, "         -R: Do not add default package roots if not specified in -r\n");
     fprintf(stderr, "         -r <package:path root>: E.g., android.hardware:hardware/interfaces.\n");
     fprintf(stderr, "         -v: verbose output.\n");
     fprintf(stderr, "         -d <depfile>: location of depfile to write to.\n");
@@ -1214,9 +1235,10 @@ int main(int argc, char **argv) {
     const OutputHandler* outputFormat = nullptr;
     Coordinator coordinator;
     std::string outputPath;
+    bool suppressDefaultPackagePaths = false;
 
     int res;
-    while ((res = getopt(argc, argv, "hp:o:O:r:L:vd:")) >= 0) {
+    while ((res = getopt(argc, argv, "hp:o:O:r:L:vd:R")) >= 0) {
         switch (res) {
             case 'p': {
                 if (!coordinator.getRootPath().empty()) {
@@ -1273,6 +1295,11 @@ int main(int argc, char **argv) {
                     exit(1);
                 }
 
+                break;
+            }
+
+            case 'R': {
+                suppressDefaultPackagePaths = true;
                 break;
             }
 
@@ -1365,15 +1392,24 @@ int main(int argc, char **argv) {
 
     coordinator.setOutputPath(outputPath);
 
-    coordinator.addDefaultPackagePath("android.hardware", "hardware/interfaces");
-    coordinator.addDefaultPackagePath("android.hidl", "system/libhidl/transport");
-    coordinator.addDefaultPackagePath("android.frameworks", "frameworks/hardware/interfaces");
-    coordinator.addDefaultPackagePath("android.system", "system/hardware/interfaces");
+    if (!suppressDefaultPackagePaths) {
+        coordinator.addDefaultPackagePath("android.hardware", "hardware/interfaces");
+        coordinator.addDefaultPackagePath("android.hidl", "system/libhidl/transport");
+        coordinator.addDefaultPackagePath("android.frameworks", "frameworks/hardware/interfaces");
+        coordinator.addDefaultPackagePath("android.system", "system/hardware/interfaces");
+    }
 
     for (int i = 0; i < argc; ++i) {
+        const char* arg = argv[i];
+
         FQName fqName;
-        if (!FQName::parse(argv[i], &fqName)) {
-            fprintf(stderr, "ERROR: Invalid fully-qualified name as argument: %s.\n", argv[i]);
+        if (!FQName::parse(arg, &fqName)) {
+            fprintf(stderr, "ERROR: Invalid fully-qualified name as argument: %s.\n", arg);
+            exit(1);
+        }
+
+        if (coordinator.getPackageInterfaceFiles(fqName, nullptr /*fileNames*/) != OK) {
+            fprintf(stderr, "ERROR: Could not get sources for %s.\n", arg);
             exit(1);
         }
 
