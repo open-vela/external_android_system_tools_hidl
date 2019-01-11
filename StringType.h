@@ -23,13 +23,13 @@
 namespace android {
 
 struct StringType : public Type {
-    StringType();
-
-    void addNamedTypesToSet(std::set<const FQName> &set) const override;
+    StringType(Scope* parent);
 
     bool isString() const override;
 
-    bool canCheckEquality() const override;
+    bool deepCanCheckEquality(std::unordered_set<const Type*>* visited) const override;
+
+    std::string typeName() const override;
 
     std::string getCppType(
             StorageMode mode,
@@ -77,7 +77,7 @@ struct StringType : public Type {
     bool needsEmbeddedReadWrite() const override;
     bool resultNeedsDeref() const override;
 
-    status_t emitVtsTypeDeclarations(Formatter &out) const override;
+    void emitVtsTypeDeclarations(Formatter& out) const override;
 
     void getAlignmentAndSize(size_t *align, size_t *size) const override;
 };

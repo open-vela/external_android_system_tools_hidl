@@ -18,17 +18,22 @@
 
 #define REF_TYPE_H_
 
+#include <vector>
+
+#include "Reference.h"
 #include "Type.h"
 
 namespace android {
 
 struct RefType : public TemplatedType {
-    RefType();
+    RefType(Scope* parent);
 
-    std::string typeName() const override;
-    bool isCompatibleElementType(Type *elementType) const override;
+    std::string templatedTypeName() const override;
 
-    void addNamedTypesToSet(std::set<const FQName> &set) const override;
+    bool isCompatibleElementType(const Type* elementType) const override;
+
+    std::vector<const Reference<Type>*> getStrongReferences() const override;
+
     std::string getCppType(StorageMode mode,
                            bool specifyNamespaces) const override;
 
@@ -66,13 +71,13 @@ struct RefType : public TemplatedType {
             const std::string &offsetText) const override;
 
     bool needsEmbeddedReadWrite() const override;
-    bool needsResolveReferences() const override;
+    bool deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const override;
     bool resultNeedsDeref() const override;
 
-    bool isJavaCompatible() const override;
-    bool containsPointer() const override;
+    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
+    bool deepContainsPointer(std::unordered_set<const Type*>* visited) const override;
 
- private:
+   private:
     DISALLOW_COPY_AND_ASSIGN(RefType);
 };
 
