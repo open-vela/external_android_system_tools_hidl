@@ -29,7 +29,7 @@ static const std::regex RE_U32("[^ul]u$");
 static const std::regex RE_S64("[^ul](l|ll)$");
 static const std::regex RE_U64("[^ul](ul|ull)$");
 
-Expression::Type Expression::integralType(const std::string& integer) {
+Expression::Type Expression::integralType(std::string integer) {
     if (std::regex_search(integer, RE_S32)) {
         return Type::S32;
     }
@@ -55,8 +55,8 @@ Expression::Type Expression::coalesceTypes(Type lhs, Type rhs) {
     // because we are reducing everything to two ranks, we can heavily simplify
     // conversion rules
 
-#define SIGNED(i) ((i) & 2) // i & 0b10
-#define MAX_RANK(i) ((i) | 1) // i | 0b01
+#define SIGNED(i) (i & 2) // i & 0b10
+#define MAX_RANK(i) (i | 1) // i | 0b01
 
     if (lhs == rhs) {
         return lhs;
@@ -111,7 +111,7 @@ struct AtomExpression : Expression {
 
         Define *define = ast.getDefinesScope().lookup(mValue);
 
-        if (define == nullptr) {
+        if (define == NULL) {
             return Type::UNKNOWN;
         }
 
@@ -228,7 +228,7 @@ struct FunctionCall : Expression {
     : mId(id), mArgs(args)
     {}
     ~FunctionCall() {
-        if(mArgs != nullptr) {
+        if(mArgs != NULL) {
             for(auto* args : *mArgs) {
                 delete args;
             }

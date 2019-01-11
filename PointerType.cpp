@@ -21,7 +21,7 @@
 
 namespace android {
 
-PointerType::PointerType(Scope* parent) : Type(parent) {}
+PointerType::PointerType() {}
 
 bool PointerType::isPointer() const {
     return true;
@@ -31,13 +31,9 @@ bool PointerType::isElidableType() const {
     return true;
 }
 
-std::string PointerType::getCppType(StorageMode /*mode*/,
-                                    bool /*specifyNamespaces*/) const {
+std::string PointerType::getCppType(StorageMode /* mode */,
+                                   bool /* specifyNamespaces */) const {
     return "void*";
-}
-
-std::string PointerType::typeName() const {
-    return "local pointer";
 }
 
 std::string PointerType::getVtsType() const {
@@ -46,53 +42,33 @@ std::string PointerType::getVtsType() const {
 
 void PointerType::emitReaderWriter(
         Formatter& out,
-        const std::string& name,
-        const std::string& /*parcelObj*/,
-        bool /*parcelObjIsPointer*/,
-        bool /*isReader*/,
-        ErrorMode /*mode*/) const {
-    out << "(void)" << name << ";\n";
-    out << "LOG_ALWAYS_FATAL(\"Pointer is only supported in passthrough mode\");\n\n";
-}
-
-void PointerType::emitReaderWriterEmbedded(
-        Formatter& out,
-        size_t /*depth*/,
-        const std::string& name,
-        const std::string& /*sanitizedName*/,
-        bool /*nameIsPointer*/,
-        const std::string& parcelObj,
-        bool parcelObjIsPointer,
-        bool isReader,
-        ErrorMode mode,
-        const std::string& parentName,
-        const std::string& offsetText) const {
-    out << "(void) " << parcelObj << ";\n";
-    out << "(void) " << parentName << ";\n";
-    out << "(void) (" << offsetText << ");\n";
-
-    // same exact code
-    emitReaderWriter(out, name, parcelObj, parcelObjIsPointer, isReader, mode);
+        const std::string& /* name */,
+        const std::string& /* parcelObj */,
+        bool /* parcelObjIsPointer */,
+        bool /* isReader */,
+        ErrorMode /* mode */) const {
+    out << "LOG_ALWAYS_FATAL(\"Pointer is only supported in passthrough mode\");\n";
 }
 
 bool PointerType::needsEmbeddedReadWrite() const {
-    return true;
+    return false;
 }
 
 bool PointerType::resultNeedsDeref() const {
     return false;
 }
 
-bool PointerType::deepIsJavaCompatible(std::unordered_set<const Type*>* /* visited */) const {
+bool PointerType::isJavaCompatible() const {
     return false;
 }
 
-bool PointerType::deepContainsPointer(std::unordered_set<const Type*>* /* visited */) const {
+bool PointerType::containsPointer() const {
     return true;
 }
 
-void PointerType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t PointerType::emitVtsTypeDeclarations(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
+    return OK;
 }
 
 }  // namespace android
