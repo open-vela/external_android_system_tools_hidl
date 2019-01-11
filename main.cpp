@@ -54,6 +54,8 @@ struct OutputHandler {
     GenerationFunction generate;
 };
 
+static bool generateForTest = false;
+
 static status_t generateSourcesForFile(
         const FQName &fqName,
         const char *,
@@ -98,6 +100,12 @@ static status_t generateSourcesForFile(
     }
     if (lang == "c++-impl") {
         return ast->generateCppImpl(outputDir);
+    }
+    if (lang == "c++-impl-headers") {
+        return ast->generateStubImplHeader(outputDir);
+    }
+    if (lang == "c++-impl-sources") {
+        return ast->generateStubImplSource(outputDir);
     }
     if (lang == "java") {
         return ast->generateJava(outputDir, limitToType);
@@ -183,7 +191,7 @@ static void generatePackagePathsSection(
         options.insert(coordinator->getPackageRootOption(interface));
     }
     options.insert(coordinator->getPackageRootOption(packageFQName));
-    options.insert(coordinator->getPackageRootOption(gIBasePackageFqName));
+    options.insert(coordinator->getPackageRootOption(gIBaseFqName));
     for (const auto &option : options) {
         out << "-r"
             << option
@@ -287,7 +295,7 @@ static void generateMakefileSection(
         if (fqName.name() == "types") {
             CHECK(typesAST != nullptr);
 
-            Scope *rootScope = typesAST->scope();
+            Scope* rootScope = typesAST->getRootScope();
 
             std::vector<NamedType *> subTypes = rootScope->getSubTypes();
             std::sort(
@@ -399,7 +407,7 @@ static bool packageNeedsJavaCode(
     // We'll have to generate Java code if types.hal contains any non-typedef
     // type declarations.
 
-    Scope *rootScope = typesAST->scope();
+    Scope* rootScope = typesAST->getRootScope();
     std::vector<NamedType *> subTypes = rootScope->getSubTypes();
 
     for (const auto &subType : subTypes) {
@@ -643,6 +651,28 @@ bool validateIsPackage(
     return true;
 }
 
+bool isHidlTransportPackage(const FQName& fqName) {
+    return fqName.package() == gIBasePackageFqName.string() ||
+           fqName.package() == gIManagerPackageFqName.string();
+}
+
+bool isSystemProcessSupportedPackage(const FQName& fqName) {
+    // Technically, so is hidl IBase + IServiceManager, but
+    // these are part of libhidltransport.
+    return fqName.string() == "android.hardware.graphics.allocator@2.0" ||
+           fqName.string() == "android.hardware.graphics.common@1.0" ||
+           fqName.string() == "android.hardware.graphics.mapper@2.0" ||
+           fqName.string() == "android.hardware.renderscript@1.0" ||
+           fqName.string() == "android.hidl.memory@1.0";
+}
+
+bool isSystemPackage(const FQName &package) {
+    return package.inPackage("android.hidl") ||
+           package.inPackage("android.system") ||
+           package.inPackage("android.frameworks") ||
+           package.inPackage("android.hardware");
+}
+
 static void generateAndroidBpGenSection(
         Formatter &out,
         const FQName &packageFQName,
@@ -685,9 +715,81 @@ static void generateAndroidBpGenSection(
     out << "}\n\n";
 }
 
-bool isHidlTransportPackage(const FQName &package) {
-    return package == gIBasePackageFqName ||
-           package == gIManagerPackageFqName;
+static void generateAndroidBpDependencyList(
+        Formatter &out,
+        const std::set<FQName> &importedPackagesHierarchy,
+        bool generateVendor) {
+    for (const auto &importedPackage : importedPackagesHierarchy) {
+        if (isHidlTransportPackage(importedPackage)) {
+            continue;
+        }
+
+        out << "\"" << makeLibraryName(importedPackage);
+        if (generateVendor && !isSystemPackage(importedPackage)) {
+            out << "_vendor";
+        }
+        out << "\",\n";
+    }
+}
+
+static void generateAndroidBpLibSection(
+        Formatter &out,
+        bool generateVendor,
+        const FQName &packageFQName,
+        const std::string &libraryName,
+        const std::string &genSourceName,
+        const std::string &genHeaderName,
+        const std::set<FQName> &importedPackagesHierarchy) {
+
+    // C++ library definition
+    out << "cc_library {\n";
+    out.indent();
+    out << "name: \"" << libraryName << (generateVendor ? "_vendor" : "") << "\",\n"
+        << "defaults: [\"hidl-module-defaults\"],\n"
+        << "generated_sources: [\"" << genSourceName << "\"],\n"
+        << "generated_headers: [\"" << genHeaderName << "\"],\n"
+        << "export_generated_headers: [\"" << genHeaderName << "\"],\n";
+
+    if (generateVendor) {
+        out << "vendor: true,\n";
+    } else {
+        out << "vendor_available: true,\n";
+        if (!generateForTest) {
+            out << "vndk: ";
+            out.block([&]() {
+                out << "enabled: true,\n";
+                if (isSystemProcessSupportedPackage(packageFQName)) {
+                    out << "support_system_process: true,\n";
+                }
+            }) << ",\n";
+        }
+    }
+    out << "shared_libs: [\n";
+
+    out.indent();
+    out << "\"libhidlbase\",\n"
+        << "\"libhidltransport\",\n"
+        << "\"libhwbinder\",\n"
+        << "\"liblog\",\n"
+        << "\"libutils\",\n"
+        << "\"libcutils\",\n";
+    generateAndroidBpDependencyList(out, importedPackagesHierarchy, generateVendor);
+    out.unindent();
+
+    out << "],\n";
+
+    out << "export_shared_lib_headers: [\n";
+    out.indent();
+    out << "\"libhidlbase\",\n"
+        << "\"libhidltransport\",\n"
+        << "\"libhwbinder\",\n"
+        << "\"libutils\",\n";
+    generateAndroidBpDependencyList(out, importedPackagesHierarchy, generateVendor);
+    out.unindent();
+    out << "],\n";
+    out.unindent();
+
+    out << "}\n";
 }
 
 static status_t generateAndroidBpForPackage(
@@ -813,64 +915,39 @@ static status_t generateAndroidBpForPackage(
     if (isHidlTransportPackage(packageFQName)) {
         out << "// " << packageFQName.string() << " is exported from libhidltransport\n";
     } else {
-        // C++ library definition
-        out << "cc_library_shared {\n";
-        out.indent();
-        out << "name: \"" << libraryName << "\",\n"
-            << "defaults: [\"hidl-module-defaults\"],\n"
-            << "generated_sources: [\"" << genSourceName << "\"],\n"
-            << "generated_headers: [\"" << genHeaderName << "\"],\n"
-            << "export_generated_headers: [\"" << genHeaderName << "\"],\n";
+        generateAndroidBpLibSection(
+            out,
+            false /* generateVendor */,
+            packageFQName,
+            libraryName,
+            genSourceName,
+            genHeaderName,
+            importedPackagesHierarchy);
 
-        // TODO(b/35813011): make always vendor_available
-        // Explicitly mark libraries vendor until BOARD_VNDK_VERSION can
-        // be enabled.
-        if (packageFQName.inPackage("android.hidl") ||
-                packageFQName.inPackage("android.system") ||
-                packageFQName.inPackage("android.frameworks") ||
-                packageFQName.inPackage("android.hardware")) {
-            out << "vendor_available: true,\n";
-        } else {
-            out << "vendor: true,\n";
+        // TODO(b/35813011): make all libraries vendor_available
+        // Explicitly create '_vendor' copies of libraries so that
+        // vendor code can link against the extensions. When this is
+        // used, framework code should link against vendor.awesome.foo@1.0
+        // and code on the vendor image should link against
+        // vendor.awesome.foo@1.0_vendor. For libraries with the below extensions,
+        // they will be available even on the generic system image.
+        // Because of this, they should always be referenced without the
+        // '_vendor' name suffix.
+        if (!isSystemPackage(packageFQName)) {
+
+            // Note, not using cc_defaults here since it's already not used and
+            // because generating this libraries will be removed when the VNDK
+            // is enabled (done by the build system itself).
+            out.endl();
+            generateAndroidBpLibSection(
+                out,
+                true /* generateVendor */,
+                packageFQName,
+                libraryName,
+                genSourceName,
+                genHeaderName,
+                importedPackagesHierarchy);
         }
-        out << "shared_libs: [\n";
-
-        out.indent();
-        out << "\"libhidlbase\",\n"
-            << "\"libhidltransport\",\n"
-            << "\"libhwbinder\",\n"
-            << "\"liblog\",\n"
-            << "\"libutils\",\n"
-            << "\"libcutils\",\n";
-        for (const auto &importedPackage : importedPackagesHierarchy) {
-            if (isHidlTransportPackage(importedPackage)) {
-                continue;
-            }
-
-            out << "\"" << makeLibraryName(importedPackage) << "\",\n";
-        }
-        out.unindent();
-
-        out << "],\n";
-
-        out << "export_shared_lib_headers: [\n";
-        out.indent();
-        out << "\"libhidlbase\",\n"
-            << "\"libhidltransport\",\n"
-            << "\"libhwbinder\",\n"
-            << "\"libutils\",\n";
-        for (const auto &importedPackage : importedPackagesHierarchy) {
-            if (isHidlTransportPackage(importedPackage)) {
-                continue;
-            }
-
-            out << "\"" << makeLibraryName(importedPackage) << "\",\n";
-        }
-        out.unindent();
-        out << "],\n";
-        out.unindent();
-
-        out << "}\n";
     }
 
     return OK;
@@ -1170,7 +1247,18 @@ static std::vector<OutputHandler> formats = {
      validateForSource,
      generationFunctionForFileOrPackage("c++-impl")
     },
-
+    {"c++-impl-headers",
+     "c++-impl but headers only",
+     OutputHandler::NEEDS_DIR /* mOutputMode */,
+     validateForSource,
+     generationFunctionForFileOrPackage("c++-impl-headers")
+    },
+    {"c++-impl-sources",
+     "c++-impl but sources only",
+     OutputHandler::NEEDS_DIR /* mOutputMode */,
+     validateForSource,
+     generationFunctionForFileOrPackage("c++-impl-sources")
+    },
 
     {"java",
      "(internal) Generates Java library for talking to HIDL interfaces in Java.",
@@ -1224,7 +1312,8 @@ static std::vector<OutputHandler> formats = {
 
 static void usage(const char *me) {
     fprintf(stderr,
-            "usage: %s [-p <root path>] -o <output path> -L <language> (-r <interface root>)+ fqname+\n",
+            "usage: %s [-p <root path>] -o <output path> -L <language> (-r <interface root>)+ [-t] "
+            "fqname+\n",
             me);
 
     fprintf(stderr, "         -h: Prints this menu.\n");
@@ -1235,6 +1324,7 @@ static void usage(const char *me) {
     fprintf(stderr, "         -o <output path>: Location to output files.\n");
     fprintf(stderr, "         -p <root path>: Android build root, defaults to $ANDROID_BUILD_TOP or pwd.\n");
     fprintf(stderr, "         -r <package:path root>: E.g., android.hardware:hardware/interfaces.\n");
+    fprintf(stderr, "         -t: generate build scripts (Android.bp) for tests.\n");
 }
 
 // hidl is intentionally leaky. Turn off LeakSanitizer by default.
@@ -1257,7 +1347,7 @@ int main(int argc, char **argv) {
     }
 
     int res;
-    while ((res = getopt(argc, argv, "hp:o:r:L:")) >= 0) {
+    while ((res = getopt(argc, argv, "hp:o:r:L:t")) >= 0) {
         switch (res) {
             case 'p':
             {
@@ -1310,6 +1400,11 @@ int main(int argc, char **argv) {
                 break;
             }
 
+            case 't': {
+                generateForTest = true;
+                break;
+            }
+
             case '?':
             case 'h':
             default:
@@ -1327,8 +1422,19 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    if (generateForTest && outputFormat->name() != "androidbp") {
+        fprintf(stderr, "ERROR: -t option is for -Landroidbp only.\n");
+        exit(1);
+    }
+
     argc -= optind;
     argv += optind;
+
+    if (argc == 0) {
+        fprintf(stderr, "ERROR: no fqname specified.\n");
+        usage(me);
+        exit(1);
+    }
 
     if (rootPath.empty()) {
         const char *ANDROID_BUILD_TOP = getenv("ANDROID_BUILD_TOP");
