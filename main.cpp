@@ -16,7 +16,6 @@
 
 #include "AST.h"
 #include "Coordinator.h"
-#include "Interface.h"
 #include "Scope.h"
 
 #include <android-base/logging.h>
@@ -456,8 +455,10 @@ bool isHidlTransportPackage(const FQName& fqName) {
 bool isSystemProcessSupportedPackage(const FQName& fqName) {
     // Technically, so is hidl IBase + IServiceManager, but
     // these are part of libhidltransport.
-    return fqName.inPackage("android.hardware.graphics.common") ||
-           fqName.inPackage("android.hardware.graphics.mapper") ||
+    return fqName.string() == "android.hardware.graphics.common@1.0" ||
+           fqName.string() == "android.hardware.graphics.common@1.1" ||
+           fqName.string() == "android.hardware.graphics.mapper@2.0" ||
+           fqName.string() == "android.hardware.graphics.mapper@2.1" ||
            fqName.string() == "android.hardware.renderscript@1.0" ||
            fqName.string() == "android.hidl.memory.token@1.0" ||
            fqName.string() == "android.hidl.memory@1.0" ||
@@ -889,31 +890,6 @@ static status_t generateHashOutput(Formatter& out, const FQName& fqName,
     return OK;
 }
 
-static status_t generateFunctionCount(Formatter& out, const FQName& fqName,
-                                      const Coordinator* coordinator) {
-    CHECK(fqName.isFullyQualified());
-
-    AST* ast = coordinator->parse(fqName, {} /* parsed */,
-                                  Coordinator::Enforce::NO_HASH /* enforcement */);
-
-    if (ast == nullptr) {
-        fprintf(stderr, "ERROR: Could not parse %s. Aborting.\n", fqName.string().c_str());
-        return UNKNOWN_ERROR;
-    }
-
-    const Interface* interface = ast->getInterface();
-    if (interface == nullptr) {
-        fprintf(stderr, "ERROR: Function count requires interface: %s.\n", fqName.string().c_str());
-        return UNKNOWN_ERROR;
-    }
-
-    // This is wrong for android.hidl.base@1.0::IBase, but in that case, it doesn't matter.
-    // This is just the number of APIs that are added.
-    out << fqName.string() << " " << interface->userDefinedMethods().size() << "\n";
-
-    return OK;
-}
-
 template <typename T>
 std::vector<T> operator+(const std::vector<T>& lhs, const std::vector<T>& rhs) {
     std::vector<T> ret;
@@ -1063,7 +1039,7 @@ static const std::vector<OutputHandler> kFormats = {
     },
     {
         "c++-impl-headers",
-        "c++-impl but headers only.",
+        "c++-impl but headers only",
         OutputMode::NEEDS_DIR,
         Coordinator::Location::DIRECT,
         GenerationGranularity::PER_FILE,
@@ -1072,7 +1048,7 @@ static const std::vector<OutputHandler> kFormats = {
     },
     {
         "c++-impl-sources",
-        "c++-impl but sources only.",
+        "c++-impl but sources only",
         OutputMode::NEEDS_DIR,
         Coordinator::Location::DIRECT,
         GenerationGranularity::PER_FILE,
@@ -1090,7 +1066,7 @@ static const std::vector<OutputHandler> kFormats = {
     },
     {
         "c++-adapter-headers",
-        "c++-adapter but helper headers only.",
+        "c++-adapter but helper headers only",
         OutputMode::NEEDS_DIR,
         Coordinator::Location::GEN_OUTPUT,
         GenerationGranularity::PER_FILE,
@@ -1099,7 +1075,7 @@ static const std::vector<OutputHandler> kFormats = {
     },
     {
         "c++-adapter-sources",
-        "c++-adapter but helper sources only.",
+        "c++-adapter but helper sources only",
         OutputMode::NEEDS_DIR,
         Coordinator::Location::GEN_OUTPUT,
         GenerationGranularity::PER_FILE,
@@ -1108,7 +1084,7 @@ static const std::vector<OutputHandler> kFormats = {
     },
     {
         "c++-adapter-main",
-        "c++-adapter but the adapter binary source only.",
+        "c++-adapter but the adapter binary source only",
         OutputMode::NEEDS_DIR,
         Coordinator::Location::DIRECT,
         GenerationGranularity::PER_PACKAGE,
@@ -1204,21 +1180,6 @@ static const std::vector<OutputHandler> kFormats = {
         }
     },
     {
-        "function-count",
-        "Prints the total number of functions added by the package or interface.",
-        OutputMode::NOT_NEEDED,
-        Coordinator::Location::STANDARD_OUT,
-        GenerationGranularity::PER_FILE,
-        validateForSource,
-        {
-            {
-                FileGenerator::generateForInterfaces,
-                nullptr /* file name for fqName */,
-                generateFunctionCount,
-            },
-        }
-    },
-    {
         "dependencies",
         "Prints all depended types.",
         OutputMode::NOT_NEEDED,
@@ -1253,7 +1214,7 @@ static void usage(const char *me) {
     fprintf(stderr, "         -O <owner>: The owner of the module for -Landroidbp(-impl)?.\n");
     fprintf(stderr, "         -o <output path>: Location to output files.\n");
     fprintf(stderr, "         -p <root path>: Android build root, defaults to $ANDROID_BUILD_TOP or pwd.\n");
-    fprintf(stderr, "         -R: Do not add default package roots if not specified in -r.\n");
+    fprintf(stderr, "         -R: Do not add default package roots if not specified in -r\n");
     fprintf(stderr, "         -r <package:path root>: E.g., android.hardware:hardware/interfaces.\n");
     fprintf(stderr, "         -v: verbose output.\n");
     fprintf(stderr, "         -d <depfile>: location of depfile to write to.\n");
