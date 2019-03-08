@@ -130,7 +130,7 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
 
     out << "public interface " << ifaceName << " extends ";
 
-    if (superType != NULL) {
+    if (superType != nullptr) {
         out << superType->fullJavaName();
     } else {
         out << "android.os.IHwInterface";
@@ -216,10 +216,6 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
     emitJavaTypeDeclarations(out);
 
     for (const auto &method : iface->methods()) {
-        if (method->isHiddenFromJava()) {
-            continue;
-        }
-
         const bool returnsValue = !method->results().empty();
         const bool needsCallback = method->results().size() > 1;
 
@@ -312,10 +308,6 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
     for (const auto &tuple : iface->allMethodsFromRoot()) {
         const Method *method = tuple.method();
 
-        if (method->isHiddenFromJava()) {
-            continue;
-        }
-
         const Interface *superInterface = tuple.interface();
         if (prevInterface != superInterface) {
             out << "// Methods from "
@@ -383,7 +375,7 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
                 << " */, _hidl_request, _hidl_reply, ";
 
             if (method->isOneway()) {
-                out << Interface::FLAG_ONEWAY << " /* oneway */";
+                out << Interface::FLAG_ONE_WAY->javaValue();
             } else {
                 out << "0 /* flags */";
             }
@@ -457,19 +449,15 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
     out << "}\n\n";
 
     for (Method *method : iface->hidlReservedMethods()) {
-        if (method->isHiddenFromJava()) {
-            continue;
-        }
-
         // b/32383557 this is a hack. We need to change this if we have more reserved methods.
         CHECK_LE(method->results().size(), 1u);
         std::string resultType = method->results().size() == 0 ? "void" :
                 method->results()[0]->type().getJavaType();
-        out << "@Override\npublic final "
-            << resultType
-            << " "
-            << method->name()
-            << "(";
+
+        bool canBeOverriden = method->name() == "debug";
+
+        out << "@Override\npublic " << (canBeOverriden ? "" : "final ") << resultType << " "
+            << method->name() << "(";
         method->emitJavaArgSignature(out);
         out << ") {\n";
 
@@ -535,8 +523,8 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
 
         out.indent();
 
-        out << "boolean _hidl_is_oneway = (_hidl_flags & " << Interface::FLAG_ONEWAY
-            << " /* oneway */) != 0\n;";
+        out << "boolean _hidl_is_oneway = (_hidl_flags & " << Interface::FLAG_ONE_WAY->javaValue()
+            << ") != 0;\n";
         out << "if (_hidl_is_oneway != " << (method->isOneway() ? "true" : "false") << ") ";
         out.block([&] {
             out << "_hidl_reply.writeStatus(" << UNKNOWN_ERROR << ");\n";
@@ -555,19 +543,6 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
         out << "_hidl_request.enforceInterface("
             << superInterface->fullJavaName()
             << ".kInterfaceName);\n\n";
-
-        if (method->isHiddenFromJava()) {
-            // This is a method hidden from the Java side of things, it must not
-            // return any value and will simply signal success.
-            CHECK(!returnsValue);
-
-            out << "_hidl_reply.writeStatus(android.os.HwParcel.STATUS_SUCCESS);\n";
-            out << "_hidl_reply.send();\n";
-            out << "break;\n";
-            out.unindent();
-            out << "}\n\n";
-            continue;
-        }
 
         for (const auto &arg : method->args()) {
             emitJavaReaderWriter(
