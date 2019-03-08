@@ -56,6 +56,8 @@ struct ArrayType : public Type {
 
     std::string getJavaType(bool forInitializer) const override;
 
+    std::string getJavaWrapperType() const override;
+
     std::string getVtsType() const override;
 
     void emitReaderWriter(
@@ -118,9 +120,6 @@ struct ArrayType : public Type {
 
     void emitJavaFieldInitializer(
             Formatter &out, const std::string &fieldName) const override;
-
-    void emitJavaFieldDefaultInitialValue(
-            Formatter &out, const std::string &declaredFieldName) const override;
 
     void emitJavaFieldReaderWriter(
             Formatter &out,

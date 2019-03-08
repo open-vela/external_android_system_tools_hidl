@@ -113,7 +113,7 @@ struct Reference {
         // Valid only while not resolved to prevent confusion when
         // ref.hasLookupFqName() is false while ref,get()->fqName is valid.
         CHECK(!isResolved());
-        return mFqName != FQName();
+        return mFqName.isValid();
     }
 
     template <class OtherT>
