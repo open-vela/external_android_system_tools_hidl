@@ -77,8 +77,10 @@ void AST::generateCppImplHeader(Formatter& out) const {
     const Interface* iface = mRootScope.getInterface();
     const std::string baseName = iface->getBaseName();
 
-    out << "// FIXME: your file license if you have one\n\n";
-    out << "#pragma once\n\n";
+    const std::string guard = makeHeaderGuard(baseName, false /* indicateGenerated */);
+
+    out << "#ifndef " << guard << "\n";
+    out << "#define " << guard << "\n\n";
 
     generateCppPackageInclude(out, mPackage, iface->localName());
 
@@ -129,6 +131,8 @@ void AST::generateCppImplHeader(Formatter& out) const {
 
     out << "}  // namespace implementation\n";
     enterLeaveNamespace(out, false /* leave */);
+
+    out << "\n#endif  // " << guard << "\n";
 }
 
 void AST::generateCppImplSource(Formatter& out) const {
@@ -140,7 +144,6 @@ void AST::generateCppImplSource(Formatter& out) const {
     const Interface* iface = mRootScope.getInterface();
     const std::string baseName = iface->getBaseName();
 
-    out << "// FIXME: your file license if you have one\n\n";
     out << "#include \"" << baseName << ".h\"\n\n";
 
     enterLeaveNamespace(out, true /* enter */);

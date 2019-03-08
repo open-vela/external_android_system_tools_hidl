@@ -107,22 +107,13 @@ bool isValidStructField(const std::string& identifier, std::string *errorMsg) {
     return true;
 }
 
-bool isValidCompoundTypeField(CompoundType::Style style, const std::string& identifier,
-                              std::string *errorMsg) {
-    // Unions don't support fix-up types; as such, they can't
-    // have name collisions with embedded read/write methods.
-    if (style == CompoundType::STYLE_UNION) { return true; }
-
-    return isValidStructField(identifier, errorMsg);;
-}
-
 bool isValidIdentifier(const std::string& identifier, std::string *errorMsg) {
     static const std::vector<std::string> keywords({
         "uint8_t", "uint16_t", "uint32_t", "uint64_t",
         "int8_t", "int16_t", "int32_t", "int64_t", "bool", "float", "double",
         "interface", "struct", "union", "string", "vec", "enum", "ref", "handle",
         "package", "import", "typedef", "generates", "oneway", "extends",
-        "fmq_sync", "fmq_unsync", "safe_union",
+        "fmq_sync", "fmq_unsync",
     });
     static const std::vector<std::string> cppKeywords({
         "alignas", "alignof", "and", "and_eq", "asm", "atomic_cancel", "atomic_commit",
@@ -243,7 +234,6 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 %token<str> STRING_LITERAL "string literal"
 %token<void> TYPEDEF "keyword `typedef`"
 %token<void> UNION "keyword `union`"
-%token<void> SAFE_UNION "keyword `safe_union`"
 %token<templatedType> TEMPLATED "templated type"
 %token<void> ONEWAY "keyword `oneway`"
 %token<str> UNKNOWN "unknown character"
@@ -272,8 +262,6 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 /* Precedence level 3, RTL; but we have to use %left here */
 %left UNARY_MINUS UNARY_PLUS '!' '~'
 
-%token '#'
-
 %type<docComment> doc_comments
 
 %type<str> error_stmt error
@@ -296,7 +284,7 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 %type<constantExpression> const_expr
 %type<enumValue> enum_value commentable_enum_value
 %type<enumValues> enum_values enum_declaration_body
-%type<typedVars> typed_vars non_empty_typed_vars
+%type<typedVars> typed_vars
 %type<typedVar> typed_var
 %type<method> method_declaration commentable_method_declaration
 %type<compoundStyle> struct_or_union_keyword
@@ -738,8 +726,7 @@ typedef_declaration
     ;
 
 const_expr
-    : INTEGER
-      {
+    : INTEGER                   {
           $$ = LiteralConstantExpression::tryParse($1);
 
           if ($$ == nullptr) {
@@ -759,11 +746,6 @@ const_expr
 
           $$ = new ReferenceConstantExpression(
               Reference<LocalIdentifier>(*$1, convertYYLoc(@1)), $1->string());
-      }
-    | fqname '#' IDENTIFIER
-      {
-          $$ = new AttributeConstantExpression(
-              Reference<Type>(*$1, convertYYLoc(@1)), $1->string(), $3);
       }
     | const_expr '?' const_expr ':' const_expr
       {
@@ -852,14 +834,7 @@ typed_vars
       {
           $$ = new TypedVarVector();
       }
-    | non_empty_typed_vars
-      {
-          $$ = $1;
-      }
-    ;
-
-non_empty_typed_vars
-    : typed_var
+    | typed_var
       {
           $$ = new TypedVarVector();
           if (!$$->add($1)) {
@@ -868,7 +843,7 @@ non_empty_typed_vars
               ast->addSyntaxError();
           }
       }
-    | non_empty_typed_vars ',' typed_var
+    | typed_vars ',' typed_var
       {
           $$ = $1;
           if (!$$->add($3)) {
@@ -901,7 +876,6 @@ typed_var
 struct_or_union_keyword
     : STRUCT { $$ = CompoundType::STYLE_STRUCT; }
     | UNION { $$ = CompoundType::STYLE_UNION; }
-    | SAFE_UNION { $$ = CompoundType::STYLE_SAFE_UNION; }
     ;
 
 named_struct_or_union_declaration
@@ -955,9 +929,8 @@ field_declaration
           CHECK((*scope)->isCompoundType());
 
           std::string errorMsg;
-          auto style = static_cast<CompoundType *>(*scope)->style();
-
-          if (!isValidCompoundTypeField(style, $2, &errorMsg)) {
+          if (static_cast<CompoundType *>(*scope)->style() == CompoundType::STYLE_STRUCT &&
+              !isValidStructField($2, &errorMsg)) {
               std::cerr << "ERROR: " << errorMsg << " at "
                         << @2 << "\n";
               YYERROR;
@@ -969,11 +942,9 @@ field_declaration
           CHECK((*scope)->isCompoundType());
 
           std::string errorMsg;
-          auto style = static_cast<CompoundType *>(*scope)->style();
-
-          if ($1 != nullptr && $1->isNamedType() &&
-              !isValidCompoundTypeField(style, static_cast<NamedType*>(
-                        $1)->localName().c_str(), &errorMsg)) {
+          if (static_cast<CompoundType *>(*scope)->style() == CompoundType::STYLE_STRUCT &&
+              $1 != nullptr && $1->isNamedType() &&
+              !isValidStructField(static_cast<NamedType*>($1)->localName().c_str(), &errorMsg)) {
               std::cerr << "ERROR: " << errorMsg << " at "
                         << @2 << "\n";
               YYERROR;
