@@ -507,12 +507,13 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			Inputs:     i.properties.Srcs,
 			Outputs:    []string{"srcs.srcjar"},
 		}, &i.inheritCommonProperties)
-
-		commonJavaProperties := javaProperties{
+		mctx.CreateModule(android.ModuleFactoryAdaptor(java.LibraryFactory), &javaProperties{
+			Name:              proptools.StringPtr(name.javaName()),
 			Defaults:          []string{"hidl-java-module-defaults"},
 			No_framework_libs: proptools.BoolPtr(true),
 			Installable:       proptools.BoolPtr(true),
 			Srcs:              []string{":" + name.javaSourcesName()},
+			Static_libs:       javaDependencies,
 
 			// This should ideally be system_current, but android.hidl.base-V1.0-java is used
 			// to build framework, which is used to build system_current.  Use core_current
@@ -520,16 +521,7 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			// not depend on framework.
 			Sdk_version: proptools.StringPtr("core_current"),
 			Libs:        []string{"hwbinder.stubs"},
-		}
-
-		mctx.CreateModule(android.ModuleFactoryAdaptor(java.LibraryFactory), &javaProperties{
-			Name:        proptools.StringPtr(name.javaName()),
-			Static_libs: javaDependencies,
-		}, &i.inheritCommonProperties, &commonJavaProperties)
-		mctx.CreateModule(android.ModuleFactoryAdaptor(java.LibraryFactory), &javaProperties{
-			Name: proptools.StringPtr(name.javaSharedName()),
-			Libs: javaDependencies,
-		}, &i.inheritCommonProperties, &commonJavaProperties)
+		}, &i.inheritCommonProperties)
 	}
 
 	if shouldGenerateJavaConstants {
@@ -741,13 +733,11 @@ func hidlInterfaceFactory() android.Module {
 }
 
 var doubleLoadablePackageNames = []string{
-	"android.frameworks.bufferhub@1.0",
 	"android.hardware.cas@1.0",
 	"android.hardware.cas.native@1.0",
 	"android.hardware.configstore@",
 	"android.hardware.drm@1.0",
 	"android.hardware.drm@1.1",
-	"android.hardware.drm@1.2",
 	"android.hardware.graphics.allocator@",
 	"android.hardware.graphics.bufferqueue@",
 	"android.hardware.media@",

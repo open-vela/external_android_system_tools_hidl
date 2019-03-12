@@ -100,9 +100,6 @@ func (f *fqName) headersName() string {
 func (f *fqName) javaName() string {
 	return f.sanitizedString() + "-java"
 }
-func (f *fqName) javaSharedName() string {
-	return f.sanitizedString() + "-java-shallow"
-}
 func (f *fqName) javaSourcesName() string {
 	return f.sanitizedString() + "-java_gen_java"
 }
