@@ -333,6 +333,8 @@ struct AST {
                               const NamedReference<Type>* arg, bool isReader,
                               bool addPrefixToName) const;
 
+    void emitTypeDeclarations(Formatter& out) const;
+    void emitJavaTypeDeclarations(Formatter& out) const;
     void emitVtsTypeDeclarations(Formatter& out) const;
 
     DISALLOW_COPY_AND_ASSIGN(AST);
