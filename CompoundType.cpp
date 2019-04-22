@@ -1152,8 +1152,6 @@ void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
 
         out.endl();
 
-        out << "::std::memset(&hidl_u, 0, sizeof(hidl_u));\n";
-
         // union itself is zero'd when set
         // padding after descriminator
         size_t dpad = layout.innerStruct.offset - layout.discriminator.size;
