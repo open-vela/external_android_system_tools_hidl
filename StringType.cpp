@@ -22,13 +22,13 @@
 
 namespace android {
 
-StringType::StringType(Scope* parent) : Type(parent) {}
+StringType::StringType() {}
 
 bool StringType::isString() const {
     return true;
 }
 
-bool StringType::deepCanCheckEquality(std::unordered_set<const Type*>* /* visited */) const {
+bool StringType::canCheckEquality() const {
     return true;
 }
 
@@ -209,8 +209,9 @@ bool StringType::resultNeedsDeref() const {
     return true;
 }
 
-void StringType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t StringType::emitVtsTypeDeclarations(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
+    return OK;
 }
 
 static HidlTypeAssertion assertion("hidl_string", 16 /* size */);

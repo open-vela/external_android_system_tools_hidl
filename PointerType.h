@@ -23,7 +23,7 @@
 namespace android {
 
 struct PointerType : public Type {
-    PointerType(Scope* parent);
+    PointerType();
 
     bool isPointer() const override;
 
@@ -48,10 +48,10 @@ struct PointerType : public Type {
     bool needsEmbeddedReadWrite() const override;
     bool resultNeedsDeref() const override;
 
-    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
-    bool deepContainsPointer(std::unordered_set<const Type*>* visited) const override;
+    bool isJavaCompatible() const override;
+    bool containsPointer() const override;
 
-    void emitVtsTypeDeclarations(Formatter& out) const override;
+    status_t emitVtsTypeDeclarations(Formatter &out) const override;
 };
 
 }  // namespace android

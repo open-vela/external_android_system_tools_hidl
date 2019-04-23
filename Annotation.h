@@ -21,7 +21,6 @@
 #include <android-base/macros.h>
 #include <map>
 #include <string>
-#include <vector>
 
 #include "ConstantExpression.h"
 
@@ -30,12 +29,15 @@ namespace android {
 struct Formatter;
 
 struct AnnotationParam {
-    virtual ~AnnotationParam() {}
+    AnnotationParam(const std::string &name,
+                    std::vector<std::string> *values);
+    AnnotationParam(const std::string &name,
+                    std::vector<ConstantExpression *> *values);
 
-    const std::string& getName() const;
+    const std::string &getName() const;
+    const std::vector<std::string> *getValues() const;
 
-    virtual std::vector<std::string> getValues() const = 0;
-    virtual std::string getSingleValue() const = 0;
+    const std::string &getSingleValue() const;
 
     /* Returns unquoted version of getSingleValue */
     std::string getSingleString() const;
@@ -43,39 +45,12 @@ struct AnnotationParam {
     /* Returns value interpretted as a boolean */
     bool getSingleBool() const;
 
-    std::vector<ConstantExpression*> getConstantExpressions();
-    virtual std::vector<const ConstantExpression*> getConstantExpressions() const;
-
-   protected:
+private:
     const std::string mName;
-
-    AnnotationParam(const std::string& name);
+    std::vector<std::string> *mValues;
 };
 
-struct StringAnnotationParam : AnnotationParam {
-    StringAnnotationParam(const std::string& name, std::vector<std::string>* values);
-
-    std::vector<std::string> getValues() const override;
-    std::string getSingleValue() const override;
-
-   private:
-    std::vector<std::string>* const mValues;
-};
-
-struct ConstantExpressionAnnotationParam : AnnotationParam {
-    ConstantExpressionAnnotationParam(const std::string& name,
-                                      std::vector<ConstantExpression*>* values);
-
-    std::vector<std::string> getValues() const override;
-    std::string getSingleValue() const override;
-
-    std::vector<const ConstantExpression*> getConstantExpressions() const override;
-
-   private:
-    std::vector<ConstantExpression*>* const mValues;
-};
-
-using AnnotationParamVector = std::vector<AnnotationParam*>;
+using AnnotationParamVector = std::vector<const AnnotationParam*>;
 
 struct Annotation {
     Annotation(const char *name, AnnotationParamVector *params);
@@ -84,12 +59,9 @@ struct Annotation {
     const AnnotationParamVector &params() const;
     const AnnotationParam *getParam(const std::string &name) const;
 
-    std::vector<ConstantExpression*> getConstantExpressions();
-    std::vector<const ConstantExpression*> getConstantExpressions() const;
-
     void dump(Formatter &out) const;
 
-   private:
+private:
     std::string mName;
     AnnotationParamVector *mParams;
 

@@ -19,7 +19,6 @@
 #include "Coordinator.h"
 #include "Interface.h"
 #include "Method.h"
-#include "Reference.h"
 #include "Scope.h"
 
 #include <hidl-util/Formatter.h>
@@ -27,9 +26,12 @@
 
 namespace android {
 
-void AST::emitJavaReaderWriter(Formatter& out, const std::string& parcelObj,
-                               const NamedReference<Type>* arg, bool isReader,
-                               bool addPrefixToName) const {
+void AST::emitJavaReaderWriter(
+        Formatter &out,
+        const std::string &parcelObj,
+        const TypedVar *arg,
+        bool isReader,
+        bool addPrefixToName) const {
     if (isReader) {
         out << arg->type().getJavaType()
             << " "
@@ -43,80 +45,93 @@ void AST::emitJavaReaderWriter(Formatter& out, const std::string& parcelObj,
             isReader);
 }
 
-void AST::generateJavaTypes(Formatter& out, const std::string& limitToType) const {
+status_t AST::generateJavaTypes(
+        const std::string &outputPath, const std::string &limitToType) const {
     // Splits types.hal up into one java file per declared type.
-    CHECK(!limitToType.empty()) << getFilename();
 
     for (const auto& type : mRootScope.getSubTypes()) {
         std::string typeName = type->localName();
 
-        if (type->isTypeDef()) continue;
-        if (typeName != limitToType) continue;
+        if (type->isTypeDef()) {
+            continue;
+        }
+
+        if (!limitToType.empty() && typeName != limitToType) {
+            continue;
+        }
+
+        std::string path = outputPath;
+        path.append(mCoordinator->convertPackageRootToPath(mPackage));
+        path.append(mCoordinator->getPackagePath(mPackage, true /* relative */,
+                true /* sanitized */));
+        path.append(typeName);
+        path.append(".java");
+
+        CHECK(Coordinator::MakeParentHierarchy(path)) << path;
+        FILE *file = fopen(path.c_str(), "w");
+
+        if (file == NULL) {
+            return -errno;
+        }
+
+        Formatter out(file);
 
         std::vector<std::string> packageComponents;
         getPackageAndVersionComponents(
                 &packageComponents, true /* cpp_compatible */);
 
-        out << "package " << mPackage.javaPackage() << ";\n\n\n";
+        out << "package " << mPackage.javaPackage() << ";\n\n";
 
-        type->emitJavaTypeDeclarations(out, true /* atTopLevel */);
-        return;
+        out << "\n";
+
+        status_t err =
+            type->emitJavaTypeDeclarations(out, true /* atTopLevel */);
+
+        if (err != OK) {
+            return err;
+        }
     }
 
-    CHECK(false) << "generateJavaTypes could not find limitToType type";
+    return OK;
 }
 
-void emitGetService(
-        Formatter& out,
-        const std::string& ifaceName,
-        const std::string& fqName,
-        bool isRetry) {
-    out << "public static "
-        << ifaceName
-        << " getService(String serviceName";
-    if (isRetry) {
-        out << ", boolean retry";
-    }
-    out << ") throws android.os.RemoteException ";
-    out.block([&] {
-        out << "return "
-            << ifaceName
-            << ".asInterface(android.os.HwBinder.getService(\""
-            << fqName
-            << "\", serviceName";
-        if (isRetry) {
-            out << ", retry";
-        }
-        out << "));\n";
-    }).endl().endl();
+status_t AST::generateJava(
+        const std::string &outputPath, const std::string &limitToType) const {
+    if (!isJavaCompatible()) {
+        fprintf(stderr,
+                "ERROR: This interface is not Java compatible. The Java backend"
+                " does NOT support union types nor native handles. "
+                "In addition, vectors of arrays are limited to at most "
+                "one-dimensional arrays and vectors of {vectors,interfaces} are"
+                " not supported.\n");
 
-    out << "public static "
-        << ifaceName
-        << " getService(";
-    if (isRetry) {
-        out << "boolean retry";
+        return UNKNOWN_ERROR;
     }
-    out << ") throws android.os.RemoteException ";
-    out.block([&] {
-        out << "return getService(\"default\"";
-        if (isRetry) {
-            out << ", retry";
-        }
-        out <<");\n";
-    }).endl().endl();
-}
-
-void AST::generateJava(Formatter& out, const std::string& limitToType) const {
-    CHECK(isJavaCompatible()) << getFilename();
 
     if (!AST::isInterface()) {
-        generateJavaTypes(out, limitToType);
-        return;
+        return generateJavaTypes(outputPath, limitToType);
     }
 
     const Interface* iface = mRootScope.getInterface();
-    const std::string ifaceName = iface->localName();
+    std::string ifaceName = iface->localName();
+
     const std::string baseName = iface->getBaseName();
+
+    std::string path = outputPath;
+    path.append(mCoordinator->convertPackageRootToPath(mPackage));
+    path.append(mCoordinator->getPackagePath(mPackage, true /* relative */,
+            true /* sanitized */));
+    path.append(ifaceName);
+    path.append(".java");
+
+    CHECK(Coordinator::MakeParentHierarchy(path));
+    FILE *file = fopen(path.c_str(), "w");
+
+    if (file == NULL) {
+        return -errno;
+    }
+
+    Formatter out(file);
 
     std::vector<std::string> packageComponents;
     getPackageAndVersionComponents(
@@ -210,10 +225,43 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
 
     out << "@Override\npublic android.os.IHwBinder asBinder();\n\n";
 
-    emitGetService(out, ifaceName, iface->fqName().string(), true /* isRetry */);
-    emitGetService(out, ifaceName, iface->fqName().string(), false /* isRetry */);
+    out << "public static "
+        << ifaceName
+        << " getService(String serviceName) throws android.os.RemoteException {\n";
 
-    emitJavaTypeDeclarations(out);
+    out.indent();
+
+    out << "return "
+        << ifaceName
+        << ".asInterface(android.os.HwBinder.getService(\""
+        << iface->fqName().string()
+        << "\",serviceName));\n";
+
+    out.unindent();
+
+    out << "}\n\n";
+
+    out << "public static "
+        << ifaceName
+        << " getService() throws android.os.RemoteException {\n";
+
+    out.indent();
+
+    out << "return "
+        << ifaceName
+        << ".asInterface(android.os.HwBinder.getService(\""
+        << iface->fqName().string()
+        << "\",\"default\"));\n";
+
+    out.unindent();
+
+    out << "}\n\n";
+
+    status_t err = emitJavaTypeDeclarations(out);
+
+    if (err != OK) {
+        return err;
+    }
 
     for (const auto &method : iface->methods()) {
         if (method->isHiddenFromJava()) {
@@ -236,8 +284,6 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
             out.unindent();
             out << "}\n\n";
         }
-
-        method->emitDocComment(out);
 
         if (returnsValue && !needsCallback) {
             out << method->results()[0]->type().getJavaType();
@@ -294,18 +340,6 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
         }).endl();
         out << "return \"[class or subclass of \" + "
             << ifaceName << ".kInterfaceName + \"]@Proxy\";\n";
-    }).endl().endl();
-
-    // Equals when internal binder object is equal (even if the interface Proxy object
-    // itself is different). This is similar to interfacesEqual in C++.
-    out << "@Override\npublic final boolean equals(java.lang.Object other) ";
-    out.block([&] {
-        out << "return android.os.HidlSupport.interfacesEqual(this, other);\n";
-    }).endl().endl();
-
-    out << "@Override\npublic final int hashCode() ";
-    out.block([&] {
-        out << "return this.asBinder().hashCode();\n";
     }).endl().endl();
 
     const Interface *prevInterface = nullptr;
@@ -383,7 +417,7 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
                 << " */, _hidl_request, _hidl_reply, ";
 
             if (method->isOneway()) {
-                out << Interface::FLAG_ONEWAY << " /* oneway */";
+                out << "android.os.IHwBinder.FLAG_ONEWAY";
             } else {
                 out << "0 /* flags */";
             }
@@ -450,8 +484,6 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
 
     out << "@Override\npublic android.os.IHwBinder asBinder() {\n";
     out.indent();
-    // If we change this behavior in the future and asBinder does not return "this",
-    // equals and hashCode should also be overridden.
     out << "return this;\n";
     out.unindent();
     out << "}\n\n";
@@ -535,15 +567,6 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
 
         out.indent();
 
-        out << "boolean _hidl_is_oneway = (_hidl_flags & " << Interface::FLAG_ONEWAY
-            << " /* oneway */) != 0\n;";
-        out << "if (_hidl_is_oneway != " << (method->isOneway() ? "true" : "false") << ") ";
-        out.block([&] {
-            out << "_hidl_reply.writeStatus(" << UNKNOWN_ERROR << ");\n";
-            out << "_hidl_reply.send();\n";
-            out << "break;\n";
-        });
-
         if (method->isHidlReserved() && method->overridesJavaImpl(IMPL_STUB)) {
             method->javaImpl(IMPL_STUB, out);
             out.unindent();
@@ -579,7 +602,7 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
         }
 
         if (!needsCallback && returnsValue) {
-            const NamedReference<Type>* returnArg = method->results()[0];
+            const TypedVar *returnArg = method->results()[0];
 
             out << returnArg->type().getJavaType()
                 << " _hidl_out_"
@@ -640,7 +663,7 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
             out << "_hidl_reply.writeStatus(android.os.HwParcel.STATUS_SUCCESS);\n";
 
             if (returnsValue) {
-                const NamedReference<Type>* returnArg = method->results()[0];
+                const TypedVar *returnArg = method->results()[0];
 
                 emitJavaReaderWriter(
                         out,
@@ -669,10 +692,12 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
 
     out.unindent();
     out << "}\n";
+
+    return OK;
 }
 
-void AST::emitJavaTypeDeclarations(Formatter& out) const {
-    mRootScope.emitJavaTypeDeclarations(out, false /* atTopLevel */);
+status_t AST::emitJavaTypeDeclarations(Formatter &out) const {
+    return mRootScope.emitJavaTypeDeclarations(out, false /* atTopLevel */);
 }
 
 }  // namespace android

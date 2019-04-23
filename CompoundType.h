@@ -18,12 +18,13 @@
 
 #define COMPOUND_TYPE_H_
 
-#include "Reference.h"
 #include "Scope.h"
 
 #include <vector>
 
 namespace android {
+
+struct CompoundField;
 
 struct CompoundType : public Scope {
     enum Style {
@@ -31,23 +32,17 @@ struct CompoundType : public Scope {
         STYLE_UNION,
     };
 
-    CompoundType(Style style, const char* localName, const FQName& fullName,
-                 const Location& location, Scope* parent);
+    CompoundType(Style style, const char* localName, const Location& location, Scope* parent);
 
     Style style() const;
 
-    void setFields(std::vector<NamedReference<Type>*>* fields);
+    bool setFields(std::vector<CompoundField *> *fields, std::string *errorMsg);
 
     bool isCompoundType() const override;
 
-    bool deepCanCheckEquality(std::unordered_set<const Type*>* visited) const override;
+    bool canCheckEquality() const override;
 
     std::string typeName() const override;
-
-    std::vector<const Reference<Type>*> getReferences() const override;
-
-    status_t validate() const override;
-    status_t validateUniqueNames() const;
 
     std::string getCppType(StorageMode mode,
                            bool specifyNamespaces) const override;
@@ -117,37 +112,51 @@ struct CompoundType : public Scope {
             const std::string &offset,
             bool isReader) const override;
 
-    void emitTypeDeclarations(Formatter& out) const override;
-    void emitTypeForwardDeclaration(Formatter& out) const override;
-    void emitPackageTypeDeclarations(Formatter& out) const override;
-    void emitPackageHwDeclarations(Formatter& out) const override;
+    status_t emitTypeDeclarations(Formatter &out) const override;
+    status_t emitGlobalTypeDeclarations(Formatter &out) const override;
+    status_t emitGlobalHwDeclarations(Formatter &out) const override;
 
-    void emitTypeDefinitions(Formatter& out, const std::string& prefix) const override;
+    status_t emitTypeDefinitions(
+            Formatter &out, const std::string prefix) const override;
 
-    void emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const override;
+    status_t emitJavaTypeDeclarations(
+            Formatter &out, bool atTopLevel) const override;
 
     bool needsEmbeddedReadWrite() const override;
-    bool deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const override;
+    bool needsResolveReferences() const override;
     bool resultNeedsDeref() const override;
 
-    void emitVtsTypeDeclarations(Formatter& out) const override;
-    void emitVtsAttributeType(Formatter& out) const override;
+    status_t emitVtsTypeDeclarations(Formatter &out) const override;
+    status_t emitVtsAttributeType(Formatter &out) const override;
 
-    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
-    bool deepContainsPointer(std::unordered_set<const Type*>* visited) const override;
+    bool isJavaCompatible() const override;
+    bool containsPointer() const override;
 
     void getAlignmentAndSize(size_t *align, size_t *size) const;
 
-    bool containsInterface() const;
 private:
     Style mStyle;
-    std::vector<NamedReference<Type>*>* mFields;
+    std::vector<CompoundField *> *mFields;
 
     void emitStructReaderWriter(
             Formatter &out, const std::string &prefix, bool isReader) const;
-    void emitResolveReferenceDef(Formatter& out, const std::string& prefix, bool isReader) const;
+    void emitResolveReferenceDef(
+        Formatter &out, const std::string prefix, bool isReader) const;
 
     DISALLOW_COPY_AND_ASSIGN(CompoundType);
+};
+
+struct CompoundField {
+    CompoundField(const char *name, Type *type);
+
+    std::string name() const;
+    const Type &type() const;
+
+private:
+    std::string mName;
+    Type *mType;
+
+    DISALLOW_COPY_AND_ASSIGN(CompoundField);
 };
 
 }  // namespace android

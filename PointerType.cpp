@@ -21,7 +21,7 @@
 
 namespace android {
 
-PointerType::PointerType(Scope* parent) : Type(parent) {}
+PointerType::PointerType() {}
 
 bool PointerType::isPointer() const {
     return true;
@@ -63,16 +63,17 @@ bool PointerType::resultNeedsDeref() const {
     return false;
 }
 
-bool PointerType::deepIsJavaCompatible(std::unordered_set<const Type*>* /* visited */) const {
+bool PointerType::isJavaCompatible() const {
     return false;
 }
 
-bool PointerType::deepContainsPointer(std::unordered_set<const Type*>* /* visited */) const {
+bool PointerType::containsPointer() const {
     return true;
 }
 
-void PointerType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t PointerType::emitVtsTypeDeclarations(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
+    return OK;
 }
 
 }  // namespace android

@@ -16,7 +16,6 @@
 
 #include "Hash.h"
 
-#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <map>
@@ -28,9 +27,7 @@
 
 namespace android {
 
-const std::vector<uint8_t> Hash::kEmptyHash = std::vector<uint8_t>(SHA256_DIGEST_LENGTH, 0);
-
-Hash& Hash::getMutableHash(const std::string& path) {
+const Hash &Hash::getHash(const std::string &path) {
     static std::map<std::string, Hash> hashes;
 
     auto it = hashes.find(path);
@@ -40,14 +37,6 @@ Hash& Hash::getMutableHash(const std::string& path) {
     }
 
     return it->second;
-}
-
-const Hash& Hash::getHash(const std::string& path) {
-    return getMutableHash(path);
-}
-
-void Hash::clearHash(const std::string& path) {
-    getMutableHash(path).mHash = kEmptyHash;
 }
 
 static std::vector<uint8_t> sha256File(const std::string &path) {
@@ -167,17 +156,15 @@ private:
     std::map<std::string,std::vector<std::string>> hashes;
 };
 
-std::vector<std::string> Hash::lookupHash(const std::string& path, const std::string& interfaceName,
-                                          std::string* err, bool* fileExists) {
+std::vector<std::string> Hash::lookupHash(const std::string &path,
+                                          const std::string &interfaceName,
+                                          std::string *err) {
     *err = "";
     const HashFile *file = HashFile::parse(path, err);
 
     if (file == nullptr || err->size() > 0) {
-        if (fileExists != nullptr) *fileExists = false;
         return {};
     }
-
-    if (fileExists != nullptr) *fileExists = true;
 
     return file->lookup(interfaceName);
 }
