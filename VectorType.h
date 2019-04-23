@@ -43,7 +43,6 @@ struct VectorType : public TemplatedType {
             bool specifyNamespaces) const override;
 
     std::string getJavaType(bool forInitializer) const override;
-    std::string getJavaTypeClass() const override;
 
     std::string getVtsType() const override;
     std::string getVtsValueName() const override;
@@ -101,9 +100,6 @@ struct VectorType : public TemplatedType {
 
     void emitJavaFieldInitializer(
             Formatter &out, const std::string &fieldName) const override;
-
-    void emitJavaFieldDefaultInitialValue(
-            Formatter &out, const std::string &declaredFieldName) const override;
 
     void emitJavaFieldReaderWriter(
             Formatter &out,

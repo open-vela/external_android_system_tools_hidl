@@ -41,7 +41,7 @@ struct EnumVarDeclaration : Declaration {
     void processContents(AST &ast) override;
 
 private:
-    Expression *mExpression = nullptr;
+    Expression *mExpression = NULL;
 
     DISALLOW_COPY_AND_ASSIGN(EnumVarDeclaration);
 };

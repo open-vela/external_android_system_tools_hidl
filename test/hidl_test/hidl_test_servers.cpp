@@ -81,7 +81,7 @@ static void killServer(pid_t pid, const char *serverName) {
 
 void signal_handler(int signal) {
     if (signal == SIGTERM) {
-        for (const auto& p : gPidList) {
+        for (auto p : gPidList) {
             killServer(p.second, p.first.c_str());
         }
         exit(0);
