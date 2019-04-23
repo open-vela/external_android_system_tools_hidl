@@ -22,10 +22,10 @@
 
 namespace android {
 
-Formatter::Formatter() : mFile(nullptr /* invalid */), mIndentDepth(0), mAtStartOfLine(true) {}
+Formatter::Formatter() : mFile(NULL /* invalid */), mIndentDepth(0), mAtStartOfLine(true) {}
 
 Formatter::Formatter(FILE* file, size_t spacesPerIndent)
-    : mFile(file == nullptr ? stdout : file),
+    : mFile(file == NULL ? stdout : file),
       mIndentDepth(0),
       mSpacesPerIndent(spacesPerIndent),
       mAtStartOfLine(true) {}
@@ -34,7 +34,7 @@ Formatter::~Formatter() {
     if (mFile != stdout) {
         fclose(mFile);
     }
-    mFile = nullptr;
+    mFile = NULL;
 }
 
 void Formatter::indent(size_t level) {
