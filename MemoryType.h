@@ -23,9 +23,7 @@
 namespace android {
 
 struct MemoryType : public Type {
-    MemoryType(Scope* parent);
-
-    std::string typeName() const override;
+    MemoryType();
 
     std::string getCppType(
             StorageMode mode,
@@ -58,12 +56,11 @@ struct MemoryType : public Type {
     bool resultNeedsDeref() const override;
 
     bool isMemory() const override;
-
-    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
+    bool isJavaCompatible() const override;
 
     void getAlignmentAndSize(size_t *align, size_t *size) const override;
 
-    void emitVtsTypeDeclarations(Formatter& out) const override;
+    status_t emitVtsTypeDeclarations(Formatter &out) const override;
 };
 
 }  // namespace android
