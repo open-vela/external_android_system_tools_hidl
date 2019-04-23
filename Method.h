@@ -78,15 +78,12 @@ struct Method {
             MethodImpl cppImpl,
             MethodImpl javaImpl);
 
-    void generateCppReturnType(Formatter &out, bool specifyNamespaces = true) const;
     void generateCppSignature(Formatter &out,
                               const std::string &className = "",
                               bool specifyNamespaces = true) const;
 
-    bool hasEmptyCppArgSignature() const;
-    void emitCppArgSignature(Formatter &out, bool specifyNamespaces = true) const;
-    void emitCppResultSignature(Formatter &out, bool specifyNamespaces = true) const;
-
+    void emitCppArgSignature(Formatter &out, bool specifyNamespaces) const;
+    void emitCppResultSignature(Formatter &out, bool specifyNamespaces) const;
     void emitJavaArgSignature(Formatter &out) const;
     void emitJavaResultSignature(Formatter &out) const;
 
