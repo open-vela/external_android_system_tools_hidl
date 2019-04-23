@@ -23,9 +23,11 @@
 
 namespace android {
 
-CompoundType::CompoundType(Style style, const char* localName, const Location& location,
-                           Scope* parent)
-    : Scope(localName, location, parent), mStyle(style), mFields(NULL) {}
+CompoundType::CompoundType(Style style, const char *localName, const Location &location)
+    : Scope(localName, location),
+      mStyle(style),
+      mFields(NULL) {
+}
 
 CompoundType::Style CompoundType::style() const {
     return mStyle;
@@ -79,22 +81,11 @@ bool CompoundType::canCheckEquality() const {
     return true;
 }
 
-std::string CompoundType::typeName() const {
-    switch (mStyle) {
-        case STYLE_STRUCT: {
-            return "struct " + localName();
-        }
-        case STYLE_UNION: {
-            return "union " + localName();
-        }
-    }
-    CHECK(!"Should not be here");
-}
-
 std::string CompoundType::getCppType(
         StorageMode mode,
-        bool /* specifyNamespaces */) const {
-    const std::string base = fullName();
+        bool specifyNamespaces) const {
+    const std::string base =
+        specifyNamespaces ? fullName() : partialCppName();
 
     switch (mode) {
         case StorageMode_Stack:
@@ -123,7 +114,6 @@ std::string CompoundType::getVtsType() const {
             return "TYPE_UNION";
         }
     }
-    CHECK(!"Should not be here");
 }
 
 void CompoundType::emitReaderWriter(

@@ -25,12 +25,12 @@ namespace android {
 
 HandleType::HandleType() {}
 
-bool HandleType::isHandle() const {
-    return true;
+void HandleType::addNamedTypesToSet(std::set<const FQName> &) const {
+    // do nothing
 }
 
-std::string HandleType::typeName() const {
-    return "handle";
+bool HandleType::isHandle() const {
+    return true;
 }
 
 std::string HandleType::getCppType(StorageMode mode,

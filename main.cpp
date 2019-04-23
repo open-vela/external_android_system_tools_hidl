@@ -33,18 +33,21 @@ using namespace android;
 
 struct OutputHandler {
     std::string mKey;
-    std::string mDescription;
     enum OutputMode {
         NEEDS_DIR,
         NEEDS_FILE,
-        NEEDS_SRC, // for changes inside the source tree itself
         NOT_NEEDED
     } mOutputMode;
 
-    const std::string& name() { return mKey; }
-    const std::string& description() { return mDescription; }
+    enum ValRes {
+        FAILED,
+        PASS_PACKAGE,
+        PASS_FULL
+    };
 
-    using ValidationFunction = std::function<bool(const FQName &, const std::string &language)>;
+    const std::string& name() { return mKey; }
+
+    using ValidationFunction = std::function<ValRes(const FQName &, const std::string &language)>;
     using GenerationFunction = std::function<status_t(const FQName &fqName,
                                                       const char *hidl_gen,
                                                       Coordinator *coordinator,
@@ -53,8 +56,6 @@ struct OutputHandler {
     ValidationFunction validate;
     GenerationFunction generate;
 };
-
-static bool generateForTest = false;
 
 static status_t generateSourcesForFile(
         const FQName &fqName,
@@ -86,9 +87,6 @@ static status_t generateSourcesForFile(
         return UNKNOWN_ERROR;
     }
 
-    if (lang == "check") {
-        return OK; // only parsing, not generating
-    }
     if (lang == "c++") {
         return ast->generateCpp(outputDir);
     }
@@ -100,12 +98,6 @@ static status_t generateSourcesForFile(
     }
     if (lang == "c++-impl") {
         return ast->generateCppImpl(outputDir);
-    }
-    if (lang == "c++-impl-headers") {
-        return ast->generateStubImplHeader(outputDir);
-    }
-    if (lang == "c++-impl-sources") {
-        return ast->generateStubImplSource(outputDir);
     }
     if (lang == "java") {
         return ast->generateJava(outputDir, limitToType);
@@ -191,7 +183,7 @@ static void generatePackagePathsSection(
         options.insert(coordinator->getPackageRootOption(interface));
     }
     options.insert(coordinator->getPackageRootOption(packageFQName));
-    options.insert(coordinator->getPackageRootOption(gIBaseFqName));
+    options.insert(coordinator->getPackageRootOption(gIBasePackageFqName));
     for (const auto &option : options) {
         out << "-r"
             << option
@@ -295,7 +287,7 @@ static void generateMakefileSection(
         if (fqName.name() == "types") {
             CHECK(typesAST != nullptr);
 
-            Scope* rootScope = typesAST->getRootScope();
+            Scope *rootScope = typesAST->scope();
 
             std::vector<NamedType *> subTypes = rootScope->getSubTypes();
             std::sort(
@@ -407,7 +399,7 @@ static bool packageNeedsJavaCode(
     // We'll have to generate Java code if types.hal contains any non-typedef
     // type declarations.
 
-    Scope* rootScope = typesAST->getRootScope();
+    Scope *rootScope = typesAST->scope();
     std::vector<NamedType *> subTypes = rootScope->getSubTypes();
 
     for (const auto &subType : subTypes) {
@@ -460,7 +452,7 @@ static status_t generateMakefileForPackage(
         const FQName &packageFQName,
         const char *hidl_gen,
         Coordinator *coordinator,
-        const std::string &outputPath) {
+        const std::string &) {
 
     CHECK(packageFQName.isValid() &&
           !packageFQName.isFullyQualified() &&
@@ -521,8 +513,9 @@ static status_t generateMakefileForPackage(
         return OK;
     }
 
-    std::string path = outputPath;
-    path.append(coordinator->getPackagePath(packageFQName, false /* relative */));
+    std::string path =
+        coordinator->getPackagePath(packageFQName, false /* relative */);
+
     path.append("Android.mk");
 
     CHECK(Coordinator::MakeParentHierarchy(path));
@@ -630,47 +623,25 @@ static status_t generateMakefileForPackage(
     return OK;
 }
 
-bool validateIsPackage(
+OutputHandler::ValRes validateForMakefile(
         const FQName &fqName, const std::string & /* language */) {
     if (fqName.package().empty()) {
         fprintf(stderr, "ERROR: Expecting package name\n");
-        return false;
+        return OutputHandler::FAILED;
     }
 
     if (fqName.version().empty()) {
         fprintf(stderr, "ERROR: Expecting package version\n");
-        return false;
+        return OutputHandler::FAILED;
     }
 
     if (!fqName.name().empty()) {
         fprintf(stderr,
                 "ERROR: Expecting only package name and version.\n");
-        return false;
+        return OutputHandler::FAILED;
     }
 
-    return true;
-}
-
-bool isHidlTransportPackage(const FQName& fqName) {
-    return fqName.package() == gIBasePackageFqName.string() ||
-           fqName.package() == gIManagerPackageFqName.string();
-}
-
-bool isSystemProcessSupportedPackage(const FQName& fqName) {
-    // Technically, so is hidl IBase + IServiceManager, but
-    // these are part of libhidltransport.
-    return fqName.string() == "android.hardware.graphics.allocator@2.0" ||
-           fqName.string() == "android.hardware.graphics.common@1.0" ||
-           fqName.string() == "android.hardware.graphics.mapper@2.0" ||
-           fqName.string() == "android.hardware.renderscript@1.0" ||
-           fqName.string() == "android.hidl.memory@1.0";
-}
-
-bool isSystemPackage(const FQName &package) {
-    return package.inPackage("android.hidl") ||
-           package.inPackage("android.system") ||
-           package.inPackage("android.frameworks") ||
-           package.inPackage("android.hardware");
+    return OutputHandler::PASS_PACKAGE;
 }
 
 static void generateAndroidBpGenSection(
@@ -715,34 +686,16 @@ static void generateAndroidBpGenSection(
     out << "}\n\n";
 }
 
-static void generateAndroidBpDependencyList(
-        Formatter &out,
-        const std::set<FQName> &importedPackagesHierarchy,
-        bool generateVendor) {
-    for (const auto &importedPackage : importedPackagesHierarchy) {
-        if (isHidlTransportPackage(importedPackage)) {
-            continue;
-        }
-
-        out << "\"" << makeLibraryName(importedPackage);
-        if (generateVendor && !isSystemPackage(importedPackage)) {
-            out << "_vendor";
-        }
-        out << "\",\n";
-    }
-}
-
 static void generateAndroidBpLibSection(
         Formatter &out,
         bool generateVendor,
-        const FQName &packageFQName,
         const std::string &libraryName,
         const std::string &genSourceName,
         const std::string &genHeaderName,
         const std::set<FQName> &importedPackagesHierarchy) {
 
     // C++ library definition
-    out << "cc_library {\n";
+    out << "cc_library_shared {\n";
     out.indent();
     out << "name: \"" << libraryName << (generateVendor ? "_vendor" : "") << "\",\n"
         << "defaults: [\"hidl-module-defaults\"],\n"
@@ -754,15 +707,6 @@ static void generateAndroidBpLibSection(
         out << "vendor: true,\n";
     } else {
         out << "vendor_available: true,\n";
-        if (!generateForTest) {
-            out << "vndk: ";
-            out.block([&]() {
-                out << "enabled: true,\n";
-                if (isSystemProcessSupportedPackage(packageFQName)) {
-                    out << "support_system_process: true,\n";
-                }
-            }) << ",\n";
-        }
     }
     out << "shared_libs: [\n";
 
@@ -773,7 +717,9 @@ static void generateAndroidBpLibSection(
         << "\"liblog\",\n"
         << "\"libutils\",\n"
         << "\"libcutils\",\n";
-    generateAndroidBpDependencyList(out, importedPackagesHierarchy, generateVendor);
+    for (const auto &importedPackage : importedPackagesHierarchy) {
+        out << "\"" << makeLibraryName(importedPackage) << "\",\n";
+    }
     out.unindent();
 
     out << "],\n";
@@ -784,7 +730,9 @@ static void generateAndroidBpLibSection(
         << "\"libhidltransport\",\n"
         << "\"libhwbinder\",\n"
         << "\"libutils\",\n";
-    generateAndroidBpDependencyList(out, importedPackagesHierarchy, generateVendor);
+    for (const auto &importedPackage : importedPackagesHierarchy) {
+        out << "\"" << makeLibraryName(importedPackage) << "\",\n";
+    }
     out.unindent();
     out << "],\n";
     out.unindent();
@@ -796,7 +744,7 @@ static status_t generateAndroidBpForPackage(
         const FQName &packageFQName,
         const char *hidl_gen,
         Coordinator *coordinator,
-        const std::string &outputPath) {
+        const std::string &) {
 
     CHECK(packageFQName.isValid() &&
           !packageFQName.isFullyQualified() &&
@@ -833,8 +781,9 @@ static status_t generateAndroidBpForPackage(
         ast->getImportedPackagesHierarchy(&importedPackagesHierarchy);
     }
 
-    std::string path = outputPath;
-    path.append(coordinator->getPackagePath(packageFQName, false /* relative */));
+    std::string path =
+        coordinator->getPackagePath(packageFQName, false /* relative */);
+
     path.append("Android.bp");
 
     CHECK(Coordinator::MakeParentHierarchy(path));
@@ -912,42 +861,39 @@ static status_t generateAndroidBpForPackage(
                 }
             });
 
-    if (isHidlTransportPackage(packageFQName)) {
-        out << "// " << packageFQName.string() << " is exported from libhidltransport\n";
-    } else {
+    generateAndroidBpLibSection(
+        out,
+        false /* generateVendor */,
+        libraryName,
+        genSourceName,
+        genHeaderName,
+        importedPackagesHierarchy);
+
+    // TODO(b/35813011): make all libraries vendor_available
+    // Explicitly create '_vendor' copies of libraries so that
+    // vendor code can link against the extensions. When this is
+    // used, framework code should link against vendor.awesome.foo@1.0
+    // and code on the vendor image should link against
+    // vendor.awesome.foo@1.0_vendor. For libraries with the below extensions,
+    // they will be available even on the generic system image.
+    // Because of this, they should always be referenced without the
+    // '_vendor' name suffix.
+    if (!(packageFQName.inPackage("android.hidl") ||
+            packageFQName.inPackage("android.system") ||
+            packageFQName.inPackage("android.frameworks") ||
+            packageFQName.inPackage("android.hardware"))) {
+
+        // Note, not using cc_defaults here since it's already not used and
+        // because generating this libraries will be removed when the VNDK
+        // is enabled (done by the build system itself).
+        out.endl();
         generateAndroidBpLibSection(
             out,
-            false /* generateVendor */,
-            packageFQName,
+            true /* generateVendor */,
             libraryName,
             genSourceName,
             genHeaderName,
             importedPackagesHierarchy);
-
-        // TODO(b/35813011): make all libraries vendor_available
-        // Explicitly create '_vendor' copies of libraries so that
-        // vendor code can link against the extensions. When this is
-        // used, framework code should link against vendor.awesome.foo@1.0
-        // and code on the vendor image should link against
-        // vendor.awesome.foo@1.0_vendor. For libraries with the below extensions,
-        // they will be available even on the generic system image.
-        // Because of this, they should always be referenced without the
-        // '_vendor' name suffix.
-        if (!isSystemPackage(packageFQName)) {
-
-            // Note, not using cc_defaults here since it's already not used and
-            // because generating this libraries will be removed when the VNDK
-            // is enabled (done by the build system itself).
-            out.endl();
-            generateAndroidBpLibSection(
-                out,
-                true /* generateVendor */,
-                packageFQName,
-                libraryName,
-                genSourceName,
-                genHeaderName,
-                importedPackagesHierarchy);
-        }
     }
 
     return OK;
@@ -1021,10 +967,6 @@ static status_t generateAndroidBpImplForPackage(
                 << "\"" << makeLibraryName(packageFQName) << "\",\n";
 
             for (const auto &importedPackage : importedPackages) {
-                if (isHidlTransportPackage(importedPackage)) {
-                    continue;
-                }
-
                 out << "\"" << makeLibraryName(importedPackage) << "\",\n";
             }
         });
@@ -1035,22 +977,22 @@ static status_t generateAndroidBpImplForPackage(
     return OK;
 }
 
-bool validateForSource(
+OutputHandler::ValRes validateForSource(
         const FQName &fqName, const std::string &language) {
     if (fqName.package().empty()) {
         fprintf(stderr, "ERROR: Expecting package name\n");
-        return false;
+        return OutputHandler::FAILED;
     }
 
     if (fqName.version().empty()) {
         fprintf(stderr, "ERROR: Expecting package version\n");
-        return false;
+        return OutputHandler::FAILED;
     }
 
     const std::string &name = fqName.name();
     if (!name.empty()) {
         if (name.find('.') == std::string::npos) {
-            return true;
+            return OutputHandler::PASS_FULL;
         }
 
         if (language != "java" || name.find("types.") != 0) {
@@ -1060,111 +1002,133 @@ bool validateForSource(
             // android.hardware.Foo@1.0::types.TopLevelTypeName.
             // In all other cases (different language, not 'types') the dot
             // notation in the name is illegal in this context.
-            return false;
+            return OutputHandler::FAILED;
         }
 
-        return true;
+        return OutputHandler::PASS_FULL;
     }
 
-    return true;
+    return OutputHandler::PASS_PACKAGE;
 }
 
-OutputHandler::GenerationFunction generateExportHeaderForPackage(bool forJava) {
-    return [forJava](const FQName &packageFQName,
-                     const char * /* hidl_gen */,
-                     Coordinator *coordinator,
-                     const std::string &outputPath) -> status_t {
-        CHECK(packageFQName.isValid()
-                && !packageFQName.package().empty()
-                && !packageFQName.version().empty()
-                && packageFQName.name().empty());
+OutputHandler::ValRes validateForExportHeader(
+        const FQName &fqName, const std::string & /* language */) {
+    if (fqName.package().empty()) {
+        fprintf(stderr, "ERROR: Expecting package name\n");
+        return OutputHandler::FAILED;
+    }
 
-        std::vector<FQName> packageInterfaces;
+    if (fqName.version().empty()) {
+        fprintf(stderr, "ERROR: Expecting package version\n");
+        return OutputHandler::FAILED;
+    }
 
-        status_t err = coordinator->appendPackageInterfacesToVector(
-                packageFQName, &packageInterfaces);
+    if (!fqName.name().empty()) {
+        fprintf(stderr,
+                "ERROR: Expecting only package name and version.\n");
+        return OutputHandler::FAILED;
+    }
 
-        if (err != OK) {
-            return err;
+    return OutputHandler::PASS_PACKAGE;
+}
+
+
+static status_t generateExportHeaderForPackage(
+        const FQName &packageFQName,
+        const char * /* hidl_gen */,
+        Coordinator *coordinator,
+        const std::string &outputPath,
+        bool forJava) {
+
+    CHECK(packageFQName.isValid()
+            && !packageFQName.isFullyQualified()
+            && packageFQName.name().empty());
+
+    std::vector<FQName> packageInterfaces;
+
+    status_t err = coordinator->appendPackageInterfacesToVector(
+            packageFQName, &packageInterfaces);
+
+    if (err != OK) {
+        return err;
+    }
+
+    std::vector<const Type *> exportedTypes;
+
+    for (const auto &fqName : packageInterfaces) {
+        AST *ast = coordinator->parse(fqName);
+
+        if (ast == NULL) {
+            fprintf(stderr,
+                    "ERROR: Could not parse %s. Aborting.\n",
+                    fqName.string().c_str());
+
+            return UNKNOWN_ERROR;
         }
 
-        std::vector<const Type *> exportedTypes;
+        ast->appendToExportedTypesVector(&exportedTypes);
+    }
 
-        for (const auto &fqName : packageInterfaces) {
-            AST *ast = coordinator->parse(fqName);
-
-            if (ast == NULL) {
-                fprintf(stderr,
-                        "ERROR: Could not parse %s. Aborting.\n",
-                        fqName.string().c_str());
-
-                return UNKNOWN_ERROR;
-            }
-
-            ast->appendToExportedTypesVector(&exportedTypes);
-        }
-
-        if (exportedTypes.empty()) {
-            return OK;
-        }
-
-        std::string path = outputPath;
-
-        if (forJava) {
-            path.append(coordinator->convertPackageRootToPath(packageFQName));
-
-            path.append(coordinator->getPackagePath(
-                        packageFQName, true /* relative */, true /* sanitized */));
-
-            path.append("Constants.java");
-        }
-
-        CHECK(Coordinator::MakeParentHierarchy(path));
-        FILE *file = fopen(path.c_str(), "w");
-
-        if (file == nullptr) {
-            return -errno;
-        }
-
-        Formatter out(file);
-
-        out << "// This file is autogenerated by hidl-gen. Do not edit manually.\n"
-            << "// Source: " << packageFQName.string() << "\n"
-            << "// Root: " << coordinator->getPackageRootOption(packageFQName) << "\n\n";
-
-        std::string guard;
-        if (forJava) {
-            out << "package " << packageFQName.javaPackage() << ";\n\n";
-            out << "public class Constants {\n";
-            out.indent();
-        } else {
-            guard = "HIDL_GENERATED_";
-            guard += StringHelper::Uppercase(packageFQName.tokenName());
-            guard += "_";
-            guard += "EXPORTED_CONSTANTS_H_";
-
-            out << "#ifndef "
-                << guard
-                << "\n#define "
-                << guard
-                << "\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n";
-        }
-
-        for (const auto &type : exportedTypes) {
-            type->emitExportedHeader(out, forJava);
-        }
-
-        if (forJava) {
-            out.unindent();
-            out << "}\n";
-        } else {
-            out << "#ifdef __cplusplus\n}\n#endif\n\n#endif  // "
-                << guard
-                << "\n";
-        }
-
+    if (exportedTypes.empty()) {
         return OK;
-    };
+    }
+
+    std::string path = outputPath;
+
+    if (forJava) {
+        path.append(coordinator->convertPackageRootToPath(packageFQName));
+
+        path.append(coordinator->getPackagePath(
+                    packageFQName, true /* relative */, true /* sanitized */));
+
+        path.append("Constants.java");
+    }
+
+    CHECK(Coordinator::MakeParentHierarchy(path));
+    FILE *file = fopen(path.c_str(), "w");
+
+    if (file == nullptr) {
+        return -errno;
+    }
+
+    Formatter out(file);
+
+    out << "// This file is autogenerated by hidl-gen. Do not edit manually.\n"
+        << "// Source: " << packageFQName.string() << "\n"
+        << "// Root: " << coordinator->getPackageRootOption(packageFQName) << "\n\n";
+
+    std::string guard;
+    if (forJava) {
+        out << "package " << packageFQName.javaPackage() << ";\n\n";
+        out << "public class Constants {\n";
+        out.indent();
+    } else {
+        guard = "HIDL_GENERATED_";
+        guard += StringHelper::Uppercase(packageFQName.tokenName());
+        guard += "_";
+        guard += "EXPORTED_CONSTANTS_H_";
+
+        out << "#ifndef "
+            << guard
+            << "\n#define "
+            << guard
+            << "\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n";
+    }
+
+    for (const auto &type : exportedTypes) {
+        type->emitExportedHeader(out, forJava);
+    }
+
+    if (forJava) {
+        out.unindent();
+        out << "}\n";
+    } else {
+        out << "#ifdef __cplusplus\n}\n#endif\n\n#endif  // "
+            << guard
+            << "\n";
+    }
+
+    return OK;
 }
 
 static status_t generateHashOutput(const FQName &fqName,
@@ -1186,8 +1150,7 @@ static status_t generateHashOutput(const FQName &fqName,
     }
 
     for (const auto &currentFqName : packageInterfaces) {
-        AST* ast = coordinator->parse(currentFqName, {} /* parsed */,
-                                      Coordinator::Enforce::NO_HASH /* enforcement */);
+        AST *ast = coordinator->parse(currentFqName);
 
         if (ast == NULL) {
             fprintf(stderr,
@@ -1206,104 +1169,96 @@ static status_t generateHashOutput(const FQName &fqName,
 }
 
 static std::vector<OutputHandler> formats = {
-    {"check",
-     "Parses the interface to see if valid but doesn't write any files.",
-     OutputHandler::NOT_NEEDED /* mOutputMode */,
-     validateForSource,
-     generationFunctionForFileOrPackage("check")
-    },
-
     {"c++",
-     "(internal) (deprecated) Generates C++ interface files for talking to HIDL interfaces.",
      OutputHandler::NEEDS_DIR /* mOutputMode */,
      validateForSource,
      generationFunctionForFileOrPackage("c++")
     },
 
     {"c++-headers",
-     "(internal) Generates C++ headers for interface files for talking to HIDL interfaces.",
      OutputHandler::NEEDS_DIR /* mOutputMode */,
      validateForSource,
      generationFunctionForFileOrPackage("c++-headers")
     },
 
     {"c++-sources",
-     "(internal) Generates C++ sources for interface files for talking to HIDL interfaces.",
      OutputHandler::NEEDS_DIR /* mOutputMode */,
      validateForSource,
      generationFunctionForFileOrPackage("c++-sources")
     },
 
     {"export-header",
-     "Generates a header file from @export enumerations to help maintain legacy code.",
      OutputHandler::NEEDS_FILE /* mOutputMode */,
-     validateIsPackage,
-     generateExportHeaderForPackage(false /* forJava */)
+     validateForExportHeader,
+     [](const FQName &fqName,
+        const char *hidl_gen,
+        Coordinator *coordinator,
+        const std::string &outputPath) -> status_t {
+            CHECK(!fqName.isFullyQualified());
+
+            return generateExportHeaderForPackage(
+                    fqName,
+                    hidl_gen,
+                    coordinator,
+                    outputPath,
+                    false /* forJava */);
+        }
     },
 
     {"c++-impl",
-     "Generates boilerplate implementation of a hidl interface in C++ (for convenience).",
      OutputHandler::NEEDS_DIR /* mOutputMode */,
      validateForSource,
      generationFunctionForFileOrPackage("c++-impl")
     },
-    {"c++-impl-headers",
-     "c++-impl but headers only",
-     OutputHandler::NEEDS_DIR /* mOutputMode */,
-     validateForSource,
-     generationFunctionForFileOrPackage("c++-impl-headers")
-    },
-    {"c++-impl-sources",
-     "c++-impl but sources only",
-     OutputHandler::NEEDS_DIR /* mOutputMode */,
-     validateForSource,
-     generationFunctionForFileOrPackage("c++-impl-sources")
-    },
+
 
     {"java",
-     "(internal) Generates Java library for talking to HIDL interfaces in Java.",
      OutputHandler::NEEDS_DIR /* mOutputMode */,
      validateForSource,
      generationFunctionForFileOrPackage("java")
     },
 
     {"java-constants",
-     "(internal) Like export-header but for Java (always created by -Lmakefile if @export exists).",
      OutputHandler::NEEDS_DIR /* mOutputMode */,
-     validateIsPackage,
-     generateExportHeaderForPackage(true /* forJava */)
+     validateForExportHeader,
+     [](const FQName &fqName,
+        const char *hidl_gen, Coordinator *coordinator,
+        const std::string &outputDir) -> status_t {
+            CHECK(!fqName.isFullyQualified());
+            return generateExportHeaderForPackage(
+                    fqName,
+                    hidl_gen,
+                    coordinator,
+                    outputDir,
+                    true /* forJava */);
+        }
     },
 
     {"vts",
-     "(internal) Generates vts proto files for use in vtsd.",
      OutputHandler::NEEDS_DIR /* mOutputMode */,
      validateForSource,
      generationFunctionForFileOrPackage("vts")
     },
 
     {"makefile",
-     "(internal) Generates makefiles for -Ljava and -Ljava-constants.",
-     OutputHandler::NEEDS_SRC /* mOutputMode */,
-     validateIsPackage,
+     OutputHandler::NOT_NEEDED /* mOutputMode */,
+     validateForMakefile,
      generateMakefileForPackage,
     },
 
     {"androidbp",
-     "(internal) Generates Soong bp files for -Lc++-headers and -Lc++-sources.",
-     OutputHandler::NEEDS_SRC /* mOutputMode */,
-     validateIsPackage,
+     OutputHandler::NOT_NEEDED /* mOutputMode */,
+     validateForMakefile,
      generateAndroidBpForPackage,
     },
 
     {"androidbp-impl",
-     "Generates boilerplate bp files for implementation created with -Lc++-impl.",
      OutputHandler::NEEDS_DIR /* mOutputMode */,
-     validateIsPackage,
+     validateForMakefile,
      generateAndroidBpImplForPackage,
     },
 
     {"hash",
-     "Prints hashes of interface in `current.txt` format to standard out.",
      OutputHandler::NOT_NEEDED /* mOutputMode */,
      validateForSource,
      generateHashOutput,
@@ -1312,49 +1267,33 @@ static std::vector<OutputHandler> formats = {
 
 static void usage(const char *me) {
     fprintf(stderr,
-            "usage: %s [-p <root path>] -o <output path> -L <language> (-r <interface root>)+ [-t] "
-            "fqname+\n",
+            "usage: %s -o output-path -L <language> (-r interface-root)+ fqname+\n",
             me);
 
-    fprintf(stderr, "         -h: Prints this menu.\n");
-    fprintf(stderr, "         -L <language>: The following options are available:\n");
-    for (auto &e : formats) {
-        fprintf(stderr, "            %-16s: %s\n", e.name().c_str(), e.description().c_str());
-    }
-    fprintf(stderr, "         -o <output path>: Location to output files.\n");
-    fprintf(stderr, "         -p <root path>: Android build root, defaults to $ANDROID_BUILD_TOP or pwd.\n");
-    fprintf(stderr, "         -r <package:path root>: E.g., android.hardware:hardware/interfaces.\n");
-    fprintf(stderr, "         -t: generate build scripts (Android.bp) for tests.\n");
-}
+    fprintf(stderr, "         -o output path\n");
 
-// hidl is intentionally leaky. Turn off LeakSanitizer by default.
-extern "C" const char *__asan_default_options() {
-    return "detect_leaks=0";
+    fprintf(stderr, "         -L <language> (one of");
+    for (auto &e : formats) {
+        fprintf(stderr, " %s", e.mKey.c_str());
+    }
+    fprintf(stderr, ")\n");
+
+    fprintf(stderr,
+            "         -r package:path root "
+            "(e.g., android.hardware:hardware/interfaces)\n");
 }
 
 int main(int argc, char **argv) {
     std::string outputPath;
-    std::string rootPath;
     std::vector<std::string> packageRootPaths;
     std::vector<std::string> packageRoots;
 
     const char *me = argv[0];
     OutputHandler *outputFormat = nullptr;
 
-    if (argc == 1) {
-        usage(me);
-        exit(1);
-    }
-
     int res;
-    while ((res = getopt(argc, argv, "hp:o:r:L:t")) >= 0) {
+    while ((res = getopt(argc, argv, "ho:r:L:")) >= 0) {
         switch (res) {
-            case 'p':
-            {
-                rootPath = optarg;
-                break;
-            }
-
             case 'o':
             {
                 outputPath = optarg;
@@ -1365,10 +1304,7 @@ int main(int argc, char **argv) {
             {
                 std::string val(optarg);
                 auto index = val.find_first_of(':');
-                if (index == std::string::npos) {
-                    fprintf(stderr, "ERROR: -r option must contain ':': %s\n", val.c_str());
-                    exit(1);
-                }
+                CHECK(index != std::string::npos);
 
                 auto package = val.substr(0, index);
                 auto path = val.substr(index + 1);
@@ -1379,29 +1315,14 @@ int main(int argc, char **argv) {
 
             case 'L':
             {
-                if (outputFormat != nullptr) {
-                    fprintf(stderr,
-                            "ERROR: only one -L option allowed. \"%s\" already specified.\n",
-                            outputFormat->name().c_str());
-                    exit(1);
-                }
+                CHECK(outputFormat == nullptr) << "Only one -L option allowed.";
                 for (auto &e : formats) {
-                    if (e.name() == optarg) {
+                    if (e.mKey == optarg) {
                         outputFormat = &e;
                         break;
                     }
                 }
-                if (outputFormat == nullptr) {
-                    fprintf(stderr,
-                            "ERROR: unrecognized -L option: \"%s\".\n",
-                            optarg);
-                    exit(1);
-                }
-                break;
-            }
-
-            case 't': {
-                generateForTest = true;
+                CHECK(outputFormat != nullptr) << "Output format not recognized.";
                 break;
             }
 
@@ -1417,37 +1338,30 @@ int main(int argc, char **argv) {
     }
 
     if (outputFormat == nullptr) {
-        fprintf(stderr,
-            "ERROR: no -L option provided.\n");
-        exit(1);
-    }
-
-    if (generateForTest && outputFormat->name() != "androidbp") {
-        fprintf(stderr, "ERROR: -t option is for -Landroidbp only.\n");
+        usage(me);
         exit(1);
     }
 
     argc -= optind;
     argv += optind;
 
-    if (argc == 0) {
-        fprintf(stderr, "ERROR: no fqname specified.\n");
-        usage(me);
-        exit(1);
-    }
+    if (packageRootPaths.empty()) {
+        // Pick reasonable defaults.
 
-    if (rootPath.empty()) {
-        const char *ANDROID_BUILD_TOP = getenv("ANDROID_BUILD_TOP");
+        packageRoots.push_back("android.hardware");
 
-        if (ANDROID_BUILD_TOP != nullptr) {
-            rootPath = ANDROID_BUILD_TOP;
+        const char *TOP = getenv("TOP");
+        if (TOP == nullptr) {
+            fprintf(stderr,
+                    "ERROR: No root path (-r) specified"
+                    " and $TOP environment variable not set.\n");
+            exit(1);
         }
 
-        // else default to pwd
-    }
+        std::string path = TOP;
+        path.append("/hardware/interfaces");
 
-    if (!rootPath.empty() && !StringHelper::EndsWith(rootPath, "/")) {
-        rootPath += "/";
+        packageRootPaths.push_back(path);
     }
 
     // Valid options are now in argv[0] .. argv[argc - 1].
@@ -1469,25 +1383,13 @@ int main(int argc, char **argv) {
             }
             break;
         }
-        case OutputHandler::NEEDS_SRC:
-        {
-            if (outputPath.empty()) {
-                outputPath = rootPath;
-            }
-
-            break;
-        }
 
         default:
             outputPath.clear();  // Unused.
             break;
     }
 
-    Coordinator coordinator(packageRootPaths, packageRoots, rootPath);
-    coordinator.addDefaultPackagePath("android.hardware", "hardware/interfaces");
-    coordinator.addDefaultPackagePath("android.hidl", "system/libhidl/transport");
-    coordinator.addDefaultPackagePath("android.frameworks", "frameworks/hardware/interfaces");
-    coordinator.addDefaultPackagePath("android.system", "system/hardware/interfaces");
+    Coordinator coordinator(packageRootPaths, packageRoots);
 
     for (int i = 0; i < argc; ++i) {
         FQName fqName(argv[i]);
@@ -1498,7 +1400,10 @@ int main(int argc, char **argv) {
             exit(1);
         }
 
-        if (!outputFormat->validate(fqName, outputFormat->name())) {
+        OutputHandler::ValRes valid =
+            outputFormat->validate(fqName, outputFormat->mKey);
+
+        if (valid == OutputHandler::FAILED) {
             fprintf(stderr,
                     "ERROR: output handler failed.\n");
             exit(1);

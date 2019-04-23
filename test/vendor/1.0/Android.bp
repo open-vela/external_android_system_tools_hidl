@@ -39,7 +39,7 @@ genrule {
     ],
 }
 
-cc_library {
+cc_library_shared {
     name: "tests.vendor@1.0",
     defaults: ["hidl-module-defaults"],
     generated_sources: ["tests.vendor@1.0_genc++"],
@@ -54,6 +54,7 @@ cc_library {
         "libutils",
         "libcutils",
         "android.hardware.tests.baz@1.0",
+        "android.hidl.base@1.0",
     ],
     export_shared_lib_headers: [
         "libhidlbase",
@@ -61,10 +62,11 @@ cc_library {
         "libhwbinder",
         "libutils",
         "android.hardware.tests.baz@1.0",
+        "android.hidl.base@1.0",
     ],
 }
 
-cc_library {
+cc_library_shared {
     name: "tests.vendor@1.0_vendor",
     defaults: ["hidl-module-defaults"],
     generated_sources: ["tests.vendor@1.0_genc++"],
@@ -79,6 +81,7 @@ cc_library {
         "libutils",
         "libcutils",
         "android.hardware.tests.baz@1.0",
+        "android.hidl.base@1.0",
     ],
     export_shared_lib_headers: [
         "libhidlbase",
@@ -86,5 +89,6 @@ cc_library {
         "libhwbinder",
         "libutils",
         "android.hardware.tests.baz@1.0",
+        "android.hidl.base@1.0",
     ],
 }

@@ -30,36 +30,49 @@
 namespace android {
 
 status_t AST::emitVtsTypeDeclarations(Formatter &out) const {
-    if (AST::isInterface()) {
-        const Interface* iface = mRootScope.getInterface();
-        return iface->emitVtsAttributeDeclaration(out);
+  std::string ifaceName;
+  if (AST::isInterface(&ifaceName)) {
+    const Interface *iface = mRootScope->getInterface();
+    status_t status = iface->emitVtsAttributeDeclaration(out);
+    if (status != OK) {
+      return status;
     }
-
-    for (const auto& type : mRootScope.getSubTypes()) {
-        // Skip for TypeDef as it is just an alias of a defined type.
-        if (type->isTypeDef()) {
-            continue;
-        }
-        out << "attribute: {\n";
-        out.indent();
-        status_t status = type->emitVtsTypeDeclarations(out);
-        if (status != OK) {
-            return status;
-        }
-        out.unindent();
-        out << "}\n\n";
+  } else {
+    for (const auto &type : mRootScope->getSubTypes()) {
+      // Skip for TypeDef as it is just an alias of a defined type.
+      if (type->isTypeDef()) {
+        continue;
+      }
+      out << "attribute: {\n";
+      out.indent();
+      status_t status = type->emitVtsTypeDeclarations(out);
+      if (status != OK) {
+        return status;
+      }
+      out.unindent();
+      out << "}\n\n";
     }
-
-    return OK;
+  }
+  return OK;
 }
 
 status_t AST::generateVts(const std::string &outputPath) const {
-    std::string baseName = AST::getBaseName();
-    const Interface *iface = AST::getInterface();
-
     std::string path = outputPath;
     path.append(mCoordinator->convertPackageRootToPath(mPackage));
     path.append(mCoordinator->getPackagePath(mPackage, true /* relative */));
+
+    std::string ifaceName;
+    std::string baseName;
+
+    bool isInterface = true;
+    if (!AST::isInterface(&ifaceName)) {
+        baseName = "types";
+        isInterface = false;
+    } else {
+        const Interface *iface = mRootScope->getInterface();
+        baseName = iface->getBaseName();
+    }
+
     path.append(baseName);
     path.append(".vts");
 
@@ -76,7 +89,7 @@ status_t AST::generateVts(const std::string &outputPath) const {
     out << "component_type_version: " << mPackage.version()
         << "\n";
     out << "component_name: \""
-        << (iface ? iface->localName() : "types")
+        << (isInterface ? ifaceName : "types")
         << "\"\n\n";
 
     out << "package: \"" << mPackage.package() << "\"\n\n";
@@ -93,8 +106,8 @@ status_t AST::generateVts(const std::string &outputPath) const {
 
     out << "\n";
 
-    if (isInterface()) {
-        const Interface* iface = mRootScope.getInterface();
+    if (isInterface) {
+        const Interface *iface = mRootScope->getInterface();
         out << "interface: {\n";
         out.indent();
 
