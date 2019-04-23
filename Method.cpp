@@ -139,6 +139,10 @@ void Method::javaImpl(MethodImplType type, Formatter &out) const {
     }
 }
 
+bool Method::isHiddenFromJava() const {
+    return isHidlReserved() && name() == "debug";
+}
+
 bool Method::overridesCppImpl(MethodImplType type) const {
     CHECK(mIsHidlReserved);
     return mCppImpl.find(type) != mCppImpl.end();
@@ -149,10 +153,8 @@ bool Method::overridesJavaImpl(MethodImplType type) const {
     return mJavaImpl.find(type) != mJavaImpl.end();
 }
 
-Method* Method::copySignature() const {
-    Method* method = new Method(mName.c_str(), mArgs, mResults, mOneway, mAnnotations, location());
-    method->setDocComment(getDocComment());
-    return method;
+Method *Method::copySignature() const {
+    return new Method(mName.c_str(), mArgs, mResults, mOneway, mAnnotations, Location());
 }
 
 void Method::setSerialId(size_t serial) {
@@ -255,6 +257,10 @@ void Method::dumpAnnotations(Formatter &out) const {
 }
 
 bool Method::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const {
+    if (isHiddenFromJava()) {
+        return true;
+    }
+
     if (!std::all_of(mArgs->begin(), mArgs->end(),
                      [&](const auto* arg) { return (*arg)->isJavaCompatible(visited); })) {
         return false;
