@@ -16,123 +16,46 @@
 
 #include "EnumType.h"
 
-#include <hidl-util/Formatter.h>
-#include <inttypes.h>
-#include <iostream>
-#include <unordered_map>
-
 #include "Annotation.h"
-#include "Location.h"
 #include "ScalarType.h"
+
+#include <inttypes.h>
+#include <hidl-util/Formatter.h>
+#include <android-base/logging.h>
 
 namespace android {
 
-EnumType::EnumType(const char* localName, const FQName& fullName, const Location& location,
-                   const Reference<Type>& storageType, Scope* parent)
-    : Scope(localName, fullName, location, parent), mValues(), mStorageType(storageType) {}
+EnumType::EnumType(const char* localName, const Location& location, Type* storageType,
+                   Scope* parent)
+    : Scope(localName, location, parent), mValues(), mStorageType(storageType) {
+    mBitfieldType = new BitFieldType();
+    mBitfieldType->setElementType(this);
+}
 
 const Type *EnumType::storageType() const {
-    return mStorageType.get();
+    return mStorageType;
 }
 
 const std::vector<EnumValue *> &EnumType::values() const {
     return mValues;
 }
 
-void EnumType::forEachValueFromRoot(const std::function<void(EnumValue*)> f) const {
-    std::vector<const EnumType*> chain = typeChain();
-    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-        const auto& type = *it;
-        for (EnumValue* v : type->values()) {
-            f(v);
-        }
-    }
-}
-
-void EnumType::addValue(EnumValue* value) {
+void EnumType::addValue(EnumValue *value) {
     CHECK(value != nullptr);
-    mValues.push_back(value);
-}
 
-status_t EnumType::resolveInheritance() {
-    const EnumType* prevType = nullptr;
-    EnumValue* prevValue = nullptr;
-
-    for (const auto* type : superTypeChain()) {
-        if (!type->values().empty()) {
-            prevType = type;
-            prevValue = type->values().back();
+    EnumValue *prev = nullptr;
+    std::vector<const EnumType *> chain;
+    getTypeChain(&chain);
+    for (auto it = chain.begin(); it != chain.end(); ++it) {
+        const auto &type = *it;
+        if(!type->values().empty()) {
+            prev = type->values().back();
             break;
         }
     }
 
-    for (auto* value : mValues) {
-        value->autofill(prevType, prevValue, mStorageType->resolveToScalarType());
-        prevType = this;
-        prevValue = value;
-    }
-
-    return Scope::resolveInheritance();
-}
-
-std::vector<const Reference<Type>*> EnumType::getReferences() const {
-    return {&mStorageType};
-}
-
-std::vector<const ConstantExpression*> EnumType::getConstantExpressions() const {
-    std::vector<const ConstantExpression*> ret;
-    for (const auto* value : mValues) {
-        ret.push_back(value->constExpr());
-    }
-    return ret;
-}
-
-status_t EnumType::validate() const {
-    CHECK(getSubTypes().empty());
-
-    if (!isElidableType() || !mStorageType->isValidEnumStorageType()) {
-        std::cerr << "ERROR: Invalid enum storage type (" << (mStorageType)->typeName()
-                  << ") specified at " << mStorageType.location() << "\n";
-        return UNKNOWN_ERROR;
-    }
-
-    status_t err = validateUniqueNames();
-    if (err != OK) return err;
-
-    return Scope::validate();
-}
-
-status_t EnumType::validateUniqueNames() const {
-    std::unordered_map<std::string, const EnumType*> registeredValueNames;
-    for (const auto* type : superTypeChain()) {
-        for (const auto* enumValue : type->mValues) {
-            // No need to check super value uniqueness
-            registeredValueNames[enumValue->name()] = type;
-        }
-    }
-
-    for (const auto* value : mValues) {
-        auto registered = registeredValueNames.find(value->name());
-
-        if (registered != registeredValueNames.end()) {
-            const EnumType* definedInType = registered->second;
-
-            if (definedInType == this) {
-                // Defined in this enum
-                std::cerr << "ERROR: Redefinition of value '" << value->name() << "'";
-            } else {
-                // Defined in super enum
-                std::cerr << "ERROR: Redefinition of value '" << value->name()
-                          << "' defined in enum '" << definedInType->fullName() << "'";
-            }
-            std::cerr << " at " << value->location() << "\n";
-            return UNKNOWN_ERROR;
-        }
-
-        registeredValueNames[value->name()] = this;
-    }
-
-    return OK;
+    value->autofill(prev, resolveToScalarType());
+    mValues.push_back(value);
 }
 
 bool EnumType::isElidableType() const {
@@ -151,7 +74,7 @@ bool EnumType::isEnum() const {
     return true;
 }
 
-bool EnumType::deepCanCheckEquality(std::unordered_set<const Type*>* /* visited */) const {
+bool EnumType::canCheckEquality() const {
     return true;
 }
 
@@ -176,21 +99,13 @@ std::string EnumType::getVtsType() const {
     return "TYPE_ENUM";
 }
 
-std::string EnumType::getBitfieldCppType(StorageMode /* mode */, bool specifyNamespaces) const {
-    const std::string space = specifyNamespaces ? "::android::hardware::" : "";
-    return space + "hidl_bitfield<" + (specifyNamespaces ? fullName() : localName()) + ">";
-}
-
-std::string EnumType::getBitfieldJavaType(bool forInitializer) const {
-    return resolveToScalarType()->getJavaType(forInitializer);
-}
-
-std::string EnumType::getBitfieldJavaWrapperType() const {
-    return resolveToScalarType()->getJavaWrapperType();
+BitFieldType *EnumType::getBitfieldType() const {
+    return mBitfieldType;
 }
 
 LocalIdentifier *EnumType::lookupIdentifier(const std::string &name) const {
-    std::vector<const EnumType*> chain = typeChain();
+    std::vector<const EnumType *> chain;
+    getTypeChain(&chain);
     for (auto it = chain.begin(); it != chain.end(); ++it) {
         const auto &type = *it;
         for(EnumValue *v : type->values()) {
@@ -234,7 +149,7 @@ void EnumType::emitJavaFieldReaderWriter(
             out, depth, parcelName, blobName, fieldName, offset, isReader);
 }
 
-void EnumType::emitTypeDeclarations(Formatter& out) const {
+status_t EnumType::emitTypeDeclarations(Formatter &out) const {
     const ScalarType *scalarType = mStorageType->resolveToScalarType();
     CHECK(scalarType != nullptr);
 
@@ -248,14 +163,13 @@ void EnumType::emitTypeDeclarations(Formatter& out) const {
 
     out.indent();
 
-    std::vector<const EnumType*> chain = typeChain();
+    std::vector<const EnumType *> chain;
+    getTypeChain(&chain);
 
     for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
         const auto &type = *it;
 
         for (const auto &entry : type->values()) {
-            entry->emitDocComment(out);
-
             out << entry->name();
 
             std::string value = entry->cppValue(scalarType->getKind());
@@ -265,7 +179,7 @@ void EnumType::emitTypeDeclarations(Formatter& out) const {
             out << ",";
 
             std::string comment = entry->comment();
-            if (!comment.empty()) {
+            if (!comment.empty() && comment != value) {
                 out << " // " << comment;
             }
 
@@ -275,42 +189,8 @@ void EnumType::emitTypeDeclarations(Formatter& out) const {
 
     out.unindent();
     out << "};\n\n";
-}
 
-void EnumType::emitTypeForwardDeclaration(Formatter& out) const {
-    const ScalarType* scalarType = mStorageType->resolveToScalarType();
-    const std::string storageType = scalarType->getCppStackType();
-
-    out << "enum class " << localName() << " : " << storageType << ";\n";
-}
-
-void EnumType::emitIteratorDeclaration(Formatter& out) const {
-    size_t elementCount = 0;
-    for (const auto* type : typeChain()) {
-        elementCount += type->mValues.size();
-    }
-
-    out << "template<> struct hidl_enum_iterator<" << getCppStackType() << ">\n";
-    out.block([&] {
-        out << "const " << getCppStackType() << "* begin() { return static_begin(); }\n";
-        out << "const " << getCppStackType() << "* end() { return begin() + " << elementCount
-            << "; }\n";
-        out << "private:\n";
-        out << "static const " << getCppStackType() << "* static_begin() ";
-        out.block([&] {
-            out << "static const " << getCppStackType() << " kVals[" << elementCount << "] ";
-            out.block([&] {
-                auto enumerators = typeChain();
-                std::reverse(enumerators.begin(), enumerators.end());
-                for (const auto* type : enumerators) {
-                    for (const auto* enumValue : type->mValues) {
-                        out << fullName() << "::" << enumValue->name() << ",\n";
-                    }
-                }
-            }) << ";\n";
-            out << "return &kVals[0];\n";
-        });
-    }) << ";\n\n";
+    return OK;
 }
 
 void EnumType::emitEnumBitwiseOperator(
@@ -378,17 +258,7 @@ void EnumType::emitBitFieldBitwiseAssignmentOperator(
     out << "}\n\n";
 }
 
-void EnumType::emitGlobalTypeDeclarations(Formatter& out) const {
-    out << "namespace android {\n";
-    out << "namespace hardware {\n";
-
-    emitIteratorDeclaration(out);
-
-    out << "}  // namespace hardware\n";
-    out << "}  // namespace android\n";
-}
-
-void EnumType::emitPackageTypeDeclarations(Formatter& out) const {
+status_t EnumType::emitGlobalTypeDeclarations(Formatter &out) const {
     emitEnumBitwiseOperator(out, true  /* lhsIsEnum */, true  /* rhsIsEnum */, "|");
     emitEnumBitwiseOperator(out, false /* lhsIsEnum */, true  /* rhsIsEnum */, "|");
     emitEnumBitwiseOperator(out, true  /* lhsIsEnum */, false /* rhsIsEnum */, "|");
@@ -399,22 +269,40 @@ void EnumType::emitPackageTypeDeclarations(Formatter& out) const {
     emitBitFieldBitwiseAssignmentOperator(out, "|");
     emitBitFieldBitwiseAssignmentOperator(out, "&");
 
+    // toString for bitfields, equivalent to dumpBitfield in Java
+    out << "template<typename>\n"
+        << "std::string toString("
+        << resolveToScalarType()->getCppArgumentType()
+        << " o);\n";
+    out << "template<>\n"
+        << "std::string toString<" << getCppStackType() << ">("
+        << resolveToScalarType()->getCppArgumentType()
+        << " o);\n\n";
+
+    // toString for enum itself
+    out << "std::string toString("
+        << getCppArgumentType()
+        << " o);\n\n";
+
+    return OK;
+}
+
+status_t EnumType::emitTypeDefinitions(Formatter &out, const std::string /* prefix */) const {
+
     const ScalarType *scalarType = mStorageType->resolveToScalarType();
     CHECK(scalarType != NULL);
 
-    out << "template<typename>\n"
-        << "static inline std::string toString(" << resolveToScalarType()->getCppArgumentType()
-        << " o);\n";
     out << "template<>\n"
-        << "inline std::string toString<" << getCppStackType() << ">("
-        << scalarType->getCppArgumentType() << " o) ";
+        << "std::string toString<" << getCppStackType() << ">("
+        << scalarType->getCppArgumentType()
+        << " o) ";
     out.block([&] {
         // include toHexString for scalar types
         out << "using ::android::hardware::details::toHexString;\n"
             << "std::string os;\n"
-            << getBitfieldCppType(StorageMode_Stack) << " flipped = 0;\n"
+            << getBitfieldType()->getCppStackType() << " flipped = 0;\n"
             << "bool first = true;\n";
-        forEachValueFromRoot([&](EnumValue* value) {
+        for (EnumValue *value : values()) {
             std::string valueName = fullName() + "::" + value->name();
             out.sIf("(o & " + valueName + ")" +
                     " == static_cast<" + scalarType->getCppStackType() +
@@ -424,7 +312,7 @@ void EnumType::emitPackageTypeDeclarations(Formatter& out) const {
                     << "first = false;\n"
                     << "flipped |= " << valueName << ";\n";
             }).endl();
-        });
+        }
         // put remaining bits
         out.sIf("o != flipped", [&] {
             out << "os += (first ? \"\" : \" | \");\n";
@@ -437,23 +325,27 @@ void EnumType::emitPackageTypeDeclarations(Formatter& out) const {
         out << "return os;\n";
     }).endl().endl();
 
-    out << "static inline std::string toString(" << getCppArgumentType() << " o) ";
+    out << "std::string toString("
+        << getCppArgumentType()
+        << " o) ";
 
     out.block([&] {
         out << "using ::android::hardware::details::toHexString;\n";
-        forEachValueFromRoot([&](EnumValue* value) {
+        for (EnumValue *value : values()) {
             out.sIf("o == " + fullName() + "::" + value->name(), [&] {
                 out << "return \"" << value->name() << "\";\n";
             }).endl();
-        });
+        }
         out << "std::string os;\n";
         scalarType->emitHexDump(out, "os",
             "static_cast<" + scalarType->getCppStackType() + ">(o)");
         out << "return os;\n";
     }).endl().endl();
+
+    return OK;
 }
 
-void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
+status_t EnumType::emitJavaTypeDeclarations(Formatter &out, bool atTopLevel) const {
     const ScalarType *scalarType = mStorageType->resolveToScalarType();
     CHECK(scalarType != NULL);
 
@@ -468,14 +360,13 @@ void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
     const std::string typeName =
         scalarType->getJavaType(false /* forInitializer */);
 
-    std::vector<const EnumType*> chain = typeChain();
+    std::vector<const EnumType *> chain;
+    getTypeChain(&chain);
 
     for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
         const auto &type = *it;
 
         for (const auto &entry : type->values()) {
-            entry->emitDocComment(out);
-
             out << "public static final "
                 << typeName
                 << " "
@@ -490,7 +381,7 @@ void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
             out << ";";
 
             std::string comment = entry->comment();
-            if (!comment.empty()) {
+            if (!comment.empty() && comment != value) {
                 out << " // " << comment;
             }
 
@@ -501,34 +392,34 @@ void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
     out << "public static final String toString("
         << typeName << " o) ";
     out.block([&] {
-        forEachValueFromRoot([&](EnumValue* value) {
+        for (EnumValue *value : values()) {
             out.sIf("o == " + value->name(), [&] {
                 out << "return \"" << value->name() << "\";\n";
             }).endl();
-        });
+        }
         out << "return \"0x\" + ";
         scalarType->emitConvertToJavaHexString(out, "o");
         out << ";\n";
     }).endl();
 
-    auto bitfieldType = getBitfieldJavaType(false /* forInitializer */);
-    auto bitfieldWrapperType = getBitfieldJavaWrapperType();
+    auto bitfieldType = getBitfieldType()->getJavaType(false /* forInitializer */);
+    auto bitfieldWrapperType = getBitfieldType()->getJavaWrapperType();
     out << "\n"
         << "public static final String dumpBitfield("
         << bitfieldType << " o) ";
     out.block([&] {
         out << "java.util.ArrayList<String> list = new java.util.ArrayList<>();\n";
         out << bitfieldType << " flipped = 0;\n";
-        forEachValueFromRoot([&](EnumValue* value) {
+        for (EnumValue *value : values()) {
             if (value->constExpr()->castSizeT() == 0) {
                 out << "list.add(\"" << value->name() << "\"); // " << value->name() << " == 0\n";
-                return;  // continue to next value
+                continue;
             }
             out.sIf("(o & " + value->name() + ") == " + value->name(), [&] {
                 out << "list.add(\"" << value->name() << "\");\n";
                 out << "flipped |= " << value->name() << ";\n";
             }).endl();
-        });
+        }
         // put remaining bits
         out.sIf("o != flipped", [&] {
             out << "list.add(\"0x\" + ";
@@ -540,9 +431,11 @@ void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
 
     out.unindent();
     out << "};\n\n";
+
+    return OK;
 }
 
-void EnumType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t EnumType::emitVtsTypeDeclarations(Formatter &out) const {
     const ScalarType *scalarType = mStorageType->resolveToScalarType();
 
     out << "name: \"" << fullName() << "\"\n";
@@ -553,7 +446,8 @@ void EnumType::emitVtsTypeDeclarations(Formatter& out) const {
     out << "scalar_type: \""
         << scalarType->getVtsScalarType()
         << "\"\n\n";
-    std::vector<const EnumType*> chain = typeChain();
+    std::vector<const EnumType *> chain;
+    getTypeChain(&chain);
 
     for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
         const auto &type = *it;
@@ -576,11 +470,13 @@ void EnumType::emitVtsTypeDeclarations(Formatter& out) const {
 
     out.unindent();
     out << "}\n";
+    return OK;
 }
 
-void EnumType::emitVtsAttributeType(Formatter& out) const {
+status_t EnumType::emitVtsAttributeType(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
     out << "predefined_type: \"" << fullName() << "\"\n";
+    return OK;
 }
 
 void EnumType::emitJavaDump(
@@ -591,28 +487,19 @@ void EnumType::emitJavaDump(
         << name << "));\n";
 }
 
-std::vector<const EnumType*> EnumType::typeChain() const {
-    std::vector<const EnumType*> types;
-    for (const EnumType* type = this; type != nullptr;) {
-        types.push_back(type);
+void EnumType::getTypeChain(std::vector<const EnumType *> *out) const {
+    out->clear();
+    const EnumType *type = this;
+    for (;;) {
+        out->push_back(type);
 
-        const Type* superType = type->storageType();
-        if (superType != nullptr && superType->isEnum()) {
-            type = static_cast<const EnumType*>(superType);
-        } else {
-            type = nullptr;
+        const Type *superType = type->storageType();
+        if (superType == NULL || !superType->isEnum()) {
+            break;
         }
-    }
 
-    return types;
-}
-
-std::vector<const EnumType*> EnumType::superTypeChain() const {
-    const Type* superType = storageType();
-    if (superType == nullptr || !superType->isEnum()) {
-        return {};
+        type = static_cast<const EnumType *>(superType);
     }
-    return static_cast<const EnumType*>(superType)->typeChain();
 }
 
 void EnumType::getAlignmentAndSize(size_t *align, size_t *size) const {
@@ -636,7 +523,7 @@ void EnumType::appendToExportedTypesVector(
     }
 }
 
-void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
+status_t EnumType::emitExportedHeader(Formatter &out, bool forJava) const {
     const Annotation *annotation = findExportAnnotation();
     CHECK(annotation != nullptr);
 
@@ -670,7 +557,7 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
 
     std::vector<const EnumType *> chain;
     if (exportParent) {
-        chain = typeChain();
+        getTypeChain(&chain);
     } else {
         chain = { this };
     }
@@ -709,7 +596,7 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
                 out << ";";
 
                 std::string comment = entry->comment();
-                if (!comment.empty()) {
+                if (!comment.empty() && comment != value) {
                     out << " // " << comment;
                 }
 
@@ -723,7 +610,7 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
         }
         out << "\n";
 
-        return;
+        return OK;
     }
 
     if (!name.empty()) {
@@ -747,7 +634,7 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
             out << ",";
 
             std::string comment = entry->comment();
-            if (!comment.empty()) {
+            if (!comment.empty() && comment != value) {
                 out << " // " << comment;
             }
 
@@ -763,12 +650,17 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
     }
 
     out << ";\n\n";
+
+    return OK;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-EnumValue::EnumValue(const char* name, ConstantExpression* value, const Location& location)
-    : mName(name), mValue(value), mLocation(location), mIsAutoFill(false) {}
+EnumValue::EnumValue(const char *name, ConstantExpression *value)
+    : mName(name),
+      mValue(value),
+      mIsAutoFill(false) {
+}
 
 std::string EnumValue::name() const {
     return mName;
@@ -790,7 +682,6 @@ std::string EnumValue::javaValue(ScalarType::Kind castKind) const {
 
 std::string EnumValue::comment() const {
     CHECK(mValue != nullptr);
-    if (mValue->descriptionIsTrivial()) return "";
     return mValue->description();
 }
 
@@ -799,21 +690,18 @@ ConstantExpression *EnumValue::constExpr() const {
     return mValue;
 }
 
-void EnumValue::autofill(const EnumType* prevType, EnumValue* prevValue, const ScalarType* type) {
-    // Value is defined explicitly
-    if (mValue != nullptr) return;
-
-    CHECK((prevType == nullptr) == (prevValue == nullptr));
-
+void EnumValue::autofill(const EnumValue *prev, const ScalarType *type) {
+    if(mValue != nullptr)
+        return;
     mIsAutoFill = true;
-    if (prevValue == nullptr) {
-        mValue = ConstantExpression::Zero(type->getKind()).release();
+    ConstantExpression *value = new ConstantExpression();
+    if(prev == nullptr) {
+        *value = ConstantExpression::Zero(type->getKind());
     } else {
-        std::string description = prevType->fullName() + "." + prevValue->name() + " implicitly";
-        auto* prevReference = new ReferenceConstantExpression(
-            Reference<LocalIdentifier>(prevValue, mLocation), description);
-        mValue = prevReference->addOne(type->getKind()).release();
+        CHECK(prev->mValue != nullptr);
+        *value = prev->mValue->addOne();
     }
+    mValue = value;
 }
 
 bool EnumValue::isAutoFill() const {
@@ -824,28 +712,17 @@ bool EnumValue::isEnumValue() const {
     return true;
 }
 
-const Location& EnumValue::location() const {
-    return mLocation;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
-
-BitFieldType::BitFieldType(Scope* parent) : TemplatedType(parent) {}
 
 bool BitFieldType::isBitField() const {
     return true;
 }
 
-const EnumType* BitFieldType::getElementEnumType() const {
-    CHECK(mElementType.get() != nullptr && mElementType->isEnum());
-    return static_cast<const EnumType*>(mElementType.get());
+std::string BitFieldType::typeName() const {
+    return "mask" + (mElementType == nullptr ? "" : (" of " + mElementType->typeName()));
 }
 
-std::string BitFieldType::templatedTypeName() const {
-    return "mask";
-}
-
-bool BitFieldType::isCompatibleElementType(const Type* elementType) const {
+bool BitFieldType::isCompatibleElementType(Type *elementType) const {
     return elementType->isEnum();
 }
 
@@ -855,11 +732,11 @@ const ScalarType *BitFieldType::resolveToScalarType() const {
 
 std::string BitFieldType::getCppType(StorageMode mode,
                                  bool specifyNamespaces) const {
-    return getElementEnumType()->getBitfieldCppType(mode, specifyNamespaces);
+    return resolveToScalarType()->getCppType(mode, specifyNamespaces);
 }
 
 std::string BitFieldType::getJavaType(bool forInitializer) const {
-    return getElementEnumType()->getBitfieldJavaType(forInitializer);
+    return resolveToScalarType()->getJavaType(forInitializer);
 }
 
 std::string BitFieldType::getJavaSuffix() const {
@@ -867,7 +744,7 @@ std::string BitFieldType::getJavaSuffix() const {
 }
 
 std::string BitFieldType::getJavaWrapperType() const {
-    return getElementEnumType()->getBitfieldJavaWrapperType();
+    return resolveToScalarType()->getJavaWrapperType();
 }
 
 std::string BitFieldType::getVtsType() const {
@@ -878,17 +755,18 @@ bool BitFieldType::isElidableType() const {
     return resolveToScalarType()->isElidableType();
 }
 
-bool BitFieldType::deepCanCheckEquality(std::unordered_set<const Type*>* visited) const {
-    return resolveToScalarType()->canCheckEquality(visited);
+bool BitFieldType::canCheckEquality() const {
+    return resolveToScalarType()->canCheckEquality();
 }
 
-void BitFieldType::emitVtsAttributeType(Formatter& out) const {
+status_t BitFieldType::emitVtsAttributeType(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
     out << "scalar_type: \""
         << mElementType->resolveToScalarType()->getVtsScalarType()
         << "\"\n";
-    out << "predefined_type: \"" << static_cast<const NamedType*>(mElementType.get())->fullName()
-        << "\"\n";
+    out << "predefined_type: \""
+        << static_cast<NamedType *>(mElementType)->fullName() << "\"\n";
+    return OK;
 }
 
 void BitFieldType::getAlignmentAndSize(size_t *align, size_t *size) const {
@@ -912,9 +790,9 @@ void BitFieldType::emitReaderWriter(
             true /* needsCast */);
 }
 
-const EnumType* BitFieldType::getEnumType() const {
+EnumType *BitFieldType::getEnumType() const {
     CHECK(mElementType->isEnum());
-    return static_cast<const EnumType*>(mElementType.get());
+    return static_cast<EnumType *>(mElementType);
 }
 
 // a bitfield maps to the underlying scalar type in C++, so operator<< is

@@ -24,14 +24,11 @@
 
 namespace android {
 
-RefType::RefType(Scope* parent) : TemplatedType(parent) {}
-
-std::string RefType::templatedTypeName() const {
-    return "ref";
+RefType::RefType() {
 }
 
-std::vector<const Reference<Type>*> RefType::getStrongReferences() const {
-    return {};
+std::string RefType::typeName() const {
+    return "ref" + (mElementType == nullptr ? "" : (" of " + mElementType->typeName()));
 }
 
 std::string RefType::getVtsType() const {
@@ -42,7 +39,7 @@ std::string RefType::getVtsValueName() const {
     return "ref_value";
 }
 
-bool RefType::isCompatibleElementType(const Type* elementType) const {
+bool RefType::isCompatibleElementType(Type *elementType) const {
     if (elementType->isScalar()) {
         return true;
     }
@@ -55,17 +52,15 @@ bool RefType::isCompatibleElementType(const Type* elementType) const {
     if (elementType->isBitField()) {
         return true;
     }
-    if (elementType->isCompoundType() &&
-        static_cast<const CompoundType*>(elementType)->style() == CompoundType::STYLE_STRUCT) {
+    if (elementType->isCompoundType()
+            && static_cast<CompoundType *>(elementType)->style() == CompoundType::STYLE_STRUCT) {
         return true;
     }
     if (elementType->isTemplatedType()) {
-        return this->isCompatibleElementType(
-            static_cast<const TemplatedType*>(elementType)->getElementType());
+        return this->isCompatibleElementType(static_cast<TemplatedType *>(elementType)->getElementType());
     }
     if (elementType->isArray()) {
-        return this->isCompatibleElementType(
-            static_cast<const ArrayType*>(elementType)->getElementType());
+        return this->isCompatibleElementType(static_cast<ArrayType *>(elementType)->getElementType());
     }
     return false;
 }
@@ -230,7 +225,7 @@ void RefType::emitResolveReferencesEmbedded(
     out << "}\n\n";
 }
 
-bool RefType::deepNeedsResolveReferences(std::unordered_set<const Type*>* /* visited */) const {
+bool RefType::needsResolveReferences() const {
     return true;
 }
 
@@ -242,11 +237,11 @@ bool RefType::resultNeedsDeref() const {
     return false;
 }
 
-bool RefType::deepIsJavaCompatible(std::unordered_set<const Type*>* /* visited */) const {
+bool RefType::isJavaCompatible() const {
     return false;
 }
 
-bool RefType::deepContainsPointer(std::unordered_set<const Type*>* /* visited */) const {
+bool RefType::containsPointer() const {
     return true;
 }
 
