@@ -62,18 +62,18 @@ struct AST {
     Scope<Define *> &getDefinesScope();
 
 private:
-    void * mScanner = nullptr;
+    void * mScanner = NULL;
     std::string mPath;
     std::string mOutputDir;
     std::string mPackage;
 
     bool mIsOpenGl;
 
-    Expression* mExpression = nullptr;
+    Expression* mExpression = NULL;
 
-    std::vector<Declaration *> *mDeclarations = nullptr;
-    std::vector<CompositeDeclaration *> *mInterfaces = nullptr;
-    std::vector<Include *> *mIncludes = nullptr;
+    std::vector<Declaration *> *mDeclarations = NULL;
+    std::vector<CompositeDeclaration *> *mInterfaces = NULL;
+    std::vector<Include *> *mIncludes = NULL;
 
     Scope<Define *> mDefinesScope;
 
