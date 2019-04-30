@@ -595,18 +595,16 @@ void CompoundType::emitSafeUnionTypeDeclarations(Formatter& out) const {
         << " ";
 
     out.block([&] {
-        const auto elements = getSafeUnionEnumElements(true /* useCppTypeName */);
-        for (size_t i = 0; i < elements.size(); i++) {
-            out << elements[i].fieldName
-                << " = "
-                << i
-                << ",";
+        for (size_t idx = 0; idx < mFields->size(); idx++) {
+            const auto& field = mFields->at(idx);
 
-            if (!elements[i].fieldTypeName.empty()) {
-                out << "  // "
-                    << elements[i].fieldTypeName;
-            }
-            out << "\n";
+            field->emitDocComment(out);
+            out << field->name()
+                << " = "
+                << idx
+                << ",  // "
+                << field->type().getCppStackType(true /*specifyNamespaces*/)
+                << "\n";
         }
     });
     out << ";\n\n";
@@ -750,6 +748,7 @@ void CompoundType::emitTypeDeclarations(Formatter& out) const {
             offset += Layout::getPad(offset, fieldAlign);
 
             if (pass == 0) {
+                field->emitDocComment(out);
                 out << field->type().getCppStackType()
                     << " "
                     << field->name()
@@ -1053,21 +1052,6 @@ static void emitSafeUnionGetterDefinition(Formatter& out, const std::string& fie
     }).endl().endl();
 }
 
-std::vector<CompoundType::SafeUnionEnumElement> CompoundType::getSafeUnionEnumElements(
-    bool useCppTypeName) const {
-    std::vector<SafeUnionEnumElement> elements;
-
-    for (const auto& field : *mFields) {
-        const std::string fieldTypeName = useCppTypeName
-            ? field->type().getCppStackType(true /* specifyNamespaces */)
-            : field->type().getJavaType(true /* forInitializer */);
-
-        elements.push_back({field->name(), fieldTypeName});
-    }
-
-    return elements;
-}
-
 void CompoundType::emitSafeUnionCopyAndAssignDefinition(Formatter& out,
                                                         const std::string& parameterName,
                                                         bool isCopyConstructor,
@@ -1143,14 +1127,25 @@ void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
             << fullName()
             << ", hidl_d) == 0, \"wrong offset\");\n";
 
+        const CompoundLayout layout = getCompoundAlignmentAndSize();
+
         if (!containsPointer()) {
-            CompoundLayout layout = getCompoundAlignmentAndSize();
-            out << "static_assert(offsetof("
-                << fullName()
-                << ", hidl_u) == "
-                << layout.innerStruct.offset
-                << ", \"wrong offset\");\n";
+            out << "static_assert(offsetof(" << fullName()
+                << ", hidl_u) == " << layout.innerStruct.offset << ", \"wrong offset\");\n";
         }
+
+        out.endl();
+
+        // union itself is zero'd when set
+        // padding after descriminator
+        size_t dpad = layout.innerStruct.offset - layout.discriminator.size;
+        emitPaddingZero(out, layout.discriminator.size /*offset*/, dpad /*size*/);
+
+        size_t innerStructEnd = layout.innerStruct.offset + layout.innerStruct.size;
+        // final padding of the struct
+        size_t fpad = layout.overall.size - innerStructEnd;
+        emitPaddingZero(out, innerStructEnd /*offset*/, fpad /*size*/);
+
         out.endl();
 
         CHECK(!mFields->empty());
@@ -1361,21 +1356,19 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
 
         out << "public static final class hidl_discriminator ";
         out.block([&] {
-            const auto elements = getSafeUnionEnumElements(false /* useCppTypeName */);
-            for (size_t idx = 0; idx < elements.size(); idx++) {
+            for (size_t idx = 0; idx < mFields->size(); idx++) {
+                const auto& field = mFields->at(idx);
+
+                field->emitDocComment(out);
                 out << "public static final "
                     << discriminatorStorageType
                     << " "
-                    << elements[idx].fieldName
+                    << field->name()
                     << " = "
                     << idx
-                    << ";";
-
-                if (!elements[idx].fieldTypeName.empty()) {
-                    out << "  // "
-                        << elements[idx].fieldTypeName;
-                }
-                out << "\n";
+                    << ";  // "
+                    << field->type().getJavaType(true /* forInitializer */)
+                    << "\n";
             }
 
             out << "\n"
@@ -1386,11 +1379,13 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
             out.block([&] {
                 out << "switch (value) ";
                 out.block([&] {
-                    for (size_t idx = 0; idx < elements.size(); idx++) {
+                    for (size_t idx = 0; idx < mFields->size(); idx++) {
+                        const auto& field = mFields->at(idx);
+
                         out << "case "
                             << idx
                             << ": { return \""
-                            << elements[idx].fieldName
+                            << field->name()
                             << "\"; }\n";
                     }
                     out << "default: { return \"Unknown\"; }\n";
@@ -2224,18 +2219,33 @@ CompoundType::CompoundLayout CompoundType::getCompoundAlignmentAndSize() const {
     innerStruct.offset += Layout::getPad(innerStruct.offset,
                                          innerStruct.align);
 
-    overall.size = innerStruct.offset + innerStruct.size;
-
     // An empty struct/union still occupies a byte of space in C++.
-    if (overall.size == 0) {
-        overall.size = 1;
+    if (innerStruct.size == 0) {
+        innerStruct.size = 1;
     }
+
+    overall.size = innerStruct.offset + innerStruct.size;
 
     // Pad the overall structure's size
     overall.align = std::max(innerStruct.align, discriminator.align);
     overall.size += Layout::getPad(overall.size, overall.align);
 
+    if (mStyle != STYLE_SAFE_UNION) {
+        CHECK(overall.offset == innerStruct.offset) << overall.offset << " " << innerStruct.offset;
+        CHECK(overall.align == innerStruct.align) << overall.align << " " << innerStruct.align;
+        CHECK(overall.size == innerStruct.size) << overall.size << " " << innerStruct.size;
+    }
+
     return compoundLayout;
+}
+
+void CompoundType::emitPaddingZero(Formatter& out, size_t offset, size_t size) const {
+    if (size > 0) {
+        out << "::std::memset(reinterpret_cast<uint8_t*>(this) + " << offset << ", 0, " << size
+            << ");\n";
+    } else {
+        out << "// no padding to zero starting at offset " << offset << "\n";
+    }
 }
 
 std::unique_ptr<ScalarType> CompoundType::getUnionDiscriminatorType() const {
