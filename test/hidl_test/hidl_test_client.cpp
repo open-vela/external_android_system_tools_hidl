@@ -1732,9 +1732,6 @@ TEST_F(HidlTest, DeathRecipientTest) {
         //do nothing, this is expected
     }
 
-    // further calls fail
-    EXPECT_FAIL(dyingBaz->ping());
-
     std::unique_lock<std::mutex> lock(recipient->mutex);
     recipient->condition.wait_for(lock, std::chrono::milliseconds(100), [&recipient]() {
             return recipient->fired;
@@ -1895,44 +1892,31 @@ TEST_F(HidlTest, EnumEqualTest) {
 
 TEST_F(HidlTest, InvalidTransactionTest) {
     using ::android::hardware::tests::bar::V1_0::BnHwBar;
+    using ::android::hardware::tests::bar::V1_0::BpHwBar;
     using ::android::hardware::IBinder;
     using ::android::hardware::Parcel;
-
-    sp<IBinder> binder = ::android::hardware::toBinder(bar);
-
-    Parcel request, reply;
-    EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBar::descriptor));
-    EXPECT_EQ(::android::UNKNOWN_TRANSACTION, binder->transact(1234, request, &reply));
-
-    EXPECT_OK(bar->ping());  // still works
-}
-
-TEST_F(HidlTest, EmptyTransactionTest) {
-    using ::android::hardware::IBinder;
-    using ::android::hardware::Parcel;
-    using ::android::hardware::tests::bar::V1_0::BnHwBar;
-
-    sp<IBinder> binder = ::android::hardware::toBinder(bar);
+    using ::android::status_t;
+    using ::android::OK;
 
     Parcel request, reply;
-    EXPECT_EQ(::android::BAD_TYPE, binder->transact(2 /*someBoolMethod*/, request, &reply));
+    sp<IBinder> binder;
+    status_t status = request.writeInterfaceToken(::android::hardware::tests::bar::V1_0::IBar::descriptor);
 
-    EXPECT_OK(bar->ping());  // still works
-}
+    EXPECT_EQ(status, OK);
 
-TEST_F(HidlTest, WrongDescriptorTest) {
-    using ::android::hardware::IBinder;
-    using ::android::hardware::Parcel;
-    using ::android::hardware::tests::bar::V1_0::BnHwBar;
+    if (mode == BINDERIZED) {
+        EXPECT_TRUE(bar->isRemote());
+        binder = ::android::hardware::toBinder<IBar>(bar);
+    } else {
+        // For a local test, just wrap the implementation with a BnHwBar
+        binder = new BnHwBar(bar);
+    }
 
-    sp<IBinder> binder = ::android::hardware::toBinder(bar);
+    status = binder->transact(1234, request, &reply);
 
-    Parcel request, reply;
-    // wrong descriptor
-    EXPECT_EQ(::android::OK, request.writeInterfaceToken("not a real descriptor"));
-    EXPECT_EQ(::android::BAD_TYPE, binder->transact(2 /*someBoolMethod*/, request, &reply));
-
-    EXPECT_OK(bar->ping());  // still works
+    EXPECT_EQ(status, ::android::UNKNOWN_TRANSACTION);
+    // Try another call, to make sure nothing is messed up
+    EXPECT_OK(bar->thisIsNew());
 }
 
 TEST_F(HidlTest, TrieSimpleTest) {
