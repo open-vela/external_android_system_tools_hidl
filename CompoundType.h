@@ -188,6 +188,13 @@ private:
                                               bool isCopyConstructor,
                                               bool usesMoveSemantics) const;
 
+    struct SafeUnionEnumElement {
+        std::string fieldName;
+        std::string fieldTypeName;
+    };
+
+    std::vector<SafeUnionEnumElement> getSafeUnionEnumElements(bool useCppTypeName) const;
+
     CompoundLayout getCompoundAlignmentAndSize() const;
     void emitPaddingZero(Formatter& out, size_t offset, size_t size) const;
 
