@@ -224,7 +224,6 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 %expect-rr 0
 %error-verbose
 
-%verbose
 %debug
 
 %token<docComment> DOC_COMMENT "doc comment"
