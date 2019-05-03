@@ -26,13 +26,13 @@ Type::Type(std::vector<Qualifier*> *qualifiers)
     {}
 
 Type::~Type() {
-    if(mArrays != NULL) {
+    if(mArrays != nullptr) {
         for(auto* array : *mArrays) {
             delete array;
         }
     }
 
-    if(mQualifiers != NULL) {
+    if(mQualifiers != nullptr) {
         for(auto* qual : *mQualifiers) {
             delete qual;
         }
@@ -60,7 +60,6 @@ const std::string Type::decorateName(const std::string &name) const {
     return ss.str();
 }
 
-// static
 std::map<std::string, std::string> Type::kSignedToUnsignedMap = {
     { "char", "uint8_t" },
     { "short", "uint16_t" },
@@ -72,7 +71,6 @@ std::map<std::string, std::string> Type::kSignedToUnsignedMap = {
     { "int64_t", "uint64_t" },
 };
 
-// static
 const std::string Type::signedToUnsigned(const std::string &signedType) {
     auto it = kSignedToUnsignedMap.find(signedType);
 
@@ -83,7 +81,6 @@ const std::string Type::signedToUnsigned(const std::string &signedType) {
     return (*it).second;
 }
 
-// static
 std::map<std::string, std::string> Type::kCToHidlMap = {
     { "char", "int8_t /* NOTE: char */" },
     { "short", "int16_t" },
@@ -107,7 +104,6 @@ std::map<std::string, std::string> Type::kCToHidlMap = {
     // { "hidl_vec", "vec"},
 };
 
-// static
 const std::string Type::cToHidlType(const std::string &cType) {
     auto it = kCToHidlMap.find(cType);
 
@@ -119,7 +115,7 @@ const std::string Type::cToHidlType(const std::string &cType) {
 }
 
 const std::string Type::getHidlType() const {
-    if (mQualifiers == NULL) {
+    if (mQualifiers == nullptr) {
         return "";
     }
 
@@ -179,7 +175,7 @@ const std::string Type::getHidlType() const {
         }
     }
 
-    if (mArrays != NULL) {
+    if (mArrays != nullptr) {
         for (const auto &array : *mArrays) {
             ss << "[" << array->toString() << "]";
         }
@@ -189,7 +185,7 @@ const std::string Type::getHidlType() const {
 }
 
 const std::string Type::getRawQualifierList() const {
-    if (mQualifiers == NULL) {
+    if (mQualifiers == nullptr) {
         return "";
     }
 
@@ -244,13 +240,13 @@ bool Type::isHwDevice() const {
 }
 
 std::string Type::removeLastId() {
-    if(mQualifiers == NULL || mQualifiers->size() == 0) {
+    if(mQualifiers == nullptr || mQualifiers->size() == 0) {
         return "";
     }
 
     Qualifier *last = (*mQualifiers)[mQualifiers->size() - 1];
 
-    if(last == NULL || last->qualification != Qualifier::ID) {
+    if(last == nullptr || last->qualification != Qualifier::ID) {
         return "";
     }
 

@@ -21,7 +21,7 @@
 
 namespace android {
 
-PointerType::PointerType() {}
+PointerType::PointerType(Scope* parent) : Type(parent) {}
 
 bool PointerType::isPointer() const {
     return true;
@@ -31,13 +31,13 @@ bool PointerType::isElidableType() const {
     return true;
 }
 
-void PointerType::addNamedTypesToSet(std::set<const FQName> &) const {
-    // do nothing
+std::string PointerType::getCppType(StorageMode /*mode*/,
+                                    bool /*specifyNamespaces*/) const {
+    return "void*";
 }
 
-std::string PointerType::getCppType(StorageMode /* mode */,
-                                   bool /* specifyNamespaces */) const {
-    return "void*";
+std::string PointerType::typeName() const {
+    return "local pointer";
 }
 
 std::string PointerType::getVtsType() const {
@@ -46,33 +46,53 @@ std::string PointerType::getVtsType() const {
 
 void PointerType::emitReaderWriter(
         Formatter& out,
-        const std::string& /* name */,
-        const std::string& /* parcelObj */,
-        bool /* parcelObjIsPointer */,
-        bool /* isReader */,
-        ErrorMode /* mode */) const {
-    out << "LOG_ALWAYS_FATAL(\"Pointer is only supported in passthrough mode\");\n";
+        const std::string& name,
+        const std::string& /*parcelObj*/,
+        bool /*parcelObjIsPointer*/,
+        bool /*isReader*/,
+        ErrorMode /*mode*/) const {
+    out << "(void)" << name << ";\n";
+    out << "LOG_ALWAYS_FATAL(\"Pointer is only supported in passthrough mode\");\n\n";
+}
+
+void PointerType::emitReaderWriterEmbedded(
+        Formatter& out,
+        size_t /*depth*/,
+        const std::string& name,
+        const std::string& /*sanitizedName*/,
+        bool /*nameIsPointer*/,
+        const std::string& parcelObj,
+        bool parcelObjIsPointer,
+        bool isReader,
+        ErrorMode mode,
+        const std::string& parentName,
+        const std::string& offsetText) const {
+    out << "(void) " << parcelObj << ";\n";
+    out << "(void) " << parentName << ";\n";
+    out << "(void) (" << offsetText << ");\n";
+
+    // same exact code
+    emitReaderWriter(out, name, parcelObj, parcelObjIsPointer, isReader, mode);
 }
 
 bool PointerType::needsEmbeddedReadWrite() const {
-    return false;
+    return true;
 }
 
 bool PointerType::resultNeedsDeref() const {
     return false;
 }
 
-bool PointerType::isJavaCompatible() const {
+bool PointerType::deepIsJavaCompatible(std::unordered_set<const Type*>* /* visited */) const {
     return false;
 }
 
-bool PointerType::containsPointer() const {
+bool PointerType::deepContainsPointer(std::unordered_set<const Type*>* /* visited */) const {
     return true;
 }
 
-status_t PointerType::emitVtsTypeDeclarations(Formatter &out) const {
+void PointerType::emitVtsTypeDeclarations(Formatter& out) const {
     out << "type: " << getVtsType() << "\n";
-    return OK;
 }
 
 }  // namespace android

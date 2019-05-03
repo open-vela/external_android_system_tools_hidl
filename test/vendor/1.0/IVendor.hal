@@ -1,3 +1,5 @@
+// note this file tests carriage returns
+
 /*
  * Copyright (C) 2016 The Android Open Source Project
  *
@@ -14,7 +16,7 @@
  * limitations under the License.
  */
 
-package tests.vendor@1.0;
+package hidl.tests.vendor@1.0;
 
 import android.hardware.tests.baz@1.0;
 
@@ -30,4 +32,8 @@ interface IVendor extends IBaz {
     fun4(string a) generates(string b);
     fun5(uint8_t[4][4] a) generates(uint8_t[4][4] b);
 
+    // Testing static functions in derived class
+    // overriding virtual functions in parent class
+    // due to namespace resolution.
+    registerForNotifications();
 };
