@@ -22,18 +22,18 @@
 
 namespace android {
 
-StringType::StringType() {}
-
-void StringType::addNamedTypesToSet(std::set<const FQName> &) const {
-    // do nothing
-}
+StringType::StringType(Scope* parent) : Type(parent) {}
 
 bool StringType::isString() const {
     return true;
 }
 
-bool StringType::canCheckEquality() const {
+bool StringType::deepCanCheckEquality(std::unordered_set<const Type*>* /* visited */) const {
     return true;
+}
+
+std::string StringType::typeName() const {
+    return "string";
 }
 
 std::string StringType::getCppType(StorageMode mode,
@@ -150,9 +150,12 @@ void StringType::emitReaderWriterEmbedded(
 
 void StringType::emitJavaFieldInitializer(
         Formatter &out, const std::string &fieldName) const {
-    out << "String "
-        << fieldName
-        << " = new String();\n";
+    emitJavaFieldDefaultInitialValue(out, "String " + fieldName);
+}
+
+void StringType::emitJavaFieldDefaultInitialValue(
+        Formatter &out, const std::string &declaredFieldName) const {
+    out << declaredFieldName << " = new String();\n";
 }
 
 void StringType::emitJavaFieldReaderWriter(
@@ -180,7 +183,7 @@ void StringType::emitJavaFieldReaderWriter(
 
         // hidl_string's embedded buffer is never null(able), because it defaults to a
         // buffer containing an empty string.
-        out << fieldName << ".getBytes().length + 1,\n"
+        out << "(" << getJavaTypeCast(fieldName) << ").getBytes().length + 1,\n"
             << blobName
             << ".handle(),\n"
             << offset
@@ -209,9 +212,8 @@ bool StringType::resultNeedsDeref() const {
     return true;
 }
 
-status_t StringType::emitVtsTypeDeclarations(Formatter &out) const {
+void StringType::emitVtsTypeDeclarations(Formatter& out) const {
     out << "type: " << getVtsType() << "\n";
-    return OK;
 }
 
 static HidlTypeAssertion assertion("hidl_string", 16 /* size */);

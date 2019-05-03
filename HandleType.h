@@ -23,15 +23,19 @@
 namespace android {
 
 struct HandleType : public Type {
-    HandleType();
+    HandleType(Scope* parent);
 
     bool isHandle() const override;
 
-    void addNamedTypesToSet(std::set<const FQName> &set) const override;
+    std::string typeName() const override;
 
     std::string getCppType(
             StorageMode mode,
             bool specifyNamespaces) const override;
+
+    std::string getJavaType(bool forInitializer) const override;
+
+    std::string getJavaSuffix() const override;
 
     std::string getVtsType() const override;
 
@@ -56,15 +60,28 @@ struct HandleType : public Type {
             const std::string &parentName,
             const std::string &offsetText) const override;
 
+    void emitJavaFieldInitializer(
+            Formatter &out, const std::string &fieldName) const override;
+
+    void emitJavaFieldDefaultInitialValue(
+            Formatter &out, const std::string &declaredFieldName) const override;
+
+    void emitJavaFieldReaderWriter(
+            Formatter &out,
+            size_t depth,
+            const std::string &parcelName,
+            const std::string &blobName,
+            const std::string &fieldName,
+            const std::string &offset,
+            bool isReader) const override;
+
     bool needsEmbeddedReadWrite() const override;
 
-    bool isJavaCompatible() const override;
-
-    bool useNameInEmitReaderWriterEmbedded(bool isReader) const override;
+    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
 
     void getAlignmentAndSize(size_t *align, size_t *size) const override;
 
-    status_t emitVtsTypeDeclarations(Formatter &out) const override;
+    void emitVtsTypeDeclarations(Formatter& out) const override;
 };
 
 }  // namespace android
