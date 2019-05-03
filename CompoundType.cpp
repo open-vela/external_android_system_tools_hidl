@@ -1166,15 +1166,23 @@ void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
     }).endl().endl();
 
     // Move constructor
-    out << fullName() << "::" << localName() << "(" << localName() << "&& other) : " << fullName()
-        << "() ";
+    out << fullName()
+        << "::"
+        << localName()
+        << "("
+        << localName()
+        << "&& other) ";
 
     emitSafeUnionCopyAndAssignDefinition(
             out, "other", true /* isCopyConstructor */, true /* usesMoveSemantics */);
 
     // Copy constructor
-    out << fullName() << "::" << localName() << "(const " << localName()
-        << "& other) : " << fullName() << "() ";
+    out << fullName()
+        << "::"
+        << localName()
+        << "(const "
+        << localName()
+        << "& other) ";
 
     emitSafeUnionCopyAndAssignDefinition(
         out, "other", true /* isCopyConstructor */, false /* usesMoveSemantics */);
