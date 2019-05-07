@@ -1,58 +1,33 @@
-# hidl-gen
-
-Full documentation can be found here:
-<https://source.android.com/devices/architecture/hidl/>
-
-hidl-gen is a compiler for the HIDL (HAL Interface Design Language) which generates
-C++ and Java endpoints for RPC mechanisms. The main userspace libraries which this
-compiler uses can be found at system/libhidl.
+# hidl-gen user guide
 
 ## 1. Build
 
 ```
-m hidl-gen
+croot
+make hidl-gen
 ```
 
 ## 2. Run
 
-Note that options for hidl-gen expected to be invoked by the build system
-are marked with 'internal' in the help menu.
-
 ```
-hidl-gen -h
+hidl-gen -o output-path -L language (-r interface-root) fqname
 
-hidl-gen -o output -L c++-impl -r android.hardware:hardware/interfaces -r android.hidl:system/libhidl/transport android.hardware.nfc@1.0
-```
+output-path: directory to store the output files.
+language: output file for given language. e.g.c++, vts..
 
-Some defaults for package roots are also provided
+fqname: fully qualified name of the input files.
+For singe file input, follow the format: package@version::fileName
+For directory input, follow the format: package@version
 
-```
-hidl-gen -o output -L c++-impl android.hardware.nfc@1.0
-hidl-gen -o output -L vts android.hardware.nfc@1.0
-hidl-gen -L hash android.hardware.nfc@1.0
-```
+interface-root(optional): prefix and root path for fqname.
+If not set, use the default prefix: android.hardware and default root path
+defined in $TOP.
 
-Example command for vendor project
+examples:
 
-```
-hidl-gen -L c++-impl -r vendor.foo:vendor/foo/interfaces vendor.foo.nfc@1.0
-```
-
-See update-makefiles-helper.sh and update-all-google-makefiles.sh for examples
-of how to generate HIDL makefiles (using the -Landroidbp option).
-
-# c2hal
-
-This is a helper tool to convert C headers to valid .hal files.
-
-```
-m c2hal && c2hal -h
-```
-
-# docs
-
-This tool generates html documentation for hal interfaces.
-
-```
-m hidl-doc && hidl-doc -h
+croot
+hidl-gen -o output -L c++ -r android.hardware:hardware/interfaces -r android.hidl:system/libhidl/transport android.hardware.nfc@1.0::INfc.hal
+hidl-gen -o output -L vts -r android.hardware:hardware/interfaces -r android.hidl:system/libhidl/transport android.hardware.nfc@1.0
+hidl-gen -o test -L c++ -r android.hardware:hardware/interfaces -r android.hidl:system/libhidl/transport android.hardware.nfc@1.0
+hidl-gen -L hash -r android.hardware:hardware/interfaces -r android.hidl:system/libhidl/transport android.hardware.nfc@1.0
 ```
