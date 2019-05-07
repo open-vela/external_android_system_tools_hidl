@@ -16,18 +16,16 @@
 
 #include "DocComment.h"
 
-#include <android-base/strings.h>
 #include <hidl-util/StringHelper.h>
 
 #include <cctype>
 #include <sstream>
 
-#include <iostream>
-
 namespace android {
 
 DocComment::DocComment(const std::string& comment) {
-    std::vector<std::string> lines = base::Split(base::Trim(comment), "\n");
+    std::vector<std::string> lines;
+    StringHelper::SplitString(comment, '\n', &lines);
 
     bool foundFirstLine = false;
 
@@ -42,12 +40,17 @@ DocComment::DocComment(const std::string& comment) {
         if (idx < line.size() && line[idx] == '*') idx++;
         if (idx < line.size() && line[idx] == ' ') idx++;
 
-        bool isEmptyLine = idx == line.size();
+        if (idx < line.size()) {
+            foundFirstLine = true;
+        }
 
-        foundFirstLine = foundFirstLine || !isEmptyLine;
         if (!foundFirstLine) continue;
 
-        is << line.substr(idx) << "\n";
+        is << line.substr(idx);
+
+        if (l + 1 < lines.size()) {
+            is << "\n";
+        }
     }
 
     mComment = is.str();
