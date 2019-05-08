@@ -25,13 +25,14 @@
 
 namespace android {
 
-VectorType::VectorType(Scope* parent) : TemplatedType(parent) {}
-
-std::string VectorType::templatedTypeName() const {
-    return "vector";
+VectorType::VectorType() {
 }
 
-bool VectorType::isCompatibleElementType(const Type* elementType) const {
+std::string VectorType::typeName() const {
+    return "vector" + (mElementType == nullptr ? "" : (" of " + mElementType->typeName()));
+}
+
+bool VectorType::isCompatibleElementType(Type *elementType) const {
     if (elementType->isScalar()) {
         return true;
     }
@@ -44,10 +45,8 @@ bool VectorType::isCompatibleElementType(const Type* elementType) const {
     if (elementType->isBitField()) {
         return true;
     }
-    if (elementType->isCompoundType()) {
-        if (static_cast<const CompoundType*>(elementType)->containsInterface()) {
-            return false;
-        }
+    if (elementType->isCompoundType()
+            && static_cast<CompoundType *>(elementType)->style() == CompoundType::STYLE_STRUCT) {
         return true;
     }
     if (elementType->isInterface()) {
@@ -60,11 +59,11 @@ bool VectorType::isCompatibleElementType(const Type* elementType) const {
         return true;
     }
     if (elementType->isTemplatedType()) {
-        const Type* inner = static_cast<const TemplatedType*>(elementType)->getElementType();
+        Type *inner = static_cast<TemplatedType *>(elementType)->getElementType();
         return this->isCompatibleElementType(inner) && !inner->isInterface();
     }
     if (elementType->isArray()) {
-        const Type* inner = static_cast<const ArrayType*>(elementType)->getElementType();
+        Type *inner = static_cast<ArrayType *>(elementType)->getElementType();
         return this->isCompatibleElementType(inner) && !inner->isInterface();
     }
     return false;
@@ -75,15 +74,11 @@ bool VectorType::isVector() const {
 }
 
 bool VectorType::isVectorOfBinders() const {
-    return mElementType->isInterface();
+    return mElementType->isBinder();
 }
 
-bool VectorType::deepCanCheckEquality(std::unordered_set<const Type*>* visited) const {
-    return mElementType->canCheckEquality(visited);
-}
-
-std::vector<const Reference<Type>*> VectorType::getStrongReferences() const {
-    return {};
+bool VectorType::canCheckEquality() const {
+    return mElementType->canCheckEquality();
 }
 
 std::string VectorType::getCppType(StorageMode mode,
@@ -113,15 +108,17 @@ std::string VectorType::getCppType(StorageMode mode,
 }
 
 std::string VectorType::getJavaType(bool /* forInitializer */) const {
-    const std::string elementJavaType = mElementType->isTemplatedType()
-        ? mElementType->getJavaType()
-        : mElementType->getJavaTypeClass();
 
-    return "java.util.ArrayList<" + elementJavaType + ">";
-}
+    std::string elementJavaType;
+    if (mElementType->isArray()) {
+        elementJavaType = mElementType->getJavaType();
+    } else {
+        elementJavaType = mElementType->getJavaWrapperType();
+    }
 
-std::string VectorType::getJavaTypeClass() const {
-    return "java.util.ArrayList";
+    return "java.util.ArrayList<"
+        + elementJavaType
+        + ">";
 }
 
 std::string VectorType::getVtsType() const {
@@ -545,17 +542,14 @@ void VectorType::emitJavaReaderWriter(
 
 void VectorType::emitJavaFieldInitializer(
         Formatter &out, const std::string &fieldName) const {
-    const std::string typeName = getJavaType(false /* forInitializer */);
-    const std::string fieldDeclaration = typeName + " " + fieldName;
+    std::string javaType = getJavaType(false /* forInitializer */);
 
-    emitJavaFieldDefaultInitialValue(out, fieldDeclaration);
-}
-
-void VectorType::emitJavaFieldDefaultInitialValue(
-        Formatter &out, const std::string &declaredFieldName) const {
-    out << declaredFieldName
+    out << "final "
+        << javaType
+        << " "
+        << fieldName
         << " = new "
-        << getJavaType(false /* forInitializer */)
+        << javaType
         << "();\n";
 }
 
@@ -567,18 +561,13 @@ void VectorType::emitJavaFieldReaderWriter(
         const std::string &fieldName,
         const std::string &offset,
         bool isReader) const {
-
-    const std::string fieldNameWithCast = isReader
-        ? "(" + getJavaTypeCast(fieldName) + ")"
-        : fieldName;
-
     VectorType::EmitJavaFieldReaderWriterForElementType(
             out,
             depth,
-            mElementType.get(),
+            mElementType,
             parcelName,
             blobName,
-            fieldNameWithCast,
+            fieldName,
             offset,
             isReader);
 }
@@ -722,24 +711,21 @@ bool VectorType::needsEmbeddedReadWrite() const {
     return true;
 }
 
-bool VectorType::deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const {
-    if (mElementType->needsResolveReferences(visited)) {
-        return true;
-    }
-    return TemplatedType::deepNeedsResolveReferences(visited);
+bool VectorType::needsResolveReferences() const {
+    return mElementType->needsResolveReferences();
 }
 
 bool VectorType::resultNeedsDeref() const {
     return !isVectorOfBinders();
 }
 
-bool VectorType::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const {
-    if (!mElementType->isJavaCompatible(visited)) {
+bool VectorType::isJavaCompatible() const {
+    if (!mElementType->isJavaCompatible()) {
         return false;
     }
 
     if (mElementType->isArray()) {
-        return static_cast<const ArrayType*>(mElementType.get())->countDimensions() == 1;
+        return static_cast<ArrayType *>(mElementType)->countDimensions() == 1;
     }
 
     if (mElementType->isVector()) {
@@ -750,14 +736,11 @@ bool VectorType::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) 
         return false;
     }
 
-    return TemplatedType::deepIsJavaCompatible(visited);
+    return true;
 }
 
-bool VectorType::deepContainsPointer(std::unordered_set<const Type*>* visited) const {
-    if (mElementType->containsPointer(visited)) {
-        return true;
-    }
-    return TemplatedType::deepContainsPointer(visited);
+bool VectorType::containsPointer() const {
+    return mElementType->containsPointer();
 }
 
 // All hidl_vec<T> have the same size.

@@ -16,44 +16,42 @@
 
 #include "Scope.h"
 
-#include "Annotation.h"
-#include "ConstantExpression.h"
 #include "Interface.h"
 
 #include <android-base/logging.h>
 #include <hidl-util/Formatter.h>
-#include <hidl-util/StringHelper.h>
-#include <algorithm>
-#include <iostream>
 #include <vector>
 
 namespace android {
 
-Scope::Scope(const char* localName, const FQName& fullName, const Location& location, Scope* parent)
-    : NamedType(localName, fullName, location, parent) {}
+Scope::Scope(const char* localName, const Location& location, Scope* parent)
+    : NamedType(localName, location, parent) {}
 Scope::~Scope(){}
 
-void Scope::addType(NamedType* type) {
+bool Scope::addType(NamedType *type, std::string *errorMsg) {
+    const std::string &localName = type->localName();
+
+    auto it = mTypeIndexByName.find(localName);
+
+    if (it != mTypeIndexByName.end()) {
+        *errorMsg = "A type named '";
+        (*errorMsg) += localName;
+        (*errorMsg) += "' is already declared in the  current scope.";
+
+        return false;
+    }
+
     size_t index = mTypes.size();
     mTypes.push_back(type);
-    mTypeIndexByName[type->localName()] = index;
-}
+    mTypeIndexByName[localName] = index;
 
-status_t Scope::validateUniqueNames() const {
-    for (const auto* type : mTypes) {
-        if (mTypes[mTypeIndexByName.at(type->localName())] != type) {
-            std::cerr << "ERROR: A type named '" << type->localName()
-                      << "' is already declared in the scope at " << type->location() << std::endl;
-            return UNKNOWN_ERROR;
-        }
-    }
-    return OK;
+    return true;
 }
 
 NamedType *Scope::lookupType(const FQName &fqName) const {
     CHECK(fqName.package().empty() && fqName.version().empty());
     if (!fqName.valueName().empty()) {
-        std::cerr << "ERROR: " << fqName.string() << " does not refer to a type." << std::endl;
+        LOG(WARNING) << fqName.string() << " does not refer to a type.";
         return nullptr;
     }
     std::vector<std::string> names = fqName.names();
@@ -75,13 +73,12 @@ NamedType *Scope::lookupType(const FQName &fqName) const {
     Scope *outerScope = static_cast<Scope *>(outerType);
     // *slowly* pop first element
     names.erase(names.begin());
-    FQName innerName;
-    CHECK(FQName::parse(StringHelper::JoinStrings(names, "."), &innerName));
+    FQName innerName(names);
     return outerScope->lookupType(innerName);
 }
 
 LocalIdentifier *Scope::lookupIdentifier(const std::string & /*name*/) const {
-    return nullptr;
+    return NULL;
 }
 
 bool Scope::isScope() const {
@@ -93,10 +90,10 @@ Interface *Scope::getInterface() const {
         return static_cast<Interface *>(mTypes[0]);
     }
 
-    return nullptr;
+    return NULL;
 }
 
-bool Scope::definesInterfaces() const {
+bool Scope::containsInterfaces() const {
     for (const NamedType *type : mTypes) {
         if (type->isInterface()) {
             return true;
@@ -106,167 +103,101 @@ bool Scope::definesInterfaces() const {
     return false;
 }
 
-const std::vector<Annotation*>& Scope::annotations() const {
-    return mAnnotations;
+status_t Scope::forEachType(std::function<status_t(Type *)> func) const {
+    for (size_t i = 0; i < mTypes.size(); ++i) {
+        status_t err = func(mTypes[i]);
+
+        if (err != OK) {
+            return err;
+        }
+    }
+
+    return OK;
 }
 
-void Scope::setAnnotations(std::vector<Annotation*>* annotations) {
-    CHECK(mAnnotations.empty());
-    CHECK(annotations != nullptr);
-    mAnnotations = *annotations;
+status_t Scope::emitTypeDeclarations(Formatter &out) const {
+    return forEachType([&](Type *type) {
+        return type->emitTypeDeclarations(out);
+    });
 }
 
-std::vector<const Type*> Scope::getDefinedTypes() const {
-    std::vector<const Type*> ret;
-    ret.insert(ret.end(), mTypes.begin(), mTypes.end());
-    return ret;
+status_t Scope::emitGlobalTypeDeclarations(Formatter &out) const {
+    return forEachType([&](Type *type) {
+        return type->emitGlobalTypeDeclarations(out);
+    });
 }
 
-std::vector<const ConstantExpression*> Scope::getConstantExpressions() const {
-    std::vector<const ConstantExpression*> ret;
-    for (const auto* annotation : mAnnotations) {
-        const auto& retAnnotation = annotation->getConstantExpressions();
-        ret.insert(ret.end(), retAnnotation.begin(), retAnnotation.end());
-    }
-    return ret;
+status_t Scope::emitGlobalHwDeclarations(Formatter &out) const {
+    return forEachType([&](Type *type) {
+        return type->emitGlobalHwDeclarations(out);
+    });
 }
 
-void Scope::topologicalReorder(const std::unordered_map<const Type*, size_t>& reversedOrder) {
-    auto less = [&](const Type* lhs, const Type* rhs) {
-        return reversedOrder.at(lhs) < reversedOrder.at(rhs);
-    };
-
-    if (std::is_sorted(mTypes.begin(), mTypes.end(), less)) return;
-
-    mTypeOrderChanged = true;
-    std::sort(mTypes.begin(), mTypes.end(), less);
-
-    for (size_t i = 0; i != mTypes.size(); ++i) {
-        mTypeIndexByName.at(mTypes[i]->localName()) = i;
-    }
+status_t Scope::emitJavaTypeDeclarations(
+        Formatter &out, bool atTopLevel) const {
+    return forEachType([&](Type *type) {
+        return type->emitJavaTypeDeclarations(out, atTopLevel);
+    });
 }
 
-void Scope::emitTypeDeclarations(Formatter& out) const {
-    if (mTypes.empty()) return;
-
-    out << "// Forward declaration for forward reference support:\n";
-    for (const Type* type : mTypes) {
-        type->emitTypeForwardDeclaration(out);
-    }
-    out << "\n";
-
-    if (mTypeOrderChanged) {
-        out << "// Order of inner types was changed for forward reference support.\n\n";
-    }
-
-    for (const Type* type : mTypes) {
-        type->emitDocComment(out);
-        type->emitTypeDeclarations(out);
-    }
-}
-
-void Scope::emitGlobalTypeDeclarations(Formatter& out) const {
-    for (const Type* type : mTypes) {
-        type->emitGlobalTypeDeclarations(out);
-    }
-}
-
-void Scope::emitPackageTypeDeclarations(Formatter& out) const {
-    for (const Type* type : mTypes) {
-        type->emitPackageTypeDeclarations(out);
-    }
-}
-
-void Scope::emitPackageTypeHeaderDefinitions(Formatter& out) const {
-    for (const Type* type : mTypes) {
-        type->emitPackageTypeHeaderDefinitions(out);
-    }
-}
-
-void Scope::emitPackageHwDeclarations(Formatter& out) const {
-    for (const Type* type : mTypes) {
-        type->emitPackageHwDeclarations(out);
-    }
-}
-
-void Scope::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
-    if (mTypeOrderChanged) {
-        out << "// Order of inner types was changed for forward reference support.\n\n";
-    }
-
-    for (const Type* type : mTypes) {
-        type->emitDocComment(out);
-        type->emitJavaTypeDeclarations(out, atTopLevel);
-    }
-}
-
-void Scope::emitTypeDefinitions(Formatter& out, const std::string& prefix) const {
-    for (const Type* type : mTypes) {
-        type->emitTypeDefinitions(out, prefix);
-    }
+status_t Scope::emitTypeDefinitions(
+        Formatter &out, const std::string prefix) const {
+    return forEachType([&](Type *type) {
+        return type->emitTypeDefinitions(out, prefix);
+    });
 }
 
 const std::vector<NamedType *> &Scope::getSubTypes() const {
     return mTypes;
 }
 
-void Scope::emitVtsTypeDeclarations(Formatter& out) const {
-    for (const Type* type : mTypes) {
-        type->emitVtsTypeDeclarations(out);
-    }
+status_t Scope::emitVtsTypeDeclarations(Formatter &out) const {
+    return forEachType([&](Type *type) {
+        return type->emitVtsTypeDeclarations(out);
+    });
 }
 
-bool Scope::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const {
-    for (const Type* type : mTypes) {
-        if (!type->isJavaCompatible(visited)) {
+bool Scope::isJavaCompatible() const {
+    for (const auto &type : mTypes) {
+        if (!type->isJavaCompatible()) {
             return false;
         }
     }
-    return Type::deepIsJavaCompatible(visited);
+
+    return true;
+}
+
+bool Scope::containsPointer() const {
+    for (const auto &type : mTypes) {
+        if (type->containsPointer()) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void Scope::appendToExportedTypesVector(
         std::vector<const Type *> *exportedTypes) const {
-    for (const Type* type : mTypes) {
+    forEachType([&](Type *type) {
         type->appendToExportedTypesVector(exportedTypes);
-    }
+        return OK;
+    });
 }
 
-////////////////////////////////////////
-
-RootScope::RootScope(const char* localName, const FQName& fullName, const Location& location,
-                     Scope* parent)
-    : Scope(localName, fullName, location, parent) {}
+RootScope::RootScope(const char* localName, const Location& location, Scope* parent)
+    : Scope(localName, location, parent) {}
 RootScope::~RootScope() {}
 
 std::string RootScope::typeName() const {
     return "(root scope)";
 }
 
-status_t RootScope::validate() const {
-    CHECK(annotations().empty());
-    return Scope::validate();
-}
-
-////////////////////////////////////////
-
 LocalIdentifier::LocalIdentifier(){}
 LocalIdentifier::~LocalIdentifier(){}
 
 bool LocalIdentifier::isEnumValue() const {
     return false;
-}
-
-const LocalIdentifier* LocalIdentifier::resolve() const {
-    return this;
-}
-
-LocalIdentifier* LocalIdentifier::resolve() {
-    return this;
-}
-
-ConstantExpression* LocalIdentifier::constExpr() const {
-    return nullptr;
 }
 
 }  // namespace android

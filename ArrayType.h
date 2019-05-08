@@ -18,7 +18,6 @@
 
 #define ARRAY_TYPE_H_
 
-#include "Reference.h"
 #include "Type.h"
 
 #include <vector>
@@ -28,26 +27,21 @@ namespace android {
 struct ConstantExpression;
 
 struct ArrayType : public Type {
-    ArrayType(const Reference<Type>& elementType, ConstantExpression* size, Scope* parent);
+    // Extends existing array by adding another dimension.
+    ArrayType(ArrayType *srcArray, ConstantExpression *size);
+
+    ArrayType(Type *elementType, ConstantExpression *size);
 
     bool isArray() const override;
-    bool deepCanCheckEquality(std::unordered_set<const Type*>* visited) const override;
+    bool canCheckEquality() const override;
 
-    const Type* getElementType() const;
+    Type *getElementType() const;
 
+    void prependDimension(ConstantExpression *size);
     void appendDimension(ConstantExpression *size);
     size_t countDimensions() const;
 
     std::string typeName() const override;
-
-    std::vector<const Reference<Type>*> getReferences() const override;
-
-    std::vector<const ConstantExpression*> getConstantExpressions() const override;
-
-    // Extends existing array by adding another dimension.
-    status_t resolveInheritance() override;
-
-    status_t validate() const override;
 
     std::string getCppType(StorageMode mode,
                            bool specifyNamespaces) const override;
@@ -55,6 +49,8 @@ struct ArrayType : public Type {
     std::string getInternalDataCppType() const;
 
     std::string getJavaType(bool forInitializer) const override;
+
+    std::string getJavaWrapperType() const override;
 
     std::string getVtsType() const override;
 
@@ -107,7 +103,7 @@ struct ArrayType : public Type {
             const std::string &name) const override;
 
     bool needsEmbeddedReadWrite() const override;
-    bool deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const override;
+    bool needsResolveReferences() const override;
     bool resultNeedsDeref() const override;
 
     void emitJavaReaderWriter(
@@ -119,9 +115,6 @@ struct ArrayType : public Type {
     void emitJavaFieldInitializer(
             Formatter &out, const std::string &fieldName) const override;
 
-    void emitJavaFieldDefaultInitialValue(
-            Formatter &out, const std::string &declaredFieldName) const override;
-
     void emitJavaFieldReaderWriter(
             Formatter &out,
             size_t depth,
@@ -131,16 +124,16 @@ struct ArrayType : public Type {
             const std::string &offset,
             bool isReader) const override;
 
-    void emitVtsTypeDeclarations(Formatter& out) const override;
+    status_t emitVtsTypeDeclarations(Formatter &out) const override;
 
-    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
-    bool deepContainsPointer(std::unordered_set<const Type*>* visited) const override;
+    bool isJavaCompatible() const override;
+    bool containsPointer() const override;
 
     void getAlignmentAndSize(size_t *align, size_t *size) const override;
 
-   private:
-    Reference<Type> mElementType;
-    std::vector<ConstantExpression*> mSizes;
+private:
+    Type *mElementType;
+    std::vector<ConstantExpression *> mSizes;
 
     size_t dimension() const;
 

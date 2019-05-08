@@ -16,21 +16,27 @@
 
 #include "Type.h"
 
-#include "ConstantExpression.h"
-#include "NamedType.h"
+#include "Annotation.h"
 #include "ScalarType.h"
-#include "Scope.h"
 
-#include <android-base/logging.h>
 #include <hidl-util/Formatter.h>
-#include <algorithm>
-#include <iostream>
+#include <android-base/logging.h>
 
 namespace android {
 
-Type::Type(Scope* parent) : mParent(parent) {}
+Type::Type()
+    : mAnnotations(nullptr) {
+}
 
 Type::~Type() {}
+
+void Type::setAnnotations(std::vector<Annotation *> *annotations) {
+    mAnnotations = annotations;
+}
+
+const std::vector<Annotation *> &Type::annotations() const {
+    return *mAnnotations;
+}
 
 bool Type::isScope() const {
     return false;
@@ -64,6 +70,10 @@ bool Type::isTypeDef() const {
     return false;
 }
 
+bool Type::isBinder() const {
+    return false;
+}
+
 bool Type::isNamedType() const {
     return false;
 }
@@ -92,238 +102,14 @@ bool Type::isPointer() const {
     return false;
 }
 
-Type* Type::resolve() {
-    return const_cast<Type*>(static_cast<const Type*>(this)->resolve());
-}
-
-const Type* Type::resolve() const {
-    return this;
-}
-
-std::vector<Type*> Type::getDefinedTypes() {
-    const auto& constRet = static_cast<const Type*>(this)->getDefinedTypes();
-    std::vector<Type*> ret(constRet.size());
-    std::transform(constRet.begin(), constRet.end(), ret.begin(),
-                   [](const auto* type) { return const_cast<Type*>(type); });
-    return ret;
-}
-
-std::vector<const Type*> Type::getDefinedTypes() const {
-    return {};
-}
-
-std::vector<Reference<Type>*> Type::getReferences() {
-    const auto& constRet = static_cast<const Type*>(this)->getReferences();
-    std::vector<Reference<Type>*> ret(constRet.size());
-    std::transform(constRet.begin(), constRet.end(), ret.begin(),
-                   [](const auto* ref) { return const_cast<Reference<Type>*>(ref); });
-    return ret;
-}
-
-std::vector<const Reference<Type>*> Type::getReferences() const {
-    return {};
-}
-
-std::vector<ConstantExpression*> Type::getConstantExpressions() {
-    const auto& constRet = static_cast<const Type*>(this)->getConstantExpressions();
-    std::vector<ConstantExpression*> ret(constRet.size());
-    std::transform(constRet.begin(), constRet.end(), ret.begin(),
-                   [](const auto* ce) { return const_cast<ConstantExpression*>(ce); });
-    return ret;
-}
-
-std::vector<const ConstantExpression*> Type::getConstantExpressions() const {
-    return {};
-}
-
-std::vector<Reference<Type>*> Type::getStrongReferences() {
-    const auto& constRet = static_cast<const Type*>(this)->getStrongReferences();
-    std::vector<Reference<Type>*> ret(constRet.size());
-    std::transform(constRet.begin(), constRet.end(), ret.begin(),
-                   [](const auto* ref) { return const_cast<Reference<Type>*>(ref); });
-    return ret;
-}
-
-std::vector<const Reference<Type>*> Type::getStrongReferences() const {
-    std::vector<const Reference<Type>*> ret;
-    for (const auto* ref : getReferences()) {
-        if (!ref->shallowGet()->isNeverStrongReference()) {
-            ret.push_back(ref);
-        }
-    }
-    return ret;
-}
-
-status_t Type::recursivePass(ParseStage stage, const std::function<status_t(Type*)>& func,
-                             std::unordered_set<const Type*>* visited) {
-    if (mParseStage > stage) return OK;
-    if (mParseStage < stage) return UNKNOWN_ERROR;
-
-    if (visited->find(this) != visited->end()) return OK;
-    visited->insert(this);
-
-    status_t err = func(this);
-    if (err != OK) return err;
-
-    for (auto* nextType : getDefinedTypes()) {
-        err = nextType->recursivePass(stage, func, visited);
-        if (err != OK) return err;
-    }
-
-    for (auto* nextRef : getReferences()) {
-        err = nextRef->shallowGet()->recursivePass(stage, func, visited);
-        if (err != OK) return err;
-    }
-
-    return OK;
-}
-
-status_t Type::recursivePass(ParseStage stage, const std::function<status_t(const Type*)>& func,
-                             std::unordered_set<const Type*>* visited) const {
-    if (mParseStage > stage) return OK;
-    if (mParseStage < stage) return UNKNOWN_ERROR;
-
-    if (visited->find(this) != visited->end()) return OK;
-    visited->insert(this);
-
-    status_t err = func(this);
-    if (err != OK) return err;
-
-    for (const auto* nextType : getDefinedTypes()) {
-        err = nextType->recursivePass(stage, func, visited);
-        if (err != OK) return err;
-    }
-
-    for (const auto* nextRef : getReferences()) {
-        err = nextRef->shallowGet()->recursivePass(stage, func, visited);
-        if (err != OK) return err;
-    }
-
-    return OK;
-}
-
-status_t Type::resolveInheritance() {
-    return OK;
-}
-
-status_t Type::validate() const {
-    return OK;
-}
-
-Type::CheckAcyclicStatus::CheckAcyclicStatus(status_t status, const Type* cycleEnd)
-    : status(status), cycleEnd(cycleEnd) {
-    CHECK(cycleEnd == nullptr || status != OK);
-}
-
-Type::CheckAcyclicStatus Type::topologicalOrder(
-    std::unordered_map<const Type*, size_t>* reversedOrder,
-    std::unordered_set<const Type*>* stack) const {
-    if (stack->find(this) != stack->end()) {
-        std::cerr << "ERROR: Cyclic declaration:\n";
-        return CheckAcyclicStatus(UNKNOWN_ERROR, this);
-    }
-
-    if (reversedOrder->find(this) != reversedOrder->end()) return CheckAcyclicStatus(OK);
-    stack->insert(this);
-
-    for (const auto* nextType : getDefinedTypes()) {
-        auto err = nextType->topologicalOrder(reversedOrder, stack);
-
-        if (err.status != OK) {
-            if (err.cycleEnd == nullptr) return err;
-
-            std::cerr << "  '" << nextType->typeName() << "' in '" << typeName() << "'";
-            if (nextType->isNamedType()) {
-                std::cerr << " at " << static_cast<const NamedType*>(nextType)->location();
-            }
-            std::cerr << "\n";
-
-            if (err.cycleEnd == this) {
-                return CheckAcyclicStatus(err.status);
-            }
-            return err;
-        }
-    }
-
-    for (const auto* nextRef : getStrongReferences()) {
-        const auto* nextType = nextRef->shallowGet();
-        auto err = nextType->topologicalOrder(reversedOrder, stack);
-
-        if (err.status != OK) {
-            if (err.cycleEnd == nullptr) return err;
-
-            std::cerr << "  '" << nextType->typeName() << "' in '" << typeName() << "' at "
-                      << nextRef->location() << "\n";
-
-            if (err.cycleEnd == this) {
-                return CheckAcyclicStatus(err.status);
-            }
-            return err;
-        }
-    }
-
-    CHECK(stack->find(this) != stack->end());
-    stack->erase(this);
-
-    CHECK(reversedOrder->find(this) == reversedOrder->end());
-    // Do not call insert and size in one statement to not rely on
-    // evaluation order.
-    size_t index = reversedOrder->size();
-    reversedOrder->insert({this, index});
-
-    return CheckAcyclicStatus(OK);
-}
-
-status_t Type::checkForwardReferenceRestrictions(const Reference<Type>& ref) const {
-    const Location& refLoc = ref.location();
-    const Type* refType = ref.shallowGet();
-
-    // Not NamedTypes are avaiable everywhere.
-    // Only ArrayType and TemplatedType contain additional types in
-    // their reference (which is actually a part of type definition),
-    // so they are proceeded in this case.
-    //
-    // If we support named templated types one day, we will need to change
-    // this logic.
-    if (!refType->isNamedType()) {
-        for (const Reference<Type>* innerRef : refType->getReferences()) {
-            status_t err = checkForwardReferenceRestrictions(*innerRef);
-            if (err != OK) return err;
-        }
-        return OK;
-    }
-
-    const Location& typeLoc = static_cast<const NamedType*>(refType)->location();
-
-    // If referenced type is declared in another file or before reference,
-    // there is no forward reference here.
-    if (!Location::inSameFile(refLoc, typeLoc) ||
-        (!Location::intersect(refLoc, typeLoc) && typeLoc < refLoc)) {
-        return OK;
-    }
-
-    // Type must be declared somewhere in the current stack to make it
-    // available for forward referencing.
-    const Type* refTypeParent = refType->parent();
-    for (const Type* ancestor = this; ancestor != nullptr; ancestor = ancestor->parent()) {
-        if (ancestor == refTypeParent) return OK;
-    }
-
-    std::cerr << "ERROR: Forward reference of '" << refType->typeName() << "' at " << ref.location()
-              << " is not supported.\n"
-              << "C++ forward declaration doesn't support inner types.\n";
-
-    return UNKNOWN_ERROR;
-}
-
 const ScalarType *Type::resolveToScalarType() const {
-    return nullptr;
+    return NULL;
 }
 
 bool Type::isValidEnumStorageType() const {
     const ScalarType *scalarType = resolveToScalarType();
 
-    if (scalarType == nullptr) {
+    if (scalarType == NULL) {
         return false;
     }
 
@@ -335,42 +121,11 @@ bool Type::isElidableType() const {
 }
 
 bool Type::canCheckEquality() const {
-    std::unordered_set<const Type*> visited;
-    return canCheckEquality(&visited);
-}
-
-bool Type::canCheckEquality(std::unordered_set<const Type*>* visited) const {
-    // See isJavaCompatible for similar structure.
-    if (visited->find(this) != visited->end()) {
-        return true;
-    }
-    visited->insert(this);
-    return deepCanCheckEquality(visited);
-}
-
-bool Type::deepCanCheckEquality(std::unordered_set<const Type*>* /* visited */) const {
     return false;
 }
 
-Type::ParseStage Type::getParseStage() const {
-    return mParseStage;
-}
-
-void Type::setParseStage(ParseStage stage) {
-    CHECK(mParseStage < stage);
-    mParseStage = stage;
-}
-
-Scope* Type::parent() {
-    return mParent;
-}
-
-const Scope* Type::parent() const {
-    return mParent;
-}
-
 std::string Type::getCppType(StorageMode, bool) const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
     return std::string();
 }
 
@@ -380,30 +135,26 @@ std::string Type::decorateCppName(
 }
 
 std::string Type::getJavaType(bool /* forInitializer */) const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
     return std::string();
 }
 
-std::string Type::getJavaTypeClass() const {
+std::string Type::getJavaWrapperType() const {
     return getJavaType();
 }
 
-std::string Type::getJavaTypeCast(const std::string& objName) const {
-    return "(" + getJavaType() + ") " + objName;
-}
-
 std::string Type::getJavaSuffix() const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
     return std::string();
 }
 
 std::string Type::getVtsType() const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
     return std::string();
 }
 
 std::string Type::getVtsValueName() const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
     return std::string();
 }
 
@@ -414,7 +165,7 @@ void Type::emitReaderWriter(
         bool,
         bool,
         ErrorMode) const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
 }
 
 void Type::emitResolveReferences(
@@ -425,7 +176,7 @@ void Type::emitResolveReferences(
         bool,
         bool,
         ErrorMode) const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
 }
 
 void Type::emitResolveReferencesEmbedded(
@@ -440,7 +191,7 @@ void Type::emitResolveReferencesEmbedded(
         ErrorMode,
         const std::string &,
         const std::string &) const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
 }
 
 void Type::emitDump(
@@ -474,6 +225,10 @@ bool Type::useParentInEmitResolveReferencesEmbedded() const {
     return needsResolveReferences();
 }
 
+bool Type::useNameInEmitReaderWriterEmbedded(bool) const {
+    return needsEmbeddedReadWrite();
+}
+
 void Type::emitReaderWriterEmbedded(
         Formatter &,
         size_t,
@@ -486,7 +241,7 @@ void Type::emitReaderWriterEmbedded(
         ErrorMode,
         const std::string &,
         const std::string &) const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
 }
 
 void Type::emitJavaReaderWriter(
@@ -512,8 +267,6 @@ void Type::emitJavaFieldInitializer(
         << ";\n";
 }
 
-void Type::emitJavaFieldDefaultInitialValue(Formatter &, const std::string &) const {}
-
 void Type::emitJavaFieldReaderWriter(
         Formatter &,
         size_t,
@@ -522,7 +275,7 @@ void Type::emitJavaFieldReaderWriter(
         const std::string &,
         const std::string &,
         bool) const {
-    CHECK(!"Should not be here") << typeName();
+    CHECK(!"Should not be here");
 }
 
 void Type::handleError(Formatter &out, ErrorMode mode) const {
@@ -617,45 +370,36 @@ void Type::emitReaderWriterEmbeddedForTypeName(
     handleError(out, mode);
 }
 
-void Type::emitTypeDeclarations(Formatter&) const {}
+status_t Type::emitTypeDeclarations(Formatter &) const {
+    return OK;
+}
 
-void Type::emitTypeForwardDeclaration(Formatter&) const {}
+status_t Type::emitGlobalTypeDeclarations(Formatter &) const {
+    return OK;
+}
 
-void Type::emitGlobalTypeDeclarations(Formatter&) const {}
+status_t Type::emitGlobalHwDeclarations(Formatter &) const {
+    return OK;
+}
 
-void Type::emitPackageTypeDeclarations(Formatter&) const {}
+status_t Type::emitTypeDefinitions(
+        Formatter &, const std::string) const {
+    return OK;
+}
 
-void Type::emitPackageTypeHeaderDefinitions(Formatter&) const {}
-
-void Type::emitPackageHwDeclarations(Formatter&) const {}
-
-void Type::emitTypeDefinitions(Formatter&, const std::string&) const {}
-
-void Type::emitJavaTypeDeclarations(Formatter&, bool) const {}
+status_t Type::emitJavaTypeDeclarations(Formatter &, bool) const {
+    return OK;
+}
 
 bool Type::needsEmbeddedReadWrite() const {
     return false;
 }
 
-bool Type::resultNeedsDeref() const {
+bool Type::needsResolveReferences() const {
     return false;
 }
 
-bool Type::needsResolveReferences() const {
-    std::unordered_set<const Type*> visited;
-    return needsResolveReferences(&visited);
-}
-
-bool Type::needsResolveReferences(std::unordered_set<const Type*>* visited) const {
-    // See isJavaCompatible for similar structure.
-    if (visited->find(this) != visited->end()) {
-        return false;
-    }
-    visited->insert(this);
-    return deepNeedsResolveReferences(visited);
-}
-
-bool Type::deepNeedsResolveReferences(std::unordered_set<const Type*>* /* visited */) const {
+bool Type::resultNeedsDeref() const {
     return false;
 }
 
@@ -669,10 +413,6 @@ std::string Type::getCppResultType(bool specifyNamespaces) const {
 
 std::string Type::getCppArgumentType(bool specifyNamespaces) const {
     return getCppType(StorageMode_Argument, specifyNamespaces);
-}
-
-std::string Type::getCppTypeCast(const std::string& objName, bool specifyNamespaces) const {
-    return "(" + getCppStackType(specifyNamespaces) + ") " + objName;
 }
 
 void Type::emitJavaReaderWriterWithSuffix(
@@ -698,124 +438,79 @@ void Type::emitJavaReaderWriterWithSuffix(
     out << ");\n";
 }
 
-void Type::emitVtsTypeDeclarations(Formatter&) const {}
+status_t Type::emitVtsTypeDeclarations(Formatter &) const {
+    return OK;
+}
 
-void Type::emitVtsAttributeType(Formatter& out) const {
-    emitVtsTypeDeclarations(out);
+status_t Type::emitVtsAttributeType(Formatter &out) const {
+    return emitVtsTypeDeclarations(out);
 }
 
 bool Type::isJavaCompatible() const {
-    std::unordered_set<const Type*> visited;
-    return isJavaCompatible(&visited);
-}
-
-bool Type::containsPointer() const {
-    std::unordered_set<const Type*> visited;
-    return containsPointer(&visited);
-}
-
-bool Type::isJavaCompatible(std::unordered_set<const Type*>* visited) const {
-    // We need to find al least one path from requested vertex
-    // to not java compatible.
-    // That means that if we have already visited some vertex,
-    // there is no need to determine whether it is java compatible
-    // (and we can assume that it is java compatible),
-    // as if not, the information about that would appear in the
-    // requested vertex through another path.
-    if (visited->find(this) != visited->end()) {
-        return true;
-    }
-    visited->insert(this);
-    return deepIsJavaCompatible(visited);
-}
-
-bool Type::containsPointer(std::unordered_set<const Type*>* visited) const {
-    // See isJavaCompatible for similar structure.
-    if (visited->find(this) != visited->end()) {
-        return false;
-    }
-    visited->insert(this);
-    return deepContainsPointer(visited);
-}
-
-bool Type::deepIsJavaCompatible(std::unordered_set<const Type*>* /* visited */) const {
     return true;
-}
-
-bool Type::deepContainsPointer(std::unordered_set<const Type*>* /* visited */) const {
-    return false;
 }
 
 void Type::getAlignmentAndSize(
         size_t * /* align */, size_t * /* size */) const {
-    CHECK(!"Should not be here.") << typeName();
+    CHECK(!"Should not be here.");
+}
+
+bool Type::containsPointer() const {
+    return false;
 }
 
 void Type::appendToExportedTypesVector(
         std::vector<const Type *> * /* exportedTypes */) const {
 }
 
-void Type::emitExportedHeader(Formatter& /* out */, bool /* forJava */) const {}
-
-bool Type::isNeverStrongReference() const {
-    return false;
+status_t Type::emitExportedHeader(
+        Formatter & /* out */, bool /* forJava */) const {
+    return OK;
 }
 
 ////////////////////////////////////////
 
-TemplatedType::TemplatedType(Scope* parent) : Type(parent) {}
-
-std::string TemplatedType::typeName() const {
-    return templatedTypeName() + " of " + mElementType->typeName();
+TemplatedType::TemplatedType() : mElementType(nullptr) {
 }
 
-void TemplatedType::setElementType(const Reference<Type>& elementType) {
-    // can only be set once.
-    CHECK(mElementType.isEmptyReference());
-    CHECK(!elementType.isEmptyReference());
-
+void TemplatedType::setElementType(Type *elementType) {
+    CHECK(mElementType == nullptr); // can only be set once.
+    CHECK(isCompatibleElementType(elementType));
     mElementType = elementType;
 }
 
-const Type* TemplatedType::getElementType() const {
-    return mElementType.get();
+Type *TemplatedType::getElementType() const {
+    return mElementType;
 }
 
 bool TemplatedType::isTemplatedType() const {
     return true;
 }
 
-std::vector<const Reference<Type>*> TemplatedType::getReferences() const {
-    return {&mElementType};
-}
-
-status_t TemplatedType::validate() const {
-    if (!isCompatibleElementType(mElementType.get())) {
-        std::cerr << "ERROR: " << typeName() /* contains element type */
-                  << " is not supported at " << mElementType.location() << "\n";
-        return UNKNOWN_ERROR;
+status_t TemplatedType::emitVtsTypeDeclarations(Formatter &out) const {
+    out << "type: " << getVtsType() << "\n";
+    out << getVtsValueName() << ": {\n";
+    out.indent();
+    status_t err = mElementType->emitVtsTypeDeclarations(out);
+    if (err != OK) {
+        return err;
     }
-
-    return Type::validate();
+    out.unindent();
+    out << "}\n";
+    return OK;
 }
 
-void TemplatedType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t TemplatedType::emitVtsAttributeType(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
     out << getVtsValueName() << ": {\n";
     out.indent();
-    mElementType->emitVtsTypeDeclarations(out);
+    status_t status = mElementType->emitVtsAttributeType(out);
+    if (status != OK) {
+        return status;
+    }
     out.unindent();
     out << "}\n";
+    return OK;
 }
-
-void TemplatedType::emitVtsAttributeType(Formatter& out) const {
-    out << "type: " << getVtsType() << "\n";
-    out << getVtsValueName() << ": {\n";
-    out.indent();
-    mElementType->emitVtsAttributeType(out);
-    out.unindent();
-    out << "}\n";
-}
-
 }  // namespace android
 
