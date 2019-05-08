@@ -12,19 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-cc_library_shared {
+cc_library {
     name: "libhidl-gen-utils",
     host_supported: true,
-    vendor_available: true,
-    cflags: hidl_flags,
+    recovery_available: true,
+    defaults: ["hidl-gen-defaults"],
     srcs: [
         "FQName.cpp",
-        "Formatter.cpp",
-        "StringHelper.cpp",
+        "FqInstance.cpp",
     ],
     shared_libs: [
         "libbase",
-        "liblog",
     ],
 
     local_include_dirs: ["include/hidl-util"],
