@@ -29,7 +29,7 @@
 
 namespace android {
 
-void AST::emitVtsTypeDeclarations(Formatter& out) const {
+status_t AST::emitVtsTypeDeclarations(Formatter &out) const {
     if (AST::isInterface()) {
         const Interface* iface = mRootScope.getInterface();
         return iface->emitVtsAttributeDeclaration(out);
@@ -42,23 +42,43 @@ void AST::emitVtsTypeDeclarations(Formatter& out) const {
         }
         out << "attribute: {\n";
         out.indent();
-        type->emitVtsTypeDeclarations(out);
+        status_t status = type->emitVtsTypeDeclarations(out);
+        if (status != OK) {
+            return status;
+        }
         out.unindent();
         out << "}\n\n";
     }
+
+    return OK;
 }
 
-void AST::generateVts(Formatter& out) const {
+status_t AST::generateVts(const std::string &outputPath) const {
     std::string baseName = AST::getBaseName();
     const Interface *iface = AST::getInterface();
 
+    std::string path = outputPath;
+    path.append(mCoordinator->convertPackageRootToPath(mPackage));
+    path.append(mCoordinator->getPackagePath(mPackage, true /* relative */));
+    path.append(baseName);
+    path.append(".vts");
+
+    CHECK(Coordinator::MakeParentHierarchy(path));
+    FILE *file = fopen(path.c_str(), "w");
+
+    if (file == NULL) {
+        return -errno;
+    }
+
+    Formatter out(file);
+
     out << "component_class: HAL_HIDL\n";
+    out << "component_type_version: " << mPackage.version()
+        << "\n";
     out << "component_name: \""
         << (iface ? iface->localName() : "types")
         << "\"\n\n";
 
-    out << "component_type_version_major: " << mPackage.getPackageMajorVersion() << "\n";
-    out << "component_type_version_minor: " << mPackage.getPackageMinorVersion() << "\n";
     out << "package: \"" << mPackage.package() << "\"\n\n";
 
     // Generate import statement for all imported interface/types.
@@ -78,20 +98,31 @@ void AST::generateVts(Formatter& out) const {
         out << "interface: {\n";
         out.indent();
 
-        // Generate all the attribute declarations first.
-        emitVtsTypeDeclarations(out);
+        std::vector<const Interface *> chain = iface->typeChain();
 
+        // Generate all the attribute declarations first.
+        status_t status = emitVtsTypeDeclarations(out);
+        if (status != OK) {
+            return status;
+        }
         // Generate all the method declarations.
-        for (const Interface* superInterface : iface->superTypeChain()) {
-            superInterface->emitVtsMethodDeclaration(out, true /*isInhereted*/);
+        for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+            const Interface *superInterface = *it;
+            status_t status = superInterface->emitVtsMethodDeclaration(out);
+            if (status != OK) {
+                return status;
+            }
         }
 
-        iface->emitVtsMethodDeclaration(out, false /*isInhereted*/);
         out.unindent();
         out << "}\n";
     } else {
-        emitVtsTypeDeclarations(out);
+        status_t status = emitVtsTypeDeclarations(out);
+        if (status != OK) {
+            return status;
+        }
     }
+    return OK;
 }
 
 }  // namespace android

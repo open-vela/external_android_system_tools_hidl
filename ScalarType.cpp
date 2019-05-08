@@ -20,7 +20,9 @@
 
 namespace android {
 
-ScalarType::ScalarType(Kind kind, Scope* parent) : Type(parent), mKind(kind) {}
+ScalarType::ScalarType(Kind kind)
+    : mKind(kind) {
+}
 
 const ScalarType *ScalarType::resolveToScalarType() const {
     return this;
@@ -39,7 +41,7 @@ bool ScalarType::isElidableType() const {
     return true;
 }
 
-bool ScalarType::deepCanCheckEquality(std::unordered_set<const Type*>* /* visited */) const {
+bool ScalarType::canCheckEquality() const {
     return true;
 }
 
@@ -83,7 +85,7 @@ std::string ScalarType::getJavaType(bool /* forInitializer */) const {
     return kName[mKind];
 }
 
-std::string ScalarType::getJavaTypeClass() const {
+std::string ScalarType::getJavaWrapperType() const {
     static const char *const kName[] = {
         "Boolean",
         "Byte",
@@ -225,7 +227,7 @@ void ScalarType::emitConvertToJavaHexString(
         case KIND_INT16:    // fallthrough
         case KIND_UINT16: {
             // Because Byte and Short doesn't have toHexString, we have to use Integer.toHexString.
-            out << "Integer.toHexString(" << getJavaTypeClass() << ".toUnsignedInt(("
+            out << "Integer.toHexString(" << getJavaWrapperType() << ".toUnsignedInt(("
                 << getJavaType(false /* forInitializer */) << ")(" << name << ")))";
             break;
         }
@@ -233,7 +235,7 @@ void ScalarType::emitConvertToJavaHexString(
         case KIND_UINT32:   // fallthrough
         case KIND_INT64:    // fallthrough
         case KIND_UINT64: {
-            out << getJavaTypeClass() << ".toHexString(" << name << ")";
+            out << getJavaWrapperType() << ".toHexString(" << name << ")";
             break;
         }
         case KIND_FLOAT:    // fallthrough
@@ -277,9 +279,10 @@ void ScalarType::emitJavaFieldReaderWriter(
         << ");\n";
 }
 
-void ScalarType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t ScalarType::emitVtsTypeDeclarations(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
     out << "scalar_type: \"" << getVtsScalarType() << "\"\n";
+    return OK;
 }
 
 void ScalarType::getAlignmentAndSize(size_t *align, size_t *size) const {

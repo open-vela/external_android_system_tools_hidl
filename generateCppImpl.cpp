@@ -20,7 +20,6 @@
 #include "EnumType.h"
 #include "Interface.h"
 #include "Method.h"
-#include "Reference.h"
 #include "ScalarType.h"
 #include "Scope.h"
 
@@ -33,15 +32,27 @@
 
 namespace android {
 
+status_t AST::generateCppImpl(const std::string &outputPath) const {
+    status_t err = generateStubImplHeader(outputPath);
+
+    if (err == OK) {
+        err = generateStubImplSource(outputPath);
+    }
+
+    return err;
+}
+
 void AST::generateFetchSymbol(Formatter &out, const std::string& ifaceName) const {
     out << "HIDL_FETCH_" << ifaceName;
 }
 
-void AST::generateStubImplMethod(Formatter& out, const std::string& className,
-                                 const Method* method) const {
+status_t AST::generateStubImplMethod(Formatter &out,
+                                     const std::string &className,
+                                     const Method *method) const {
+
     // ignore HIDL reserved methods -- implemented in IFoo already.
     if (method->isHidlReserved()) {
-        return;
+        return OK;
     }
 
     method->generateCppSignature(out, className, false /* specifyNamespaces */);
@@ -51,7 +62,7 @@ void AST::generateStubImplMethod(Formatter& out, const std::string& className,
     out.indent();
     out << "// TODO implement\n";
 
-    const NamedReference<Type>* elidedReturn = method->canElideCallback();
+    const TypedVar *elidedReturn = method->canElideCallback();
 
     if (elidedReturn == nullptr) {
         out << "return Void();\n";
@@ -65,20 +76,35 @@ void AST::generateStubImplMethod(Formatter& out, const std::string& className,
 
     out << "}\n\n";
 
-    return;
+    return OK;
 }
 
-void AST::generateCppImplHeader(Formatter& out) const {
+status_t AST::generateStubImplHeader(const std::string &outputPath) const {
     if (!AST::isInterface()) {
         // types.hal does not get a stub header.
-        return;
+        return OK;
     }
 
     const Interface* iface = mRootScope.getInterface();
     const std::string baseName = iface->getBaseName();
 
-    out << "// FIXME: your file license if you have one\n\n";
-    out << "#pragma once\n\n";
+    std::string path = outputPath;
+    path.append(baseName);
+    path.append(".h");
+
+    CHECK(Coordinator::MakeParentHierarchy(path));
+    FILE *file = fopen(path.c_str(), "w");
+
+    if (file == NULL) {
+        return -errno;
+    }
+
+    Formatter out(file);
+
+    const std::string guard = makeHeaderGuard(baseName, false /* indicateGenerated */);
+
+    out << "#ifndef " << guard << "\n";
+    out << "#define " << guard << "\n\n";
 
     generateCppPackageInclude(out, mPackage, iface->localName());
 
@@ -106,15 +132,20 @@ void AST::generateCppImplHeader(Formatter& out) const {
 
     out.indent();
 
-    generateMethods(out, [&](const Method* method, const Interface*) {
+    status_t err = generateMethods(out, [&](const Method *method, const Interface *) {
         // ignore HIDL reserved methods -- implemented in IFoo already.
         if (method->isHidlReserved()) {
-            return;
+            return OK;
         }
         method->generateCppSignature(out, "" /* className */,
                 false /* specifyNamespaces */);
         out << " override;\n";
+        return OK;
     });
+
+    if (err != OK) {
+        return err;
+    }
 
     out.unindent();
 
@@ -129,26 +160,46 @@ void AST::generateCppImplHeader(Formatter& out) const {
 
     out << "}  // namespace implementation\n";
     enterLeaveNamespace(out, false /* leave */);
+
+    out << "\n#endif  // " << guard << "\n";
+
+    return OK;
 }
 
-void AST::generateCppImplSource(Formatter& out) const {
+status_t AST::generateStubImplSource(const std::string &outputPath) const {
     if (!AST::isInterface()) {
         // types.hal does not get a stub header.
-        return;
+        return OK;
     }
 
     const Interface* iface = mRootScope.getInterface();
     const std::string baseName = iface->getBaseName();
 
-    out << "// FIXME: your file license if you have one\n\n";
+    std::string path = outputPath;
+    path.append(baseName);
+    path.append(".cpp");
+
+    CHECK(Coordinator::MakeParentHierarchy(path));
+    FILE *file = fopen(path.c_str(), "w");
+
+    if (file == NULL) {
+        return -errno;
+    }
+
+    Formatter out(file);
+
     out << "#include \"" << baseName << ".h\"\n\n";
 
     enterLeaveNamespace(out, true /* enter */);
     out << "namespace implementation {\n\n";
 
-    generateMethods(out, [&](const Method* method, const Interface*) {
-        generateStubImplMethod(out, baseName, method);
+    status_t err = generateMethods(out, [&](const Method *method, const Interface *) {
+        return generateStubImplMethod(out, baseName, method);
     });
+
+    if (err != OK) {
+        return err;
+    }
 
     out.setLinePrefix("//");
     out << iface->localName()
@@ -163,6 +214,8 @@ void AST::generateCppImplSource(Formatter& out) const {
 
     out << "}  // namespace implementation\n";
     enterLeaveNamespace(out, false /* leave */);
+
+    return OK;
 }
 
 }  // namespace android

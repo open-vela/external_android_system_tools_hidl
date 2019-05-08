@@ -23,7 +23,7 @@
 
 namespace android {
 
-MemoryType::MemoryType(Scope* parent) : Type(parent) {}
+MemoryType::MemoryType() {}
 
 std::string MemoryType::getCppType(StorageMode mode,
                                    bool specifyNamespaces) const {
@@ -145,7 +145,7 @@ bool MemoryType::isMemory() const {
     return true;
 }
 
-bool MemoryType::deepIsJavaCompatible(std::unordered_set<const Type*>* /* visited */) const {
+bool MemoryType::isJavaCompatible() const {
     return false;
 }
 
@@ -155,8 +155,9 @@ void MemoryType::getAlignmentAndSize(size_t *align, size_t *size) const {
     *size = assertion.size();
 }
 
-void MemoryType::emitVtsTypeDeclarations(Formatter& out) const {
+status_t MemoryType::emitVtsTypeDeclarations(Formatter &out) const {
     out << "type: " << getVtsType() << "\n";
+    return OK;
 }
 
 }  // namespace android
