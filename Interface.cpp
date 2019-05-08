@@ -68,9 +68,6 @@ enum {
     LAST_HIDL_TRANSACTION   = 0x0fffffff,
 };
 
-const std::unique_ptr<ConstantExpression> Interface::FLAG_ONE_WAY =
-    std::make_unique<LiteralConstantExpression>(ScalarType::KIND_UINT32, 0x01, "oneway");
-
 Interface::Interface(const char* localName, const FQName& fullName, const Location& location,
                      Scope* parent, const Reference<Type>& superType, const Hash* fileHash)
     : Scope(localName, fullName, location, parent), mSuperType(superType), mFileHash(fileHash) {}
@@ -144,7 +141,7 @@ bool Interface::fillLinkToDeathMethod(Method *method) const {
             {
                 {IMPL_INTERFACE,
                     [](auto &out) {
-                        out << "return true;\n";
+                        out << "return true;";
                     }
                 },
                 {IMPL_PROXY,
@@ -174,16 +171,16 @@ bool Interface::fillUnlinkToDeathMethod(Method *method) const {
                 {IMPL_PROXY,
                     [](auto &out) {
                         out << "std::unique_lock<std::mutex> lock(_hidl_mMutex);\n"
-                            << "for (auto it = _hidl_mDeathRecipients.rbegin();"
-                            << "it != _hidl_mDeathRecipients.rend();"
+                            << "for (auto it = _hidl_mDeathRecipients.begin();"
+                            << "it != _hidl_mDeathRecipients.end();"
                             << "++it) {\n";
                         out.indent([&] {
                             out.sIf("(*it)->getRecipient() == recipient", [&] {
                                 out << "::android::status_t status = remote()->unlinkToDeath(*it);\n"
-                                    << "_hidl_mDeathRecipients.erase(it.base()-1);\n"
+                                    << "_hidl_mDeathRecipients.erase(it);\n"
                                     << "return status == ::android::OK;\n";
                                 });
-                            }).endl();
+                            });
                         out << "}\n";
                         out << "return false;\n";
                     }
@@ -215,10 +212,10 @@ bool Interface::fillSyspropsChangedMethod(Method *method) const {
             HIDL_SYSPROPS_CHANGED_TRANSACTION,
             { { IMPL_INTERFACE, [](auto &out) {
                 out << "::android::report_sysprop_change();\n";
-                out << "return ::android::hardware::Void();\n";
+                out << "return ::android::hardware::Void();";
             } } }, /*cppImpl */
             { { IMPL_INTERFACE, [](auto &out) { /* javaImpl */
-                out << "android.os.HwBinder.enableInstrumentation();\n";
+                out << "android.os.HwBinder.enableInstrumentation();";
             } } } /*javaImpl */
     );
     return true;
@@ -284,7 +281,7 @@ bool Interface::fillDescriptorChainMethod(Method *method) const {
                     out << ",\n";
                 out << chain[i]->fullJavaName() << ".kInterfaceName";
             }
-            out << "));\n";
+            out << "));";
             out.unindent(); out.unindent();
         } } } /* javaImpl */
     );
@@ -356,7 +353,7 @@ bool Interface::fillGetDescriptorMethod(Method *method) const {
             out << "_hidl_cb("
                 << fullName()
                 << "::descriptor);\n"
-                << "return ::android::hardware::Void();\n";
+                << "return ::android::hardware::Void();";
         } } }, /* cppImpl */
         { { IMPL_INTERFACE, [this](auto &out) {
             out << "return "
@@ -412,7 +409,7 @@ bool Interface::fillGetDebugInfoMethod(Method *method) const {
                 << "info.pid = android.os.HidlSupport.getPidIfSharable();\n"
                 << "info.ptr = 0;\n"
                 << "info.arch = android.hidl.base.V1_0.DebugInfo.Architecture.UNKNOWN;\n"
-                << "return info;\n";
+                << "return info;";
         } } } /* javaImpl */
     );
 
@@ -424,18 +421,20 @@ bool Interface::fillDebugMethod(Method *method) const {
         return false;
     }
 
-    method->fillImplementation(HIDL_DEBUG_TRANSACTION,
-                               {
-                                   {IMPL_INTERFACE,
-                                    [](auto& out) {
-                                        out << "(void)fd;\n"
-                                            << "(void)options;\n"
-                                            << "return ::android::hardware::Void();\n";
-                                    }},
-                               }, /* cppImpl */
-                               {
-                                   {IMPL_INTERFACE, [](auto& out) { out << "return;\n"; }},
-                               } /* javaImpl */
+    method->fillImplementation(
+        HIDL_DEBUG_TRANSACTION,
+        {
+            {IMPL_INTERFACE,
+                [](auto &out) {
+                    out << "(void)fd;\n"
+                        << "(void)options;\n"
+                        << "return ::android::hardware::Void();";
+                }
+            },
+        }, /* cppImpl */
+        {
+            /* unused, as the debug method is hidden from Java */
+        } /* javaImpl */
     );
 
     return true;
@@ -666,6 +665,10 @@ bool Interface::isInterface() const {
     return true;
 }
 
+bool Interface::isBinder() const {
+    return true;
+}
+
 const std::vector<Method *> &Interface::userDefinedMethods() const {
     return mUserMethods;
 }
@@ -817,7 +820,13 @@ void Interface::emitReaderWriter(
         out << "} else {\n";
         out.indent();
         out << "::android::sp<::android::hardware::IBinder> _hidl_binder = "
-            << "::android::hardware::getOrCreateCachedBinder(" << name << ".get());\n";
+            << "::android::hardware::toBinder<\n";
+        out.indent(2, [&] {
+            out << fqName().cppName()
+                << ">("
+                << name
+                << ");\n";
+        });
         out << "if (_hidl_binder.get() != nullptr) {\n";
         out.indent([&] {
             out << "_hidl_err = "
@@ -838,12 +847,6 @@ void Interface::emitReaderWriter(
 
 void Interface::emitPackageTypeDeclarations(Formatter& out) const {
     Scope::emitPackageTypeDeclarations(out);
-
-    out << "static inline std::string toString(" << getCppArgumentType() << " o);\n\n";
-}
-
-void Interface::emitPackageTypeHeaderDefinitions(Formatter& out) const {
-    Scope::emitPackageTypeHeaderDefinitions(out);
 
     out << "static inline std::string toString(" << getCppArgumentType() << " o) ";
 
@@ -896,7 +899,7 @@ void Interface::emitVtsAttributeDeclaration(Formatter& out) const {
     }
 }
 
-void Interface::emitVtsMethodDeclaration(Formatter& out, bool isInherited) const {
+void Interface::emitVtsMethodDeclaration(Formatter& out) const {
     for (const auto &method : methods()) {
         if (method->isHidlReserved()) {
             continue;
@@ -905,12 +908,10 @@ void Interface::emitVtsMethodDeclaration(Formatter& out, bool isInherited) const
         out << "api: {\n";
         out.indent();
         out << "name: \"" << method->name() << "\"\n";
-        out << "is_inherited: " << (isInherited ? "true" : "false") << "\n";
         // Generate declaration for each return value.
         for (const auto &result : method->results()) {
             out << "return_type_hidl: {\n";
             out.indent();
-            out << "name: \"" << result->name() << "\"\n";
             result->type().emitVtsAttributeType(out);
             out.unindent();
             out << "}\n";
@@ -919,7 +920,6 @@ void Interface::emitVtsMethodDeclaration(Formatter& out, bool isInherited) const
         for (const auto &arg : method->args()) {
             out << "arg: {\n";
             out.indent();
-            out << "name: \"" << arg->name() << "\"\n";
             arg->type().emitVtsAttributeType(out);
             out.unindent();
             out << "}\n";
@@ -986,7 +986,7 @@ bool Interface::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) c
         }
     }
 
-    return Scope::deepIsJavaCompatible(visited);
+    return Scope::isJavaCompatible(visited);
 }
 
 bool Interface::isNeverStrongReference() const {

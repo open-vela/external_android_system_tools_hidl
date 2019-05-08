@@ -45,9 +45,6 @@ bool VectorType::isCompatibleElementType(const Type* elementType) const {
         return true;
     }
     if (elementType->isCompoundType()) {
-        if (static_cast<const CompoundType*>(elementType)->containsInterface()) {
-            return false;
-        }
         return true;
     }
     if (elementType->isInterface()) {
@@ -75,7 +72,7 @@ bool VectorType::isVector() const {
 }
 
 bool VectorType::isVectorOfBinders() const {
-    return mElementType->isInterface();
+    return mElementType->isBinder();
 }
 
 bool VectorType::deepCanCheckEquality(std::unordered_set<const Type*>* visited) const {
@@ -113,15 +110,17 @@ std::string VectorType::getCppType(StorageMode mode,
 }
 
 std::string VectorType::getJavaType(bool /* forInitializer */) const {
-    const std::string elementJavaType = mElementType->isTemplatedType()
-        ? mElementType->getJavaType()
-        : mElementType->getJavaTypeClass();
 
-    return "java.util.ArrayList<" + elementJavaType + ">";
-}
+    std::string elementJavaType;
+    if (mElementType->isArray()) {
+        elementJavaType = mElementType->getJavaType();
+    } else {
+        elementJavaType = mElementType->getJavaWrapperType();
+    }
 
-std::string VectorType::getJavaTypeClass() const {
-    return "java.util.ArrayList";
+    return "java.util.ArrayList<"
+        + elementJavaType
+        + ">";
 }
 
 std::string VectorType::getVtsType() const {
@@ -545,17 +544,14 @@ void VectorType::emitJavaReaderWriter(
 
 void VectorType::emitJavaFieldInitializer(
         Formatter &out, const std::string &fieldName) const {
-    const std::string typeName = getJavaType(false /* forInitializer */);
-    const std::string fieldDeclaration = typeName + " " + fieldName;
+    std::string javaType = getJavaType(false /* forInitializer */);
 
-    emitJavaFieldDefaultInitialValue(out, fieldDeclaration);
-}
-
-void VectorType::emitJavaFieldDefaultInitialValue(
-        Formatter &out, const std::string &declaredFieldName) const {
-    out << declaredFieldName
+    out << "final "
+        << javaType
+        << " "
+        << fieldName
         << " = new "
-        << getJavaType(false /* forInitializer */)
+        << javaType
         << "();\n";
 }
 
@@ -567,18 +563,13 @@ void VectorType::emitJavaFieldReaderWriter(
         const std::string &fieldName,
         const std::string &offset,
         bool isReader) const {
-
-    const std::string fieldNameWithCast = isReader
-        ? "(" + getJavaTypeCast(fieldName) + ")"
-        : fieldName;
-
     VectorType::EmitJavaFieldReaderWriterForElementType(
             out,
             depth,
             mElementType.get(),
             parcelName,
             blobName,
-            fieldNameWithCast,
+            fieldName,
             offset,
             isReader);
 }

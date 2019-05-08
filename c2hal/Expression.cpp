@@ -82,14 +82,14 @@ Expression::Type Expression::coalesceTypes(Type lhs, Type rhs) {
 struct ParenthesizedExpression : Expression {
     ParenthesizedExpression(Expression* inner)
     : mInner(inner) {}
-    ~ParenthesizedExpression() override {
+    ~ParenthesizedExpression() {
         delete mInner;
     }
 
-    Type getType(const AST &ast) override {
+    virtual Type getType(const AST &ast) {
         return mInner->getType(ast);
     }
-    std::string toString(StringHelper::Case atomCase) override {
+    virtual std::string toString(StringHelper::Case atomCase) {
         return "(" + mInner->toString(atomCase) + ")";
     }
 
@@ -104,20 +104,20 @@ struct AtomExpression : Expression {
     : mType(type), mValue(value), mIsId(isId)
     {}
 
-    Type getType(const AST &ast) override {
+    virtual Type getType(const AST &ast) {
         if (mType != Type::UNKNOWN) {
             return mType;
         }
 
         Define *define = ast.getDefinesScope().lookup(mValue);
 
-        if (define == nullptr) {
+        if (define == NULL) {
             return Type::UNKNOWN;
         }
 
         return define->getExpressionType();
     }
-    std::string toString(StringHelper::Case atomCase) override {
+    virtual std::string toString(StringHelper::Case atomCase) {
         // do not enforce case if it is not an identifier.
         return mIsId ? StringHelper::ToCase(atomCase, mValue) : mValue;
     }
@@ -134,14 +134,14 @@ struct UnaryExpression : Expression {
     UnaryExpression(std::string op, Expression* rhs)
     : mOp(op), mRhs(rhs)
     {}
-    ~UnaryExpression() override {
+    ~UnaryExpression() {
         delete mRhs;
     }
 
-    Type getType(const AST &ast) override {
+    virtual Type getType(const AST &ast) {
         return mRhs->getType(ast);
     }
-    std::string toString(StringHelper::Case atomCase) override {
+    virtual std::string toString(StringHelper::Case atomCase) {
         return mOp + mRhs->toString(atomCase);
     }
 
@@ -156,15 +156,15 @@ struct BinaryExpression : Expression {
     BinaryExpression(Expression *lhs, std::string op, Expression* rhs)
     : mLhs(lhs), mOp(op), mRhs(rhs)
     {}
-    ~BinaryExpression() override {
+    ~BinaryExpression() {
         delete mLhs;
         delete mRhs;
     }
 
-    Type getType(const AST &ast) override {
+    virtual Type getType(const AST &ast) {
         return coalesceTypes(mLhs->getType(ast), mRhs->getType(ast));
     }
-    std::string toString(StringHelper::Case atomCase) override {
+    virtual std::string toString(StringHelper::Case atomCase) {
         return mLhs->toString(atomCase) + " " + mOp + " " + mRhs->toString(atomCase);
     }
 
@@ -180,16 +180,16 @@ struct TernaryExpression : Expression {
     TernaryExpression(Expression *lhs, Expression *mhs, Expression* rhs)
     : mLhs(lhs), mMhs(mhs), mRhs(rhs)
     {}
-    ~TernaryExpression() override {
+    ~TernaryExpression() {
         delete mLhs;
         delete mMhs;
         delete mRhs;
     }
 
-    Type getType(const AST &ast) override {
+    virtual Type getType(const AST &ast) {
         return coalesceTypes(mMhs->getType(ast), mRhs->getType(ast));
     }
-    std::string toString(StringHelper::Case atomCase) override {
+    virtual std::string toString(StringHelper::Case atomCase) {
         return mLhs->toString(atomCase) + " ? " + mMhs->toString(atomCase) + " : " + mRhs->toString(atomCase);
     }
 
@@ -205,14 +205,14 @@ struct ArraySubscript : Expression {
     ArraySubscript(std::string id, Expression* subscript)
     : mId(id), mSubscript(subscript)
     {}
-    ~ArraySubscript() override {
+    ~ArraySubscript() {
         delete mSubscript;
     }
 
-    Type getType(const AST &) override {
+    virtual Type getType(const AST &) {
         return Type::UNKNOWN;
     }
-    std::string toString(StringHelper::Case atomCase) override {
+    virtual std::string toString(StringHelper::Case atomCase) {
         return mId + "[" + mSubscript->toString(atomCase) + "]";
     }
 
@@ -227,8 +227,8 @@ struct FunctionCall : Expression {
     FunctionCall(std::string id, std::vector<Expression *> *args)
     : mId(id), mArgs(args)
     {}
-    ~FunctionCall() override {
-        if(mArgs != nullptr) {
+    ~FunctionCall() {
+        if(mArgs != NULL) {
             for(auto* args : *mArgs) {
                 delete args;
             }
@@ -236,10 +236,10 @@ struct FunctionCall : Expression {
         delete mArgs;
     }
 
-    Type getType(const AST &) override {
+    virtual Type getType(const AST &) {
         return Type::UNKNOWN;
     }
-    std::string toString(StringHelper::Case atomCase) override {
+    virtual std::string toString(StringHelper::Case atomCase) {
         std::string out = mId + "(";
 
         for (auto it = mArgs->begin(); it != mArgs->end(); ++it) {
