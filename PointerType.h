@@ -23,11 +23,13 @@
 namespace android {
 
 struct PointerType : public Type {
-    PointerType();
+    PointerType(Scope* parent);
 
     bool isPointer() const override;
 
     bool isElidableType() const override;
+
+    std::string typeName() const override;
 
     std::string getCppType(
             StorageMode mode,
@@ -43,13 +45,26 @@ struct PointerType : public Type {
             bool isReader,
             ErrorMode mode) const override;
 
+    void emitReaderWriterEmbedded(
+            Formatter &out,
+            size_t depth,
+            const std::string &name,
+            const std::string &sanitizedName,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode,
+            const std::string &parentName,
+            const std::string &offsetText) const override;
+
     bool needsEmbeddedReadWrite() const override;
     bool resultNeedsDeref() const override;
 
-    bool isJavaCompatible() const override;
-    bool containsPointer() const override;
+    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
+    bool deepContainsPointer(std::unordered_set<const Type*>* visited) const override;
 
-    status_t emitVtsTypeDeclarations(Formatter &out) const override;
+    void emitVtsTypeDeclarations(Formatter& out) const override;
 };
 
 }  // namespace android

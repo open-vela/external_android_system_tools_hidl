@@ -29,7 +29,6 @@
 #include <string>
 #include <algorithm>
 #include <stdlib.h>
-#include <sys/dir.h>
 #include <sys/stat.h>
 
 namespace android {
@@ -38,7 +37,7 @@ AST::AST(const std::string &path,
          const std::string &outputDir,
          const std::string &package,
          bool isOpenGl)
-    : mScanner(NULL),
+    : mScanner(nullptr),
       mPath(path),
       mOutputDir(outputDir),
       mPackage(package),
@@ -48,21 +47,21 @@ AST::AST(const std::string &path,
 AST::~AST() {
     delete mExpression;
 
-    if(mDeclarations != NULL) {
+    if(mDeclarations != nullptr) {
         for(auto* decl : *mDeclarations) {
             delete decl;
         }
     }
     delete mDeclarations;
 
-    if(mInterfaces != NULL) {
+    if(mInterfaces != nullptr) {
         for(auto* inter : *mInterfaces) {
             delete inter;
         }
     }
     delete mInterfaces;
 
-    if(mIncludes != NULL) {
+    if(mIncludes != nullptr) {
         for(auto* incl : *mIncludes) {
             delete incl;
         }
@@ -117,10 +116,10 @@ Scope<Define *> &AST::getDefinesScope() {
 }
 
 void AST::processContents() {
-    CHECK(mDeclarations != NULL);
+    CHECK(mDeclarations != nullptr);
 
     for (auto &declaration : *mDeclarations) {
-        CHECK(declaration != NULL);
+        CHECK(declaration != nullptr);
 
         declaration->processContents(*this);
     }
@@ -210,7 +209,7 @@ void AST::isolateConstants(Expression::Type ofType) {
             auto var = new EnumVarDeclaration(define->getName(),
                                               define->getExpression());
 
-            define->setExpression(NULL);
+            define->setExpression(nullptr);
 
             constants->push_back(var);
             it = mDeclarations->erase(it);
@@ -234,7 +233,7 @@ void AST::isolateConstants(Expression::Type ofType) {
 }
 
 status_t AST::generateCode() const {
-    CHECK(mDeclarations != NULL);
+    CHECK(mDeclarations != nullptr);
 
     status_t err;
 
@@ -260,7 +259,7 @@ status_t AST::generateFile(CompositeDeclaration* declaration) const {
 
     FILE *file = fopen((getFileDir() + fileName).c_str(), "w");
 
-    if(file == NULL) {
+    if(file == nullptr) {
         return -errno;
     }
 
@@ -281,7 +280,7 @@ status_t AST::generateTypesFile() const {
 
     FILE *file = fopen((getFileDir() + "types.hal").c_str(), "w");
 
-    if(file == NULL) {
+    if(file == nullptr) {
         return -errno;
     }
 
@@ -317,7 +316,7 @@ bool MakeParentHierarchy(const std::string &path) {
 
     size_t start = 1;  // Ignore leading '/'
     size_t slashPos;
-    while ((slashPos = path.find("/", start)) != std::string::npos) {
+    while ((slashPos = path.find('/', start)) != std::string::npos) {
         std::string partial = path.substr(0, slashPos);
 
         struct stat st;

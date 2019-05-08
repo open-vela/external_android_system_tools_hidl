@@ -18,29 +18,38 @@
 
 #define COMPOUND_TYPE_H_
 
+#include "Reference.h"
 #include "Scope.h"
 
 #include <vector>
 
 namespace android {
 
-struct CompoundField;
-
 struct CompoundType : public Scope {
     enum Style {
         STYLE_STRUCT,
         STYLE_UNION,
+        STYLE_SAFE_UNION,
     };
 
-    CompoundType(Style style, const char *localName, const Location &location);
+    CompoundType(Style style, const char* localName, const FQName& fullName,
+                 const Location& location, Scope* parent);
 
     Style style() const;
 
-    bool setFields(std::vector<CompoundField *> *fields, std::string *errorMsg);
+    void setFields(std::vector<NamedReference<Type>*>* fields);
 
     bool isCompoundType() const override;
 
-    bool canCheckEquality() const override;
+    bool deepCanCheckEquality(std::unordered_set<const Type*>* visited) const override;
+
+    std::string typeName() const override;
+
+    std::vector<const Reference<Type>*> getReferences() const override;
+
+    status_t validate() const override;
+    status_t validateUniqueNames() const;
+    status_t validateSubTypeNames() const;
 
     std::string getCppType(StorageMode mode,
                            bool specifyNamespaces) const override;
@@ -101,6 +110,9 @@ struct CompoundType : public Scope {
     void emitJavaFieldInitializer(
             Formatter &out, const std::string &fieldName) const override;
 
+    void emitJavaFieldDefaultInitialValue(
+            Formatter &out, const std::string &declaredFieldName) const override;
+
     void emitJavaFieldReaderWriter(
             Formatter &out,
             size_t depth,
@@ -110,51 +122,88 @@ struct CompoundType : public Scope {
             const std::string &offset,
             bool isReader) const override;
 
-    status_t emitTypeDeclarations(Formatter &out) const override;
-    status_t emitGlobalTypeDeclarations(Formatter &out) const override;
-    status_t emitGlobalHwDeclarations(Formatter &out) const override;
+    void emitTypeDeclarations(Formatter& out) const override;
+    void emitTypeForwardDeclaration(Formatter& out) const override;
+    void emitPackageTypeDeclarations(Formatter& out) const override;
+    void emitPackageTypeHeaderDefinitions(Formatter& out) const override;
+    void emitPackageHwDeclarations(Formatter& out) const override;
 
-    status_t emitTypeDefinitions(
-            Formatter &out, const std::string prefix) const override;
+    void emitTypeDefinitions(Formatter& out, const std::string& prefix) const override;
 
-    status_t emitJavaTypeDeclarations(
-            Formatter &out, bool atTopLevel) const override;
+    void emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const override;
 
     bool needsEmbeddedReadWrite() const override;
-    bool needsResolveReferences() const override;
+    bool deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const override;
     bool resultNeedsDeref() const override;
 
-    status_t emitVtsTypeDeclarations(Formatter &out) const override;
-    status_t emitVtsAttributeType(Formatter &out) const override;
+    void emitVtsTypeDeclarations(Formatter& out) const override;
+    void emitVtsAttributeType(Formatter& out) const override;
 
-    bool isJavaCompatible() const override;
-    bool containsPointer() const override;
+    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
+    bool deepContainsPointer(std::unordered_set<const Type*>* visited) const override;
 
-    void getAlignmentAndSize(size_t *align, size_t *size) const;
+    void getAlignmentAndSize(size_t *align, size_t *size) const override;
 
+    bool containsInterface() const;
 private:
+
+    struct Layout {
+        size_t offset;
+        size_t align;
+        size_t size;
+
+        Layout() : offset(0), align(1), size(0) {}
+        static size_t getPad(size_t offset, size_t align);
+    };
+
+    struct CompoundLayout {
+        // Layout of this entire object including metadata.
+        // For struct/union, this is the same as innerStruct.
+        Layout overall;
+        // Layout of user-specified data
+        Layout innerStruct;
+        // Layout of discriminator for safe union (otherwise zero)
+        Layout discriminator;
+    };
+
     Style mStyle;
-    std::vector<CompoundField *> *mFields;
+    std::vector<NamedReference<Type>*>* mFields;
+
+    void emitLayoutAsserts(Formatter& out, const Layout& localLayout,
+                           const std::string& localLayoutName) const;
+
+    void emitInvalidSubTypeNamesError(const std::string& subTypeName,
+                                      const Location& location) const;
+
+    void emitSafeUnionTypeDefinitions(Formatter& out) const;
+    void emitSafeUnionTypeConstructors(Formatter& out) const;
+    void emitSafeUnionTypeDeclarations(Formatter& out) const;
+    std::unique_ptr<ScalarType> getUnionDiscriminatorType() const;
+
+    void emitSafeUnionUnknownDiscriminatorError(Formatter& out, const std::string& value,
+                                                bool fatal) const;
+
+    void emitSafeUnionCopyAndAssignDefinition(Formatter& out,
+                                              const std::string& parameterName,
+                                              bool isCopyConstructor,
+                                              bool usesMoveSemantics) const;
+
+    CompoundLayout getCompoundAlignmentAndSize() const;
+    void emitPaddingZero(Formatter& out, size_t offset, size_t size) const;
+
+    void emitSafeUnionReaderWriterForInterfaces(
+            Formatter &out,
+            const std::string &name,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode) const;
 
     void emitStructReaderWriter(
             Formatter &out, const std::string &prefix, bool isReader) const;
-    void emitResolveReferenceDef(
-        Formatter &out, const std::string prefix, bool isReader) const;
+    void emitResolveReferenceDef(Formatter& out, const std::string& prefix, bool isReader) const;
 
     DISALLOW_COPY_AND_ASSIGN(CompoundType);
-};
-
-struct CompoundField {
-    CompoundField(const char *name, Type *type);
-
-    std::string name() const;
-    const Type &type() const;
-
-private:
-    std::string mName;
-    Type *mType;
-
-    DISALLOW_COPY_AND_ASSIGN(CompoundField);
 };
 
 }  // namespace android

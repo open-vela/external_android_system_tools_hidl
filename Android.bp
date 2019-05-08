@@ -12,65 +12,64 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-subdirs = [
-    "c2hal",
-    "test",
-    "utils",
-]
-
-hidl_flags = [
-    "-O0",
-    "-g",
-    "-Wall",
-    "-Werror",
-]
+cc_defaults {
+    name: "hidl-gen-defaults",
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    target: {
+        host: {
+            cflags: ["-O0", "-g"],
+        }
+    }
+}
 
 // This configuration is inherited by all hidl-gen-generated modules.
 cc_defaults {
     name: "hidl-module-defaults",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra-semi",
+    ],
+    tidy_checks: [
+        // _hidl_cb and addOnewayTask are stuck because of the legacy ABI
+        "-performance-unnecessary-value-param",
+    ],
     product_variables: {
         debuggable: {
             cflags: ["-D__ANDROID_DEBUGGABLE__"]
         },
-        treble: {
-            cflags: ["-D__ANDROID_TREBLE__"]
+    },
+}
+
+// This configuration is inherited by all hidl-gen-java modules
+java_defaults {
+    name: "hidl-java-module-defaults",
+    // TODO(b/68433855): allow HIDL java to build in the PDK
+    product_variables: {
+        pdk: {
+            enabled: false,
         },
     },
 }
 
-//
-// libhidl-gen-hash
-//
-cc_library_shared {
-    name: "libhidl-gen-hash",
-    host_supported: true,
-    cflags: hidl_flags,
-    srcs: ["Hash.cpp"],
-    local_include_dirs: ["include_hash/hidl-hash"],
-    export_include_dirs: ["include_hash"],
-    shared_libs: [
-        "libbase",
-        "libcrypto",
-        "libssl",
-    ],
-}
-
-//
-// libhidl-gen
-//
 cc_library_host_shared {
     name: "libhidl-gen",
-    cflags: hidl_flags,
+    defaults: ["hidl-gen-defaults"],
     srcs: [
         "Annotation.cpp",
         "ArrayType.cpp",
         "CompoundType.cpp",
         "ConstantExpression.cpp",
         "DeathRecipientType.cpp",
+        "DocComment.cpp",
         "EnumType.cpp",
         "HandleType.cpp",
         "HidlTypeAssertion.cpp",
         "Interface.cpp",
+        "Location.cpp",
         "MemoryType.cpp",
         "Method.cpp",
         "NamedType.cpp",
@@ -88,21 +87,26 @@ cc_library_host_shared {
         "libbase",
         "liblog",
         "libhidl-gen-hash",
+        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
     ],
+    export_shared_lib_headers: [
+        "libbase",
+        "libhidl-gen-host-utils",
+        "libhidl-gen-utils",
+    ],
+    export_include_dirs: ["."], // for tests
 }
-
-//
-// libhidl-gen-ast
-//
 
 cc_library_host_shared {
     name: "libhidl-gen-ast",
-    cflags: hidl_flags,
+    defaults: ["hidl-gen-defaults"],
     srcs: [
         "Coordinator.cpp",
         "generateCpp.cpp",
+        "generateCppAdapter.cpp",
         "generateCppImpl.cpp",
+        "generateDependencies.cpp",
         "generateJava.cpp",
         "generateVts.cpp",
         "hidl-gen_y.yy",
@@ -114,16 +118,23 @@ cc_library_host_shared {
         "liblog",
         "libhidl-gen",
         "libhidl-gen-hash",
+        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
     ],
+    export_shared_lib_headers: [
+        "libbase",
+        "libhidl-gen-utils",
+    ],
+    export_include_dirs: ["."], // for tests
+    yacc: {
+        gen_location_hh: true,
+        gen_position_hh: true,
+    }
 }
 
-//
-// hidl-gen
-//
 cc_binary_host {
     name: "hidl-gen",
-    cflags: hidl_flags,
+    defaults: ["hidl-gen-defaults"],
     srcs: ["main.cpp"],
     shared_libs: [
         "libbase",
@@ -131,6 +142,7 @@ cc_binary_host {
         "libhidl-gen",
         "libhidl-gen-ast",
         "libhidl-gen-hash",
+        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
     ],
 }
