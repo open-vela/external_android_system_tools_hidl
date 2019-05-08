@@ -23,7 +23,7 @@
 namespace android {
 
 struct DeathRecipientType : public Type {
-    DeathRecipientType(Scope* parent);
+    DeathRecipientType();
 
     std::string getCppType(
             StorageMode mode,
@@ -32,7 +32,6 @@ struct DeathRecipientType : public Type {
     std::string getJavaType(bool forInitializer) const override;
 
     std::string getVtsType() const override;
-    std::string typeName() const override;
 
     void emitReaderWriter(
             Formatter &out,
@@ -45,9 +44,11 @@ struct DeathRecipientType : public Type {
     bool needsEmbeddedReadWrite() const override;
     bool resultNeedsDeref() const override;
 
+    bool isJavaCompatible() const override;
+
     void getAlignmentAndSize(size_t *align, size_t *size) const override;
 
-    void emitVtsTypeDeclarations(Formatter& out) const override;
+    status_t emitVtsTypeDeclarations(Formatter &out) const override;
 };
 
 }  // namespace android

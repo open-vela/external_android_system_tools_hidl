@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package hidl.tests.vendor@1.0;
+package tests.vendor@1.0;
 
 enum Bar : uint32_t {
     A

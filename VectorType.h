@@ -18,32 +18,25 @@
 
 #define VECTOR_TYPE_H_
 
-#include <vector>
-
-#include "Reference.h"
 #include "Type.h"
 
 namespace android {
 
 struct VectorType : public TemplatedType {
-    VectorType(Scope* parent);
+    VectorType();
 
     bool isVector() const override;
     bool isVectorOfBinders() const;
+    std::string typeName() const override;
+    bool isCompatibleElementType(Type *elementType) const override;
 
-    std::string templatedTypeName() const override;
-    bool isCompatibleElementType(const Type* elementType) const override;
-
-    std::vector<const Reference<Type>*> getStrongReferences() const override;
-
-    bool deepCanCheckEquality(std::unordered_set<const Type*>* visited) const override;
+    bool canCheckEquality() const override;
 
     std::string getCppType(
             StorageMode mode,
             bool specifyNamespaces) const override;
 
     std::string getJavaType(bool forInitializer) const override;
-    std::string getJavaTypeClass() const override;
 
     std::string getVtsType() const override;
     std::string getVtsValueName() const override;
@@ -102,9 +95,6 @@ struct VectorType : public TemplatedType {
     void emitJavaFieldInitializer(
             Formatter &out, const std::string &fieldName) const override;
 
-    void emitJavaFieldDefaultInitialValue(
-            Formatter &out, const std::string &declaredFieldName) const override;
-
     void emitJavaFieldReaderWriter(
             Formatter &out,
             size_t depth,
@@ -125,11 +115,11 @@ struct VectorType : public TemplatedType {
             bool isReader);
 
     bool needsEmbeddedReadWrite() const override;
-    bool deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const override;
+    bool needsResolveReferences() const override;
     bool resultNeedsDeref() const override;
 
-    bool deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const override;
-    bool deepContainsPointer(std::unordered_set<const Type*>* visited) const override;
+    bool isJavaCompatible() const override;
+    bool containsPointer() const override;
 
     void getAlignmentAndSize(size_t *align, size_t *size) const override;
     static void getAlignmentAndSizeStatic(size_t *align, size_t *size);

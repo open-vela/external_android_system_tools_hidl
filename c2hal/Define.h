@@ -44,7 +44,7 @@ private:
     const std::string mSlurp;
 
     Expression::Type mExpressionType;
-    Expression* mExpression = nullptr;
+    Expression* mExpression = NULL;
 
     DISALLOW_COPY_AND_ASSIGN(Define);
 };
