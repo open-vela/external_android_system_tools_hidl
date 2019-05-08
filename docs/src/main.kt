@@ -47,7 +47,7 @@ fun main(args: Array<String>) {
             if (writer.writeToFile()) println("$LOG_NAME Wrote file: ${writer.path}")
 
         } catch (ex: ParseException) {
-            if (config.warnOnly) {
+            if (config.skipError) {
                 System.err.println("$LOG_NAME Error parsing file, skipping: $fp")
                 continue
             } else {

@@ -104,10 +104,10 @@ private:
     const std::string getRawQualifierList() const;
     const std::string getSpecialTypeName() const;
 
-    std::vector<Qualifier*> *mQualifiers = nullptr;
+    std::vector<Qualifier*> *mQualifiers = NULL;
 
     /* [ expression ] [ expression ] ... [ expression ] */
-    std::vector<Expression*> *mArrays = nullptr;
+    std::vector<Expression*> *mArrays = NULL;
 
     DISALLOW_COPY_AND_ASSIGN(Type);
 };
