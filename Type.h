@@ -195,7 +195,6 @@ struct Type : DocCommentable {
         ErrorMode_Goto,
         ErrorMode_Break,
         ErrorMode_Return,
-        ErrorMode_ReturnNothing,
     };
     virtual void emitReaderWriter(
             Formatter &out,
@@ -342,8 +341,9 @@ struct Type : DocCommentable {
 
     virtual bool isNeverStrongReference() const;
 
-    static void handleError(Formatter &out, ErrorMode mode);
    protected:
+    void handleError(Formatter &out, ErrorMode mode) const;
+
     void emitReaderWriterEmbeddedForTypeName(
             Formatter &out,
             const std::string &name,
