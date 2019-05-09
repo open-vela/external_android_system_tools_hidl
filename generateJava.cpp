@@ -139,6 +139,10 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
     const std::string ifaceName = iface->localName();
     const std::string baseName = iface->getBaseName();
 
+    std::vector<std::string> packageComponents;
+    getPackageAndVersionComponents(
+            &packageComponents, true /* cpp_compatible */);
+
     out << "package " << mPackage.javaPackage() << ";\n\n";
 
     out.setNamespace(mPackage.javaPackage() + ".");
