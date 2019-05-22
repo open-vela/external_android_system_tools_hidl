@@ -946,7 +946,7 @@ bool Coordinator::MakeParentHierarchy(const std::string &path) {
 void Coordinator::parseOptions(int argc, char** argv, const std::string& options,
                                const HandleArg& handleArg) {
     // reset global state for getopt
-    optind = 1;
+    optind = 0;
 
     bool suppressDefaultPackagePaths = false;
 
