@@ -26,6 +26,7 @@
 #include "Interface.h"
 #include "Location.h"
 #include "Method.h"
+#include "RefType.h"
 #include "Scope.h"
 #include "TypeDef.h"
 #include "VectorType.h"
