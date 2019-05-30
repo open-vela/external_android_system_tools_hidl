@@ -695,15 +695,6 @@ void AST::generateStubHeader(Formatter& out) const {
 
     out << "::android::sp<" << iface->localName() << "> getImpl() { return _hidl_mImpl; }\n";
 
-    // Because the Bn class hierarchy always inherits from BnHwBase (and no other parent classes)
-    // and also no HIDL-specific things exist in the base binder classes, whenever we want to do
-    // C++ HIDL things with a binder, we only have the choice to convert it into a BnHwBase.
-    // Other hwbinder C++ class hierarchies (namely the one used for Java binder) will still
-    // be libhwbinder binders, but they are not instances of BnHwBase.
-    if (isIBase()) {
-        out << "bool checkSubclass(const void* subclassID) const;\n";
-    }
-
     generateMethods(out,
                     [&](const Method* method, const Interface*) {
                         if (method->isHidlReserved() && method->overridesCppImpl(IMPL_PROXY)) {
@@ -994,23 +985,6 @@ void AST::emitCppReaderWriter(Formatter& out, const std::string& parcelObj, bool
             mode);
 }
 
-void AST::emitCppResolveReferences(Formatter& out, const std::string& parcelObj,
-                                   bool parcelObjIsPointer, const NamedReference<Type>* arg,
-                                   bool isReader, Type::ErrorMode mode,
-                                   bool addPrefixToName) const {
-    const Type &type = arg->type();
-    if(type.needsResolveReferences()) {
-        type.emitResolveReferences(
-                out,
-                addPrefixToName ? ("_hidl_out_" + arg->name()) : arg->name(),
-                isReader, // nameIsPointer
-                parcelObj,
-                parcelObjIsPointer,
-                isReader,
-                mode);
-    }
-}
-
 void AST::generateProxyMethodSource(Formatter& out, const std::string& klassName,
                                     const Method* method, const Interface* superInterface) const {
     method->generateCppSignature(out,
@@ -1117,24 +1091,12 @@ void AST::generateStaticProxyMethodSource(Formatter& out, const std::string& kla
     out << "if (_hidl_err != ::android::OK) { goto _hidl_error; }\n\n";
 
     bool hasInterfaceArgument = false;
-    // First DFS: write all buffers and resolve pointers for parent
+
     for (const auto &arg : method->args()) {
         if (arg->type().isInterface()) {
             hasInterfaceArgument = true;
         }
         emitCppReaderWriter(
-                out,
-                "_hidl_data",
-                false /* parcelObjIsPointer */,
-                arg,
-                false /* reader */,
-                Type::ErrorMode_Goto,
-                false /* addPrefixToName */);
-    }
-
-    // Second DFS: resolve references.
-    for (const auto &arg : method->args()) {
-        emitCppResolveReferences(
                 out,
                 "_hidl_data",
                 false /* parcelObjIsPointer */,
@@ -1187,21 +1149,8 @@ void AST::generateStaticProxyMethodSource(Formatter& out, const std::string& kla
             out << "if (!_hidl_status.isOk()) { return _hidl_status; }\n\n";
         }
 
-        // First DFS: write all buffers and resolve pointers for parent
         for (const auto &arg : method->results()) {
             emitCppReaderWriter(
-                    out,
-                    "_hidl_reply",
-                    false /* parcelObjIsPointer */,
-                    arg,
-                    true /* reader */,
-                    errorMode,
-                    true /* addPrefixToName */);
-        }
-
-        // Second DFS: resolve references.
-        for (const auto &arg : method->results()) {
-            emitCppResolveReferences(
                     out,
                     "_hidl_reply",
                     false /* parcelObjIsPointer */,
@@ -1371,11 +1320,6 @@ void AST::generateStubSource(Formatter& out, const Interface* iface) const {
             .endl()
             .endl();
 
-    if (isIBase()) {
-        out << "bool " << klassName << "::checkSubclass(const void* subclassID) const ";
-        out.block([&] { out << "return subclassID == " << interfaceName << "::descriptor;\n"; });
-    }
-
     generateMethods(out,
                     [&](const Method* method, const Interface* superInterface) {
                         return generateStaticStubMethodSource(out, iface->fqName(), method, superInterface);
@@ -1534,21 +1478,8 @@ void AST::generateStaticStubMethodSource(Formatter& out, const FQName& fqName,
 
     declareCppReaderLocals(out, method->args(), false /* forResults */);
 
-    // First DFS: write buffers
     for (const auto &arg : method->args()) {
         emitCppReaderWriter(
-                out,
-                "_hidl_data",
-                false /* parcelObjIsPointer */,
-                arg,
-                true /* reader */,
-                Type::ErrorMode_Return,
-                false /* addPrefixToName */);
-    }
-
-    // Second DFS: resolve references
-    for (const auto &arg : method->args()) {
-        emitCppResolveReferences(
                 out,
                 "_hidl_data",
                 false /* parcelObjIsPointer */,
@@ -1603,15 +1534,6 @@ void AST::generateStaticStubMethodSource(Formatter& out, const FQName& fqName,
                 false, /* isReader */
                 Type::ErrorMode_Ignore);
 
-        emitCppResolveReferences(
-                out,
-                "_hidl_reply",
-                true /* parcelObjIsPointer */,
-                elidedReturn,
-                false /* reader */,
-                Type::ErrorMode_Ignore,
-                true /* addPrefixToName */);
-
         generateCppInstrumentationCall(
                 out,
                 InstrumentationEvent::SERVER_API_EXIT,
@@ -1660,21 +1582,8 @@ void AST::generateStaticStubMethodSource(Formatter& out, const FQName& fqName,
             out << "::android::hardware::writeToParcel(::android::hardware::Status::ok(), "
                 << "_hidl_reply);\n\n";
 
-            // First DFS: buffers
             for (const auto &arg : method->results()) {
                 emitCppReaderWriter(
-                        out,
-                        "_hidl_reply",
-                        true /* parcelObjIsPointer */,
-                        arg,
-                        false /* reader */,
-                        Type::ErrorMode_Ignore,
-                        true /* addPrefixToName */);
-            }
-
-            // Second DFS: resolve references
-            for (const auto &arg : method->results()) {
-                emitCppResolveReferences(
                         out,
                         "_hidl_reply",
                         true /* parcelObjIsPointer */,
