@@ -20,7 +20,7 @@ cc_library_host_shared {
     srcs: [
         "Lint.cpp",
         "LintRegistry.cpp",
-        "lints/*",
+        "onewayLint.cpp",
     ],
     shared_libs: [
         "libbase",
