@@ -632,46 +632,6 @@ TEST_F(HidlTest, BazTestDoubleVecs) {
                 in, [&](const auto &out) { EXPECT_EQ(in, out); }));
 }
 
-TEST_F(HidlTest, TwowayMethodOnewayEnabledTest) {
-    using ::android::hardware::IBinder;
-    using ::android::hardware::Parcel;
-
-    sp<IBinder> binder = ::android::hardware::toBinder(baz);
-
-    Parcel request, reply;
-    EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBaz::descriptor));
-    EXPECT_EQ(::android::OK, request.writeInt64(1234));
-    // IBaz::doThatAndReturnSomething is two-way but we call it using FLAG_ONEWAY.
-    EXPECT_EQ(::android::OK, binder->transact(18 /*doThatAndReturnSomething*/, request, &reply,
-                                              IBinder::FLAG_ONEWAY));
-
-    ::android::hardware::Status status;
-    EXPECT_EQ(::android::NOT_ENOUGH_DATA, ::android::hardware::readFromParcel(&status, reply));
-    EXPECT_EQ(::android::hardware::Status::EX_TRANSACTION_FAILED, status.exceptionCode());
-
-    EXPECT_OK(baz->ping());  // still works
-}
-
-TEST_F(HidlTest, OnewayMethodOnewayDisabledTest) {
-    using ::android::hardware::IBinder;
-    using ::android::hardware::Parcel;
-
-    sp<IBinder> binder = ::android::hardware::toBinder(baz);
-
-    Parcel request, reply;
-    EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBaz::descriptor));
-    EXPECT_EQ(::android::OK, request.writeFloat(1.0f));
-    // IBaz::doThis is oneway but we call it without using FLAG_ONEWAY.
-    EXPECT_EQ(
-            // Expect UNKNOWN_ERROR because the JNI class JHwBinder always sets
-            // the reply to UNKNOWN_ERROR for two-way transactions if the
-            // transaction itself did not send a reply.
-            ::android::UNKNOWN_ERROR,
-            binder->transact(17 /*doThis*/, request, &reply, 0 /* Not FLAG_ONEWAY */));
-
-    EXPECT_OK(baz->ping());  // still works
-}
-
 TEST_F(HidlTest, SafeUnionNoInitTest) {
     EXPECT_OK(safeunionInterface->newLargeSafeUnion([&](const LargeSafeUnion& safeUnion) {
         EXPECT_EQ(LargeSafeUnion::hidl_discriminator::noinit, safeUnion.getDiscriminator());
@@ -1061,41 +1021,6 @@ TEST_F(HidlTest, SafeUnionEqualityTest) {
             }));
         }));
     }));
-}
-
-template <typename T, size_t start, size_t end>
-void expectRangeEqual(const T* t, uint8_t byte) {
-    static_assert(start < sizeof(T));
-    static_assert(end <= sizeof(T));
-
-    const uint8_t* buf = reinterpret_cast<const uint8_t*>(t);
-
-    for (size_t i = start; i < end; i++) {
-        EXPECT_EQ(byte, buf[i]) << i;
-    }
-}
-
-TEST_F(HidlTest, UninitTest) {
-    IBase::Foo foo;
-    foo.x = 1;
-    foo.y = {0, ""};
-
-    static_assert(offsetof(IBase::Foo, x) == 0);
-    static_assert(sizeof(foo.x) == 4);
-    static_assert(offsetof(IBase::Foo, aaa) == 8);
-
-    uint8_t* buf = reinterpret_cast<uint8_t*>(&foo);
-    memset(buf + 4, 0xFF, 4);
-
-    // this should not affect the result for remote Java (but would for remote C++)
-    expectRangeEqual<IBase::Foo, 4, 8>(&foo, 0xFF);
-
-    // run many times, if this error case is hit, it will only be hit
-    // sometimes.
-    for (size_t i = 0; i < 100; i++) {
-        EXPECT_OK(baz->someOtherBaseMethod(
-                foo, [](const IBase::Foo& foo) { expectRangeEqual<IBase::Foo, 4, 8>(&foo, 0); }));
-    }
 }
 
 int main(int argc, char **argv) {

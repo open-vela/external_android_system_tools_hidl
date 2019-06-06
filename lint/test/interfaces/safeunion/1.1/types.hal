@@ -20,5 +20,4 @@ import @1.0::InTypes;
 
 struct SomeStruct {
     InTypes unionType;
-    uint8_t preventLintForSingleElement;
 };
