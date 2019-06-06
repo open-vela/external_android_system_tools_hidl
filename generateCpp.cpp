@@ -695,15 +695,6 @@ void AST::generateStubHeader(Formatter& out) const {
 
     out << "::android::sp<" << iface->localName() << "> getImpl() { return _hidl_mImpl; }\n";
 
-    // Because the Bn class hierarchy always inherits from BnHwBase (and no other parent classes)
-    // and also no HIDL-specific things exist in the base binder classes, whenever we want to do
-    // C++ HIDL things with a binder, we only have the choice to convert it into a BnHwBase.
-    // Other hwbinder C++ class hierarchies (namely the one used for Java binder) will still
-    // be libhwbinder binders, but they are not instances of BnHwBase.
-    if (isIBase()) {
-        out << "bool checkSubclass(const void* subclassID) const;\n";
-    }
-
     generateMethods(out,
                     [&](const Method* method, const Interface*) {
                         if (method->isHidlReserved() && method->overridesCppImpl(IMPL_PROXY)) {
@@ -1329,11 +1320,6 @@ void AST::generateStubSource(Formatter& out, const Interface* iface) const {
             .endl()
             .endl();
 
-    if (isIBase()) {
-        out << "bool " << klassName << "::checkSubclass(const void* subclassID) const ";
-        out.block([&] { out << "return subclassID == " << interfaceName << "::descriptor;\n"; });
-    }
-
     generateMethods(out,
                     [&](const Method* method, const Interface* superInterface) {
                         return generateStaticStubMethodSource(out, iface->fqName(), method, superInterface);
@@ -1382,6 +1368,11 @@ void AST::generateStubSource(Formatter& out, const Interface* iface) const {
             << " */:\n{\n";
 
         out.indent();
+
+        out << "bool _hidl_is_oneway = _hidl_flags & " << Interface::FLAG_ONE_WAY->cppValue()
+            << ";\n";
+        out << "if (_hidl_is_oneway != " << (method->isOneway() ? "true" : "false") << ") ";
+        out.block([&] { out << "return ::android::UNKNOWN_ERROR;\n"; }).endl().endl();
 
         generateStubSourceForMethod(out, method, superInterface);
 

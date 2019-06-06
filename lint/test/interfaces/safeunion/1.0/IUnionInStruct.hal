@@ -22,6 +22,5 @@ interface IUnionInStruct {
             uint8_t number;
             int32_t otherNumber;
         } shouldOnlyLintDefinition;
-        uint8_t preventLintForSingleElement;
     };
 };
