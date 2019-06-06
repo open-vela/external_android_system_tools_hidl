@@ -19,6 +19,7 @@
 #include <android/hardware/tests/bar/1.0/IBar.h>
 #include <android/hardware/tests/bar/1.0/IComplicated.h>
 #include <android/hardware/tests/bar/1.0/IImportRules.h>
+#include <android/hardware/tests/baz/1.0/BnHwBaz.h>
 #include <android/hardware/tests/baz/1.0/IBaz.h>
 #include <android/hardware/tests/expression/1.0/IExpression.h>
 #include <android/hardware/tests/foo/1.0/BnHwSimple.h>
@@ -1688,9 +1689,6 @@ TEST_F(HidlTest, DeathRecipientTest) {
         //do nothing, this is expected
     }
 
-    // further calls fail
-    EXPECT_FAIL(dyingBaz->ping());
-
     std::unique_lock<std::mutex> lock(recipient->mutex);
     recipient->condition.wait_for(lock, std::chrono::milliseconds(100), [&recipient]() {
             return recipient->fired;
@@ -1851,44 +1849,83 @@ TEST_F(HidlTest, EnumEqualTest) {
 
 TEST_F(HidlTest, InvalidTransactionTest) {
     using ::android::hardware::tests::bar::V1_0::BnHwBar;
+    using ::android::hardware::tests::bar::V1_0::BpHwBar;
     using ::android::hardware::IBinder;
     using ::android::hardware::Parcel;
-
-    sp<IBinder> binder = ::android::hardware::toBinder(bar);
+    using ::android::status_t;
+    using ::android::OK;
 
     Parcel request, reply;
-    EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBar::descriptor));
-    EXPECT_EQ(::android::UNKNOWN_TRANSACTION, binder->transact(1234, request, &reply));
+    sp<IBinder> binder;
+    status_t status = request.writeInterfaceToken(::android::hardware::tests::bar::V1_0::IBar::descriptor);
 
-    EXPECT_OK(bar->ping());  // still works
+    EXPECT_EQ(status, OK);
+
+    if (mode == BINDERIZED) {
+        EXPECT_TRUE(bar->isRemote());
+        binder = ::android::hardware::toBinder<IBar>(bar);
+    } else {
+        // For a local test, just wrap the implementation with a BnHwBar
+        binder = new BnHwBar(bar);
+    }
+
+    status = binder->transact(1234, request, &reply);
+
+    EXPECT_EQ(status, ::android::UNKNOWN_TRANSACTION);
+    // Try another call, to make sure nothing is messed up
+    EXPECT_OK(bar->thisIsNew());
 }
 
-TEST_F(HidlTest, EmptyTransactionTest) {
+TEST_F(HidlTest, TwowayMethodOnewayEnabledTest) {
     using ::android::hardware::IBinder;
     using ::android::hardware::Parcel;
-    using ::android::hardware::tests::bar::V1_0::BnHwBar;
+    using ::android::hardware::tests::baz::V1_0::BnHwBaz;
 
-    sp<IBinder> binder = ::android::hardware::toBinder(bar);
+    sp<IBinder> binder = ::android::hardware::toBinder(baz);
 
     Parcel request, reply;
-    EXPECT_EQ(::android::BAD_TYPE, binder->transact(2 /*someBoolMethod*/, request, &reply));
+    EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBaz::descriptor));
+    EXPECT_EQ(::android::OK, request.writeInt64(1234));
+    // IBaz::doThatAndReturnSomething is two-way but we call it using FLAG_ONEWAY.
+    EXPECT_EQ(::android::OK, binder->transact(18 /*doThatAndReturnSomething*/, request, &reply,
+                                              IBinder::FLAG_ONEWAY));
 
-    EXPECT_OK(bar->ping());  // still works
+    ::android::hardware::Status status;
+    ::android::status_t readFromParcelStatus = ::android::hardware::readFromParcel(&status, reply);
+    if (mode == BINDERIZED) {
+        EXPECT_EQ(::android::NOT_ENOUGH_DATA, readFromParcelStatus);
+        EXPECT_EQ(::android::hardware::Status::EX_TRANSACTION_FAILED, status.exceptionCode());
+    } else {
+        EXPECT_EQ(666, reply.readInt32());
+    }
+
+    EXPECT_OK(baz->ping());  // still works
 }
 
-TEST_F(HidlTest, WrongDescriptorTest) {
+TEST_F(HidlTest, OnewayMethodOnewayDisabledTest) {
     using ::android::hardware::IBinder;
     using ::android::hardware::Parcel;
-    using ::android::hardware::tests::bar::V1_0::BnHwBar;
+    using ::android::hardware::tests::baz::V1_0::BnHwBaz;
 
-    sp<IBinder> binder = ::android::hardware::toBinder(bar);
+    sp<IBinder> binder = ::android::hardware::toBinder(baz);
 
     Parcel request, reply;
-    // wrong descriptor
-    EXPECT_EQ(::android::OK, request.writeInterfaceToken("not a real descriptor"));
-    EXPECT_EQ(::android::BAD_TYPE, binder->transact(2 /*someBoolMethod*/, request, &reply));
+    EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBaz::descriptor));
+    EXPECT_EQ(::android::OK, request.writeFloat(1.0f));
+    nsecs_t now = systemTime();
+    // IBaz::doThis is oneway but we call it without using FLAG_ONEWAY.
+    EXPECT_EQ(
+            // Expect OK because IPCThreadState::executeCommand for BR_TRANSACTION
+            // sends an empty reply for two-way transactions if the transaction itself
+            // did not send a reply.
+            ::android::OK,
+            binder->transact(17 /*doThis*/, request, &reply, 0 /* Not FLAG_ONEWAY */));
+    if (gHidlEnvironment->enableDelayMeasurementTests) {
+        // IBaz::doThis is oneway, should return instantly.
+        EXPECT_LT(systemTime() - now, ONEWAY_TOLERANCE_NS);
+    }
 
-    EXPECT_OK(bar->ping());  // still works
+    EXPECT_OK(baz->ping());  // still works
 }
 
 TEST_F(HidlTest, TrieSimpleTest) {
@@ -2027,49 +2064,6 @@ TEST_F(HidlTest, SafeUnionCopyConstructorTest) {
                 EXPECT_EQ(testVector, safeUnionCopy.h());
             }));
     }));
-}
-
-template <typename T>
-void testZeroInit(const std::string& header) {
-    uint8_t buf[sizeof(T)];
-    memset(buf, 0xFF, sizeof(buf));
-
-    T* t = new (buf) T;
-
-    for (size_t i = 0; i < sizeof(T); i++) {
-        EXPECT_EQ(0, buf[i]) << header << " at offset: " << i;
-    }
-
-    t->~T();
-    t = nullptr;
-
-    memset(buf, 0xFF, sizeof(buf));
-    t = new (buf) T(T());  // copy constructor
-
-    for (size_t i = 0; i < sizeof(T); i++) {
-        EXPECT_EQ(0, buf[i]) << header << " at offset: " << i;
-    }
-
-    t->~T();
-    t = nullptr;
-
-    memset(buf, 0xFF, sizeof(buf));
-    const T aT = T();
-    t = new (buf) T(std::move(aT));  // move constructor
-
-    for (size_t i = 0; i < sizeof(T); i++) {
-        EXPECT_EQ(0, buf[i]) << header << " at offset: " << i;
-    }
-
-    t->~T();
-    t = nullptr;
-}
-
-TEST_F(HidlTest, SafeUnionUninit) {
-    testZeroInit<SmallSafeUnion>("SmallSafeUnion");
-    testZeroInit<LargeSafeUnion>("LargeSafeUnion");
-    testZeroInit<InterfaceTypeSafeUnion>("InterfaceTypeSafeUnion");
-    testZeroInit<HandleTypeSafeUnion>("HandleTypeSafeUnion");
 }
 
 TEST_F(HidlTest, SafeUnionMoveConstructorTest) {
