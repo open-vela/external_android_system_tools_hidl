@@ -20,7 +20,6 @@
 #include "EnumType.h"
 #include "HidlTypeAssertion.h"
 #include "Interface.h"
-#include "Location.h"
 #include "Method.h"
 #include "Reference.h"
 #include "ScalarType.h"
@@ -108,8 +107,7 @@ static void declareGetService(Formatter &out, const std::string &interfaceName, 
                 "during device boot. If getStub is true, this will try to return an unwrapped\n"
                 "passthrough implementation in the same process. This is useful when getting an\n"
                 "implementation from the same partition/compilation group.\n\n"
-                "In general, prefer getService(std::string,bool)",
-                HIDL_LOCATION_HERE)
+                "In general, prefer getService(std::string,bool)")
                 .emit(out);
     } else {
         DocComment(
@@ -119,29 +117,24 @@ static void declareGetService(Formatter &out, const std::string &interfaceName, 
                 "become available. If the service is a lazy service, this will start the service\n"
                 "and return when it becomes available. If getStub is true, this will try to\n"
                 "return an unwrapped passthrough implementation in the same process. This is\n"
-                "useful when getting an implementation from the same partition/compilation group.",
-                HIDL_LOCATION_HERE)
+                "useful when getting an implementation from the same partition/compilation group.")
                 .emit(out);
     }
     out << "static ::android::sp<" << interfaceName << "> " << functionName << "("
         << "const std::string &serviceName=\"default\", bool getStub=false);\n";
-    DocComment("Deprecated. See " + functionName + "(std::string, bool)", HIDL_LOCATION_HERE)
-            .emit(out);
+    DocComment("Deprecated. See " + functionName + "(std::string, bool)").emit(out);
     out << "static ::android::sp<" << interfaceName << "> " << functionName << "("
         << "const char serviceName[], bool getStub=false)"
         << "  { std::string str(serviceName ? serviceName : \"\");"
         << "      return " << functionName << "(str, getStub); }\n";
-    DocComment("Deprecated. See " + functionName + "(std::string, bool)", HIDL_LOCATION_HERE)
-            .emit(out);
+    DocComment("Deprecated. See " + functionName + "(std::string, bool)").emit(out);
     out << "static ::android::sp<" << interfaceName << "> " << functionName << "("
         << "const ::android::hardware::hidl_string& serviceName, bool getStub=false)"
         // without c_str the std::string constructor is ambiguous
         << "  { std::string str(serviceName.c_str());"
         << "      return " << functionName << "(str, getStub); }\n";
     DocComment("Calls " + functionName +
-                       "(\"default\", bool). This is the recommended instance name for singleton "
-                       "services.",
-               HIDL_LOCATION_HERE)
+               "(\"default\", bool). This is the recommended instance name for singleton services.")
             .emit(out);
     out << "static ::android::sp<" << interfaceName << "> " << functionName << "("
         << "bool getStub) { return " << functionName << "(\"default\", getStub); }\n";
@@ -153,13 +146,11 @@ static void declareServiceManagerInteractions(Formatter &out, const std::string 
 
     DocComment(
             "Registers a service with the service manager. For Trebilized devices, the service\n"
-            "must also be in the VINTF manifest.",
-            HIDL_LOCATION_HERE)
+            "must also be in the VINTF manifest.")
             .emit(out);
     out << "__attribute__ ((warn_unused_result))"
         << "::android::status_t registerAsService(const std::string &serviceName=\"default\");\n";
-    DocComment("Registers for notifications for when a service is registered.", HIDL_LOCATION_HERE)
-            .emit(out);
+    DocComment("Registers for notifications for when a service is registered.").emit(out);
     out << "static bool registerForNotifications(\n";
     out.indent(2, [&] {
         out << "const std::string &serviceName,\n"
@@ -282,13 +273,11 @@ void AST::generateInterfaceHeader(Formatter& out) const {
 
         out.indent();
 
-        DocComment("Type tag for use in template logic that indicates this is a 'pure' class.",
-                   HIDL_LOCATION_HERE)
+        DocComment("Type tag for use in template logic that indicates this is a 'pure' class.")
                 .emit(out);
         generateCppTag(out, "android::hardware::details::i_tag");
 
-        DocComment("Fully qualified interface name: \"" + iface->fqName().string() + "\"",
-                   HIDL_LOCATION_HERE)
+        DocComment("Fully qualified interface name: \"" + iface->fqName().string() + "\"")
                 .emit(out);
         out << "static const char* descriptor;\n\n";
 
@@ -299,8 +288,7 @@ void AST::generateInterfaceHeader(Formatter& out) const {
 
     if (iface) {
         DocComment(
-                "Returns whether this object's implementation is outside of the current process.",
-                HIDL_LOCATION_HERE)
+                "Returns whether this object's implementation is outside of the current process.")
                 .emit(out);
         out << "virtual bool isRemote() const ";
         if (!isIBase()) {
@@ -317,7 +305,7 @@ void AST::generateInterfaceHeader(Formatter& out) const {
             const NamedReference<Type>* elidedReturn = method->canElideCallback();
 
             if (elidedReturn == nullptr && returnsValue) {
-                DocComment("Return callback for " + method->name(), HIDL_LOCATION_HERE).emit(out);
+                DocComment("Return callback for " + method->name()).emit(out);
                 out << "using "
                     << method->name()
                     << "_cb = std::function<void(";
@@ -356,8 +344,7 @@ void AST::generateInterfaceHeader(Formatter& out) const {
         for (const Interface *superType : iface->typeChain()) {
             DocComment(
                     "This performs a checked cast based on what the underlying implementation "
-                    "actually is.",
-                    HIDL_LOCATION_HERE)
+                    "actually is.")
                     .emit(out);
             out << "static ::android::hardware::Return<"
                 << childTypeResult
@@ -637,7 +624,7 @@ void AST::generateMethods(Formatter& out, const MethodGenerator& gen, bool inclu
 }
 
 void AST::generateTemplatizationLink(Formatter& out) const {
-    DocComment("The pure class is what this class wraps.", HIDL_LOCATION_HERE).emit(out);
+    DocComment("The pure class is what this class wraps.").emit(out);
     out << "typedef " << mRootScope.getInterface()->localName() << " Pure;\n\n";
 }
 
@@ -698,21 +685,11 @@ void AST::generateStubHeader(Formatter& out) const {
 
     out.endl();
     generateTemplatizationLink(out);
-    DocComment("Type tag for use in template logic that indicates this is a 'native' class.",
-               HIDL_LOCATION_HERE)
+    DocComment("Type tag for use in template logic that indicates this is a 'native' class.")
             .emit(out);
     generateCppTag(out, "android::hardware::details::bnhw_tag");
 
     out << "::android::sp<" << iface->localName() << "> getImpl() { return _hidl_mImpl; }\n";
-
-    // Because the Bn class hierarchy always inherits from BnHwBase (and no other parent classes)
-    // and also no HIDL-specific things exist in the base binder classes, whenever we want to do
-    // C++ HIDL things with a binder, we only have the choice to convert it into a BnHwBase.
-    // Other hwbinder C++ class hierarchies (namely the one used for Java binder) will still
-    // be libhwbinder binders, but they are not instances of BnHwBase.
-    if (isIBase()) {
-        out << "bool checkSubclass(const void* subclassID) const;\n";
-    }
 
     generateMethods(out,
                     [&](const Method* method, const Interface*) {
@@ -802,8 +779,7 @@ void AST::generateProxyHeader(Formatter& out) const {
         << "\n\n";
 
     generateTemplatizationLink(out);
-    DocComment("Type tag for use in template logic that indicates this is a 'proxy' class.",
-               HIDL_LOCATION_HERE)
+    DocComment("Type tag for use in template logic that indicates this is a 'proxy' class.")
             .emit(out);
     generateCppTag(out, "android::hardware::details::bphw_tag");
 
@@ -1339,11 +1315,6 @@ void AST::generateStubSource(Formatter& out, const Interface* iface) const {
        })
             .endl()
             .endl();
-
-    if (isIBase()) {
-        out << "bool " << klassName << "::checkSubclass(const void* subclassID) const ";
-        out.block([&] { out << "return subclassID == " << interfaceName << "::descriptor;\n"; });
-    }
 
     generateMethods(out,
                     [&](const Method* method, const Interface* superInterface) {

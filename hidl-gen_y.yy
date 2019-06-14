@@ -228,7 +228,7 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 %verbose
 %debug
 
-%token<str> DOC_COMMENT "doc comment"
+%token<docComment> DOC_COMMENT "doc comment"
 
 %token<void> ENUM "keyword `enum`"
 %token<void> EXTENDS "keyword `extends`"
@@ -346,10 +346,10 @@ program
     ;
 
 doc_comments
-    : DOC_COMMENT { $$ = new DocComment($1, convertYYLoc(@1, ast)); }
+    : DOC_COMMENT { $$ = $1; }
     | doc_comments DOC_COMMENT
       {
-        $1->merge(new DocComment($2, convertYYLoc(@2, ast)));
+        $1->merge($2);
         $$ = $1;
       }
     | doc_comments '}'
