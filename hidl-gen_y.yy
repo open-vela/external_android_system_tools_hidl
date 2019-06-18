@@ -276,7 +276,7 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 
 %token '#'
 
-%type<docComment> doc_comments ignore_doc_comments
+%type<docComment> doc_comments
 
 %type<str> error_stmt error
 %type<str> package
@@ -299,7 +299,7 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 %type<enumValue> enum_value commentable_enum_value
 %type<enumValues> enum_values enum_declaration_body
 %type<typedVars> typed_vars non_empty_typed_vars
-%type<typedVar> typed_var uncommented_typed_var
+%type<typedVar> typed_var
 %type<method> method_declaration commentable_method_declaration
 %type<compoundStyle> struct_or_union_keyword
 %type<stringVec> annotation_string_values annotation_string_value
@@ -340,11 +340,9 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 %%
 
 program
-    : doc_comments package imports type_declarations ignore_doc_comments
-      {
-        ast->setHeader($1);
-      }
-    | package imports type_declarations ignore_doc_comments
+    // Don't care if license header is a doc comment or not
+    : DOC_COMMENT package imports type_declarations
+    | package imports type_declarations
     ;
 
 doc_comments
@@ -354,11 +352,11 @@ doc_comments
         $1->merge(new DocComment($2, convertYYLoc(@2, ast)));
         $$ = $1;
       }
-    ;
-
-ignore_doc_comments
-    : /*empty*/ { $$ = nullptr; }
-    | doc_comments { ast->addUnhandledComment($1); $$ = $1; }
+    | doc_comments '}'
+      {
+        std::cerr << "ERROR: Doc comments must preceed what they describe at " << @1 << "\n";
+        YYERROR;
+      }
     ;
 
 valid_identifier
@@ -715,7 +713,7 @@ interface_declaration
 
           enterScope(ast, scope, iface);
       }
-      interface_declaration_body
+      '{' interface_declarations '}'
       {
           CHECK((*scope)->isInterface());
 
@@ -726,10 +724,6 @@ interface_declaration
           ast->addScopedType(iface, *scope);
           $$ = iface;
       }
-    ;
-
-interface_declaration_body
-    : '{' interface_declarations ignore_doc_comments '}'
     ;
 
 typedef_declaration
@@ -888,12 +882,7 @@ non_empty_typed_vars
     ;
 
 typed_var
-    : doc_comments uncommented_typed_var { $2->setDocComment($1); $$ = $2; }
-    | uncommented_typed_var { $$ = $1; }
-    ;
-
-uncommented_typed_var
-    : type valid_identifier ignore_doc_comments
+    : type valid_identifier
       {
           $$ = new NamedReference<Type>($2, *$1, convertYYLoc(@2, ast));
       }
@@ -937,7 +926,7 @@ named_struct_or_union_declaration
     ;
 
 struct_or_union_body
-    : '{' field_declarations ignore_doc_comments '}' { $$ = $2; }
+    : '{' field_declarations '}' { $$ = $2; }
     ;
 
 field_declarations
@@ -1011,8 +1000,13 @@ compound_declaration
     ;
 
 enum_storage_type
-    : ':' fqtype ignore_doc_comments { $$ = $2; }
+    : ':' fqtype { $$ = $2; }
     | /* empty */ { $$ = nullptr; }
+    ;
+
+opt_comma
+    : /* empty */
+    | ','
     ;
 
 named_enum_declaration
@@ -1044,12 +1038,11 @@ named_enum_declaration
     ;
 
 enum_declaration_body
-    : '{' enum_values '}' { $$ = $2; }
-    | '{' enum_values ',' ignore_doc_comments '}' { $$ = $2; }
+    : '{' enum_values opt_comma '}' { $$ = $2; }
     ;
 
 commentable_enum_value
-    : doc_comments enum_value ignore_doc_comments
+    : doc_comments enum_value
       {
         $2->setDocComment($1);
         $$ = $2;
@@ -1113,9 +1106,9 @@ array_type_base
     ;
 
 array_type
-    : array_type_base ignore_doc_comments '[' const_expr ']'
+    : array_type_base '[' const_expr ']'
       {
-          $$ = new ArrayType(*$1, $4, *scope);
+          $$ = new ArrayType(*$1, $3, *scope);
       }
     | array_type '[' const_expr ']'
       {
@@ -1125,21 +1118,18 @@ array_type
     ;
 
 type
-    : array_type_base ignore_doc_comments { $$ = $1; }
-    | array_type ignore_doc_comments
+    : array_type_base { $$ = $1; }
+    | array_type { $$ = new Reference<Type>($1, convertYYLoc(@1, ast)); }
+    | INTERFACE
       {
-        $$ = new Reference<Type>($1, convertYYLoc(@1, ast));
-      }
-    | INTERFACE ignore_doc_comments
-      {
-        // "interface" is a synonym of android.hidl.base@1.0::IBase
-        $$ = new Reference<Type>(gIBaseFqName, convertYYLoc(@1, ast));
+          // "interface" is a synonym of android.hidl.base@1.0::IBase
+          $$ = new Reference<Type>(gIBaseFqName, convertYYLoc(@1, ast));
       }
     ;
 
 type_or_inplace_compound_declaration
     : type { $$ = $1; }
-    | annotated_compound_declaration ignore_doc_comments
+    | annotated_compound_declaration
       {
           $$ = new Reference<Type>($1, convertYYLoc(@1, ast));
       }
