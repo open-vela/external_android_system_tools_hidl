@@ -43,6 +43,7 @@ bool TypeDef::isInterface() const {
 }
 
 bool TypeDef::isEnum() const {
+    CHECK(!"Should not be here");
     return false;
 }
 
