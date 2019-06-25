@@ -193,6 +193,20 @@ TEST_F(HidlLintTest, DocCommentRefTest) {
 
     // Incorrectly marked as @param should lint as a param
     EXPECT_LINT("lint_test.doc_comments@1.0::ISwitched", "is not an argument");
+
+    // Incorrectly marked as @param should lint as a param
+    EXPECT_LINT("lint_test.doc_comments@1.0::IParamAfterReturn",
+                "@param references should come before @return");
+
+    // Reversed order should be caught
+    EXPECT_LINT("lint_test.doc_comments@1.0::IRevReturn",
+                "@return references should be ordered the same way they show up");
+    EXPECT_LINT("lint_test.doc_comments@1.0::IRevParam",
+                "@param references should be ordered the same way they show up");
+
+    // Referencing the same param/return multiple times should be caught
+    EXPECT_LINT("lint_test.doc_comments@1.0::IDoubleReturn", "was referenced multiple times");
+    EXPECT_LINT("lint_test.doc_comments@1.0::IDoubleParam", "was referenced multiple times");
 }
 
 TEST_F(HidlLintTest, MethodVersionsTest) {
@@ -240,10 +254,5 @@ TEST_F(HidlLintTest, EnumMaxAllTest) {
     // Lint since MAX and ALL are parts of the enum values
     EXPECT_LINT("lint_test.enum_max_all@1.0::IMax2", "\"MAX\" enum values are considered harmful");
     EXPECT_LINT("lint_test.enum_max_all@1.0::IAll2", "\"ALL\" enum values are considered harmful");
-}
-
-TEST_F(HidlLintTest, UnhandledDocCommentTest) {
-    EXPECT_LINT("lint_test.unhandled_comments@1.0::types",
-                "cannot be processed since it is in an unrecognized place");
 }
 }  // namespace android
