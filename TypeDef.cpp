@@ -27,7 +27,7 @@ TypeDef::TypeDef(const char* localName, const FQName& fullName, const Location& 
 
 const ScalarType *TypeDef::resolveToScalarType() const {
     CHECK(!"Should not be here");
-    return NULL;
+    return nullptr;
 }
 
 Type* TypeDef::referencedType() {
@@ -43,7 +43,6 @@ bool TypeDef::isInterface() const {
 }
 
 bool TypeDef::isEnum() const {
-    CHECK(!"Should not be here");
     return false;
 }
 
