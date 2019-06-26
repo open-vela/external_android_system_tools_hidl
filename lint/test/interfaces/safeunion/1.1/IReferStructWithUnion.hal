@@ -16,7 +16,7 @@
 
 package lint_test.safeunion@1.1;
 
-/* Refers to a struct that contains a union. */
+// Refers to a struct that contains a union.
 interface IReferStructWithUnion {
     someMethod(SomeStruct someStruct);
 };
