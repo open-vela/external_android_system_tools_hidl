@@ -31,7 +31,6 @@
 #include "TypeDef.h"
 #include "VectorType.h"
 
-#include "hidl-gen_y-helpers.h"
 #include "hidl-gen_y.h"
 
 #include <android-base/logging.h>
@@ -41,8 +40,7 @@
 
 using namespace android;
 
-extern int yylex(yy::parser::semantic_type*, yy::parser::location_type*, void*, AST* const,
-                 Scope** const);
+extern int yylex(yy::parser::semantic_type*, yy::parser::location_type*, void*, Scope** const);
 
 void enterScope(AST* /* ast */, Scope** scope, Scope* container) {
     CHECK(container->parent() == (*scope));
@@ -219,7 +217,6 @@ bool isValidTypeName(const std::string& identifier, std::string *errorMsg) {
 %parse-param { android::AST* const ast }
 %parse-param { android::Scope** const scope }
 %lex-param { void* scanner }
-%lex-param { android::AST* const ast }
 %lex-param { android::Scope** const scope }
 %pure-parser
 %glr-parser

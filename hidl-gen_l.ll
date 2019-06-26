@@ -47,7 +47,6 @@ FQNAME              ({COMPONENT}|{VERSION})(({DOT}|":"+){COMPONENT}|{VERSION})*
 #include "VectorType.h"
 #include "FmqType.h"
 
-#include "hidl-gen_y-helpers.h"
 #include "hidl-gen_y.h"
 
 #include <assert.h>
@@ -64,7 +63,7 @@ using token = yy::parser::token;
     }
 
 #define YY_DECL int yylex(YYSTYPE* yylval_param, YYLTYPE* yylloc_param,  \
-    yyscan_t yyscanner, android::AST* const ast, android::Scope** const scope)
+    yyscan_t yyscanner, android::Scope** const scope)
 
 #define YY_USER_ACTION yylloc->step(); yylloc->columns(yyleng);
 
@@ -95,7 +94,7 @@ using token = yy::parser::token;
                                 return token::DOC_COMMENT;
                             }
 
-"//"[^\r\n]*        { ast->addUnhandledComment(new DocComment(yytext, convertYYLoc(*yylloc, ast))); }
+"//"[^\r\n]*        { /* skip C++ style comment */ }
 
 "enum"              { return token::ENUM; }
 "extends"           { return token::EXTENDS; }
