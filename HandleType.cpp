@@ -51,14 +51,6 @@ std::string HandleType::getCppType(StorageMode mode,
     }
 }
 
-std::string HandleType::getJavaType(bool /* forInitializer */) const {
-    return "android.os.NativeHandle";
-}
-
-std::string HandleType::getJavaSuffix() const {
-    return "NativeHandle";
-}
-
 std::string HandleType::getVtsType() const {
     return "TYPE_HANDLE";
 }
@@ -97,11 +89,15 @@ void HandleType::emitReaderWriter(
     }
 }
 
+bool HandleType::useNameInEmitReaderWriterEmbedded(bool isReader) const {
+    return !isReader;
+}
+
 void HandleType::emitReaderWriterEmbedded(
         Formatter &out,
         size_t /* depth */,
         const std::string &name,
-        const std::string & /* sanitizedName */,
+        const std::string &sanitizedName,
         bool nameIsPointer,
         const std::string &parcelObj,
         bool parcelObjIsPointer,
@@ -109,65 +105,52 @@ void HandleType::emitReaderWriterEmbedded(
         ErrorMode mode,
         const std::string &parentName,
         const std::string &offsetText) const {
-    emitReaderWriterEmbeddedForTypeName(
-            out,
-            name,
-            nameIsPointer,
-            parcelObj,
-            parcelObjIsPointer,
-            isReader,
-            mode,
-            parentName,
-            offsetText,
-            "::android::hardware::hidl_handle",
-            "" /* childName */,
-            "::android::hardware");
-}
-
-void HandleType::emitJavaFieldInitializer(
-        Formatter &out, const std::string &fieldName) const {
-    const std::string fieldDeclaration = getJavaType(false) + " " + fieldName;
-    emitJavaFieldDefaultInitialValue(out, fieldDeclaration);
-}
-
-void HandleType::emitJavaFieldDefaultInitialValue(
-        Formatter &out, const std::string &declaredFieldName) const {
-    out << declaredFieldName
-        << " = new "
-        << getJavaType(true)
-        << "();\n";
-}
-
-void HandleType::emitJavaFieldReaderWriter(
-        Formatter &out,
-        size_t /* depth */,
-        const std::string &parcelName,
-        const std::string &blobName,
-        const std::string &fieldName,
-        const std::string &offset,
-        bool isReader) const {
     if (isReader) {
-        out << fieldName
-            << " = "
-            << parcelName
-            << ".readEmbeddedNativeHandle(\n";
+        const std::string ptrName = "_hidl_" + sanitizedName  + "_ptr";
 
-        out.indent(2, [&] {
-            out << blobName
-                << ".handle(),\n"
-                << offset
-                << " + 0 /* offsetof(hidl_handle, mHandle) */);\n\n";
-        });
+        out << "const native_handle_t *"
+            << ptrName << ";\n"
+            << "_hidl_err = "
+            << parcelObj
+            << (parcelObjIsPointer ? "->" : ".")
+            << "readNullableEmbeddedNativeHandle(\n";
 
-        return;
+        out.indent();
+        out.indent();
+
+        out << parentName
+            << ",\n"
+            << offsetText
+            << ",\n"
+            << "&" << ptrName
+            << "\n"
+            << ");\n\n";
+
+        out.unindent();
+        out.unindent();
+
+        handleError(out, mode);
+    } else {
+        out << "_hidl_err = "
+            << parcelObj
+            << (parcelObjIsPointer ? "->" : ".")
+            << "writeEmbeddedNativeHandle(\n";
+
+        out.indent();
+        out.indent();
+
+        out << (nameIsPointer ? ("*" + name) : name)
+            << ",\n"
+            << parentName
+            << ",\n"
+            << offsetText
+            << ");\n\n";
+
+        out.unindent();
+        out.unindent();
+
+        handleError(out, mode);
     }
-
-    out << blobName
-        << ".putNativeHandle("
-        << offset
-        << ", "
-        << fieldName
-        << ");\n";
 }
 
 bool HandleType::needsEmbeddedReadWrite() const {
@@ -175,7 +158,7 @@ bool HandleType::needsEmbeddedReadWrite() const {
 }
 
 bool HandleType::deepIsJavaCompatible(std::unordered_set<const Type*>* /* visited */) const {
-    return true;
+    return false;
 }
 
 static HidlTypeAssertion assertion("hidl_handle", 16 /* size */);

@@ -56,6 +56,8 @@ struct ArrayType : public Type {
 
     std::string getJavaType(bool forInitializer) const override;
 
+    std::string getJavaWrapperType() const override;
+
     std::string getVtsType() const override;
 
     void emitReaderWriter(
@@ -79,12 +81,35 @@ struct ArrayType : public Type {
             const std::string &parentName,
             const std::string &offsetText) const override;
 
+    void emitResolveReferences(
+            Formatter &out,
+            const std::string &name,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode) const override;
+
+    void emitResolveReferencesEmbedded(
+            Formatter &out,
+            size_t depth,
+            const std::string &name,
+            const std::string &sanitizedName,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode,
+            const std::string &parentName,
+            const std::string &offsetText) const override;
+
     void emitJavaDump(
             Formatter &out,
             const std::string &streamName,
             const std::string &name) const override;
 
     bool needsEmbeddedReadWrite() const override;
+    bool deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const override;
     bool resultNeedsDeref() const override;
 
     void emitJavaReaderWriter(
@@ -95,9 +120,6 @@ struct ArrayType : public Type {
 
     void emitJavaFieldInitializer(
             Formatter &out, const std::string &fieldName) const override;
-
-    void emitJavaFieldDefaultInitialValue(
-            Formatter &out, const std::string &declaredFieldName) const override;
 
     void emitJavaFieldReaderWriter(
             Formatter &out,

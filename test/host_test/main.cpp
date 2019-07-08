@@ -16,8 +16,6 @@
 
 #define LOG_TAG "libhidl-gen-utils"
 
-#include <vector>
-
 #include <gtest/gtest.h>
 
 #include <ConstantExpression.h>
@@ -36,8 +34,6 @@ namespace android {
 
 class HidlGenHostTest : public ::testing::Test {};
 
-class HidlGenHostDeathTest : public ::testing::Test {};
-
 TEST_F(HidlGenHostTest, CoordinatorTest) {
     Coordinator coordinator;
 
@@ -50,24 +46,22 @@ TEST_F(HidlGenHostTest, CoordinatorTest) {
     coordinator.addDefaultPackagePath("a.b", "a3/b3/"); // should take path above
     coordinator.addDefaultPackagePath("a.c", "a4/b4/"); // should succeed
 
-    EXPECT_EQ_OK("a.b", coordinator.getPackageRoot, FQName("a.b.foo", "1.0"));
-    EXPECT_EQ_OK("a.c", coordinator.getPackageRoot, FQName("a.c.foo.bar", "1.0", "IFoo"));
+    EXPECT_EQ_OK("a.b", coordinator.getPackageRoot, FQName("a.b.foo@1.0"));
+    EXPECT_EQ_OK("a.c", coordinator.getPackageRoot, FQName("a.c.foo.bar@1.0::IFoo"));
 
     // getPackagePath(fqname, relative, sanitized, ...)
-    EXPECT_EQ_OK("a1/b1/foo/1.0/", coordinator.getPackagePath, FQName("a.b.foo", "1.0"), false,
+    EXPECT_EQ_OK("a1/b1/foo/1.0/", coordinator.getPackagePath, FQName("a.b.foo@1.0"), false, false);
+    EXPECT_EQ_OK("a4/b4/foo/bar/1.0/", coordinator.getPackagePath, FQName("a.c.foo.bar@1.0::IFoo"),
+                 false, false);
+    EXPECT_EQ_OK("a1/b1/foo/V1_0/", coordinator.getPackagePath, FQName("a.b.foo@1.0"), false, true);
+    EXPECT_EQ_OK("a4/b4/foo/bar/V1_0/", coordinator.getPackagePath, FQName("a.c.foo.bar@1.0::IFoo"),
+                 false, true);
+    EXPECT_EQ_OK("foo/1.0/", coordinator.getPackagePath, FQName("a.b.foo@1.0"), true, false);
+    EXPECT_EQ_OK("foo/bar/1.0/", coordinator.getPackagePath, FQName("a.c.foo.bar@1.0::IFoo"), true,
                  false);
-    EXPECT_EQ_OK("a4/b4/foo/bar/1.0/", coordinator.getPackagePath,
-                 FQName("a.c.foo.bar", "1.0", "IFoo"), false, false);
-    EXPECT_EQ_OK("a1/b1/foo/V1_0/", coordinator.getPackagePath, FQName("a.b.foo", "1.0"), false,
+    EXPECT_EQ_OK("foo/V1_0/", coordinator.getPackagePath, FQName("a.b.foo@1.0"), true, true);
+    EXPECT_EQ_OK("foo/bar/V1_0/", coordinator.getPackagePath, FQName("a.c.foo.bar@1.0::IFoo"), true,
                  true);
-    EXPECT_EQ_OK("a4/b4/foo/bar/V1_0/", coordinator.getPackagePath,
-                 FQName("a.c.foo.bar", "1.0", "IFoo"), false, true);
-    EXPECT_EQ_OK("foo/1.0/", coordinator.getPackagePath, FQName("a.b.foo", "1.0"), true, false);
-    EXPECT_EQ_OK("foo/bar/1.0/", coordinator.getPackagePath, FQName("a.c.foo.bar", "1.0", "IFoo"),
-                 true, false);
-    EXPECT_EQ_OK("foo/V1_0/", coordinator.getPackagePath, FQName("a.b.foo", "1.0"), true, true);
-    EXPECT_EQ_OK("foo/bar/V1_0/", coordinator.getPackagePath, FQName("a.c.foo.bar", "1.0", "IFoo"),
-                 true, true);
 }
 
 TEST_F(HidlGenHostTest, CoordinatorFilepathTest) {
@@ -81,7 +75,7 @@ TEST_F(HidlGenHostTest, CoordinatorFilepathTest) {
     EXPECT_EQ(OK, coordinator.addPackagePath("a.b", "a1/b1", &error));
     EXPECT_TRUE(error.empty());
 
-    const static FQName kName = FQName("a.b.c", "1.2");
+    const static FQName kName = FQName("a.b.c@1.2");
 
     // get file names
     EXPECT_EQ_OK("foo/x.y", coordinator.getFilepath, kName, Location::DIRECT, "x.y");
@@ -109,97 +103,6 @@ TEST_F(HidlGenHostTest, LocationTest) {
     EXPECT_LT(b, c);
     EXPECT_LT(a, c);
     EXPECT_FALSE(Location::inSameFile(a, other));
-}
-
-void populateArgv(std::vector<const char*> options, char** argv) {
-    for (int i = 0; i < options.size(); i++) {
-        argv[i] = const_cast<char*>(options.at(i));
-    }
-}
-
-TEST_F(HidlGenHostTest, CoordinatorRootPathTest) {
-    // Test that rootPath is set correctly
-    Coordinator coordinator;
-
-    std::vector<const char*> options = {"hidl-gen", "-p", "~/"};
-    char* argv[options.size()];
-
-    populateArgv(options, argv);
-    coordinator.parseOptions(options.size(), argv, "", [&](int /* res */, char* /* arg */) {
-        // Coordinator should always handle -p
-        FAIL() << "Coordinator should handle -p";
-    });
-
-    EXPECT_EQ("~/", coordinator.getRootPath());
-}
-
-TEST_F(HidlGenHostDeathTest, CoordinatorTooManyRootPathsTest) {
-    // Test that cannot set multiple rootPaths
-    Coordinator coordinator;
-
-    std::vector<const char*> options = {"hidl-gen", "-p", "~/", "-p", "."};
-    char* argv[options.size()];
-
-    populateArgv(options, argv);
-    EXPECT_DEATH(coordinator.parseOptions(options.size(), argv, "",
-                                          [&](int /* res */, char* /* arg */) {
-                                              // Coordinator should always handle -p
-                                              FAIL() << "Coordinator should handle -p";
-                                          }),
-                 "ERROR: -p <root path> can only be specified once.");
-}
-
-TEST_F(HidlGenHostTest, CoordinatorNoDefaultRootTest) {
-    // Test that overrides default root paths without specifying new roots
-    Coordinator coordinator;
-
-    std::vector<const char*> options = {"hidl-gen", "-R"};
-    char* argv[options.size()];
-
-    populateArgv(options, argv);
-    coordinator.parseOptions(options.size(), argv, "", [&](int /* res */, char* /* arg */) {
-        // Coordinator should always handle -R
-        FAIL() << "Coordinator should handle -R";
-    });
-
-    // android.hardware is a default path. with -R specified it should not be set
-    std::string root;
-    EXPECT_NE(::android::OK,
-              coordinator.getPackageRoot(FQName("android.hardware.tests.Baz", "1.0"), &root));
-    EXPECT_EQ("", root);
-}
-
-TEST_F(HidlGenHostTest, CoordinatorCustomArgParseTest) {
-    // Test custom args are sent to the function
-    Coordinator coordinator;
-
-    std::string optstring = "xy:";
-    std::vector<const char*> options = {"hidl-gen", "-y", "yvalue", "-x"};
-    char* argv[options.size()];
-
-    populateArgv(options, argv);
-
-    bool xCalled = false;
-    bool yCalled = false;
-    coordinator.parseOptions(options.size(), argv, optstring, [&](int res, char* arg) {
-        switch (res) {
-            case 'x': {
-                EXPECT_STREQ(nullptr, arg);
-                xCalled = true;
-                break;
-            }
-            case 'y': {
-                EXPECT_STREQ(argv[2] /* "yvalue" */, arg);
-                yCalled = true;
-                break;
-            }
-            default: { FAIL() << "Coordinator sent invalid param " << (char)res; }
-        }
-    });
-
-    // Ensure the function was called with both x and y
-    EXPECT_TRUE(xCalled);
-    EXPECT_TRUE(yCalled);
 }
 
 int main(int argc, char **argv) {
