@@ -22,24 +22,17 @@
 
 #include <string>
 
-#include "Location.h"
-
 namespace android {
 
 struct DocComment {
-    DocComment(const std::string& comment, const Location& location);
+    DocComment(const std::string& comment);
 
     void merge(const DocComment* comment);
 
     void emit(Formatter& out) const;
 
-    const std::string& string() const { return mComment; }
-
-    const Location& location() const { return mLocation; }
-
-  private:
+   private:
     std::string mComment;
-    Location mLocation;
 };
 
 struct DocCommentable {
@@ -50,9 +43,7 @@ struct DocCommentable {
         }
     }
 
-    const DocComment* getDocComment() const { return mDocComment; }
-
-  private:
+   private:
     const DocComment* mDocComment = nullptr;
 };
 

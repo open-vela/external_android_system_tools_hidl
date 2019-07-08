@@ -45,9 +45,6 @@ bool VectorType::isCompatibleElementType(const Type* elementType) const {
         return true;
     }
     if (elementType->isCompoundType()) {
-        if (static_cast<const CompoundType*>(elementType)->containsInterface()) {
-            return false;
-        }
         return true;
     }
     if (elementType->isInterface()) {
@@ -75,7 +72,7 @@ bool VectorType::isVector() const {
 }
 
 bool VectorType::isVectorOfBinders() const {
-    return mElementType->isInterface();
+    return mElementType->isBinder();
 }
 
 bool VectorType::deepCanCheckEquality(std::unordered_set<const Type*>* visited) const {
@@ -113,15 +110,17 @@ std::string VectorType::getCppType(StorageMode mode,
 }
 
 std::string VectorType::getJavaType(bool /* forInitializer */) const {
-    const std::string elementJavaType = mElementType->isTemplatedType()
-        ? mElementType->getJavaType()
-        : mElementType->getJavaTypeClass();
 
-    return "java.util.ArrayList<" + elementJavaType + ">";
-}
+    std::string elementJavaType;
+    if (mElementType->isArray()) {
+        elementJavaType = mElementType->getJavaType();
+    } else {
+        elementJavaType = mElementType->getJavaWrapperType();
+    }
 
-std::string VectorType::getJavaTypeClass() const {
-    return "java.util.ArrayList";
+    return "java.util.ArrayList<"
+        + elementJavaType
+        + ">";
 }
 
 std::string VectorType::getVtsType() const {
@@ -354,6 +353,117 @@ void VectorType::emitReaderWriterEmbedded(
     out << "}\n\n";
 }
 
+void VectorType::emitResolveReferences(
+            Formatter &out,
+            const std::string &name,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode) const {
+    emitResolveReferencesEmbeddedHelper(
+        out,
+        0, /* depth */
+        name,
+        name /* sanitizedName */,
+        nameIsPointer,
+        parcelObj,
+        parcelObjIsPointer,
+        isReader,
+        mode,
+        "_hidl_" + name + "_child",
+        "0 /* parentOffset */");
+}
+
+void VectorType::emitResolveReferencesEmbedded(
+            Formatter &out,
+            size_t depth,
+            const std::string &name,
+            const std::string &sanitizedName,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode,
+            const std::string & /* parentName */,
+            const std::string & /* offsetText */) const {
+    emitResolveReferencesEmbeddedHelper(
+        out, depth, name, sanitizedName, nameIsPointer, parcelObj,
+        parcelObjIsPointer, isReader, mode, "", "");
+}
+
+bool VectorType::useParentInEmitResolveReferencesEmbedded() const {
+    // parentName and offsetText is not used in emitResolveReferencesEmbedded
+    return false;
+}
+
+void VectorType::emitResolveReferencesEmbeddedHelper(
+            Formatter &out,
+            size_t depth,
+            const std::string &name,
+            const std::string &sanitizedName,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode,
+            const std::string &childName,
+            const std::string &childOffsetText) const {
+    CHECK(needsResolveReferences() && mElementType->needsResolveReferences());
+
+    const std::string nameDeref = name + (nameIsPointer ? "->" : ".");
+    const std::string nameDerefed = (nameIsPointer ? "*" : "") + name;
+    std::string elementType = mElementType->getCppStackType();
+
+    std::string myChildName = childName, myChildOffset = childOffsetText;
+
+    if(myChildName.empty() && myChildOffset.empty()) {
+        myChildName = "_hidl_" + sanitizedName + "_child";
+        myChildOffset = "0";
+
+        out << "size_t " << myChildName << ";\n";
+        out << "_hidl_err = ::android::hardware::findInParcel("
+            << nameDerefed << ", "
+            << (parcelObjIsPointer ? "*" : "") << parcelObj << ", "
+            << "&" << myChildName
+            << ");\n";
+
+        handleError(out, mode);
+    }
+
+    std::string iteratorName = "_hidl_index_" + std::to_string(depth);
+
+    out << "for (size_t "
+        << iteratorName
+        << " = 0; "
+        << iteratorName
+        << " < "
+        << nameDeref
+        << "size(); ++"
+        << iteratorName
+        << ") {\n";
+
+    out.indent();
+
+    mElementType->emitResolveReferencesEmbedded(
+        out,
+        depth + 1,
+        (nameIsPointer ? "(*" + name + ")" : name) + "[" + iteratorName + "]",
+        sanitizedName + (nameIsPointer ? "_deref" : "") + "_indexed",
+        false /* nameIsPointer */,
+        parcelObj,
+        parcelObjIsPointer,
+        isReader,
+        mode,
+        myChildName,
+        myChildOffset + " + " +
+                iteratorName + " * sizeof(" + elementType + ")");
+
+    out.unindent();
+
+    out << "}\n\n";
+}
+
 void VectorType::emitJavaReaderWriter(
         Formatter &out,
         const std::string &parcelObj,
@@ -434,17 +544,14 @@ void VectorType::emitJavaReaderWriter(
 
 void VectorType::emitJavaFieldInitializer(
         Formatter &out, const std::string &fieldName) const {
-    const std::string typeName = getJavaType(false /* forInitializer */);
-    const std::string fieldDeclaration = typeName + " " + fieldName;
+    std::string javaType = getJavaType(false /* forInitializer */);
 
-    emitJavaFieldDefaultInitialValue(out, fieldDeclaration);
-}
-
-void VectorType::emitJavaFieldDefaultInitialValue(
-        Formatter &out, const std::string &declaredFieldName) const {
-    out << declaredFieldName
+    out << "final "
+        << javaType
+        << " "
+        << fieldName
         << " = new "
-        << getJavaType(false /* forInitializer */)
+        << javaType
         << "();\n";
 }
 
@@ -456,18 +563,13 @@ void VectorType::emitJavaFieldReaderWriter(
         const std::string &fieldName,
         const std::string &offset,
         bool isReader) const {
-
-    const std::string fieldNameWithCast = isReader
-        ? "(" + getJavaTypeCast(fieldName) + ")"
-        : fieldName;
-
     VectorType::EmitJavaFieldReaderWriterForElementType(
             out,
             depth,
             mElementType.get(),
             parcelName,
             blobName,
-            fieldNameWithCast,
+            fieldName,
             offset,
             isReader);
 }
@@ -609,6 +711,13 @@ void VectorType::EmitJavaFieldReaderWriterForElementType(
 
 bool VectorType::needsEmbeddedReadWrite() const {
     return true;
+}
+
+bool VectorType::deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const {
+    if (mElementType->needsResolveReferences(visited)) {
+        return true;
+    }
+    return TemplatedType::deepNeedsResolveReferences(visited);
 }
 
 bool VectorType::resultNeedsDeref() const {

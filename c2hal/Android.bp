@@ -36,7 +36,6 @@ cc_binary_host {
     shared_libs: [
         "libbase",
         "liblog",
-        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
     ],
 

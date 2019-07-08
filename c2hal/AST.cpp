@@ -37,7 +37,7 @@ AST::AST(const std::string &path,
          const std::string &outputDir,
          const std::string &package,
          bool isOpenGl)
-    : mScanner(nullptr),
+    : mScanner(NULL),
       mPath(path),
       mOutputDir(outputDir),
       mPackage(package),
@@ -47,21 +47,21 @@ AST::AST(const std::string &path,
 AST::~AST() {
     delete mExpression;
 
-    if(mDeclarations != nullptr) {
+    if(mDeclarations != NULL) {
         for(auto* decl : *mDeclarations) {
             delete decl;
         }
     }
     delete mDeclarations;
 
-    if(mInterfaces != nullptr) {
+    if(mInterfaces != NULL) {
         for(auto* inter : *mInterfaces) {
             delete inter;
         }
     }
     delete mInterfaces;
 
-    if(mIncludes != nullptr) {
+    if(mIncludes != NULL) {
         for(auto* incl : *mIncludes) {
             delete incl;
         }
@@ -116,10 +116,10 @@ Scope<Define *> &AST::getDefinesScope() {
 }
 
 void AST::processContents() {
-    CHECK(mDeclarations != nullptr);
+    CHECK(mDeclarations != NULL);
 
     for (auto &declaration : *mDeclarations) {
-        CHECK(declaration != nullptr);
+        CHECK(declaration != NULL);
 
         declaration->processContents(*this);
     }
@@ -209,7 +209,7 @@ void AST::isolateConstants(Expression::Type ofType) {
             auto var = new EnumVarDeclaration(define->getName(),
                                               define->getExpression());
 
-            define->setExpression(nullptr);
+            define->setExpression(NULL);
 
             constants->push_back(var);
             it = mDeclarations->erase(it);
@@ -233,7 +233,7 @@ void AST::isolateConstants(Expression::Type ofType) {
 }
 
 status_t AST::generateCode() const {
-    CHECK(mDeclarations != nullptr);
+    CHECK(mDeclarations != NULL);
 
     status_t err;
 
@@ -259,7 +259,7 @@ status_t AST::generateFile(CompositeDeclaration* declaration) const {
 
     FILE *file = fopen((getFileDir() + fileName).c_str(), "w");
 
-    if(file == nullptr) {
+    if(file == NULL) {
         return -errno;
     }
 
@@ -280,7 +280,7 @@ status_t AST::generateTypesFile() const {
 
     FILE *file = fopen((getFileDir() + "types.hal").c_str(), "w");
 
-    if(file == nullptr) {
+    if(file == NULL) {
         return -errno;
     }
 

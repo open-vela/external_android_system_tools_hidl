@@ -14,15 +14,13 @@
 
 cc_defaults {
     name: "hidl-gen-defaults",
+    cpp_std: "experimental",
     cflags: [
+        "-O0",
+        "-g",
         "-Wall",
         "-Werror",
     ],
-    target: {
-        host: {
-            cflags: ["-O0", "-g"],
-        }
-    }
 }
 
 // This configuration is inherited by all hidl-gen-generated modules.
@@ -32,10 +30,6 @@ cc_defaults {
         "-Wall",
         "-Werror",
         "-Wextra-semi",
-    ],
-    tidy_checks: [
-        // _hidl_cb and addOnewayTask are stuck because of the legacy ABI
-        "-performance-unnecessary-value-param",
     ],
     product_variables: {
         debuggable: {
@@ -55,6 +49,26 @@ java_defaults {
     },
 }
 
+//
+// libhidl-gen-hash
+//
+cc_library {
+    name: "libhidl-gen-hash",
+    host_supported: true,
+    defaults: ["hidl-gen-defaults"],
+    srcs: ["Hash.cpp"],
+    local_include_dirs: ["include_hash/hidl-hash"],
+    export_include_dirs: ["include_hash"],
+    shared_libs: [
+        "libbase",
+        "libcrypto",
+        "libssl",
+    ],
+}
+
+//
+// libhidl-gen
+//
 cc_library_host_shared {
     name: "libhidl-gen",
     defaults: ["hidl-gen-defaults"],
@@ -75,6 +89,7 @@ cc_library_host_shared {
         "NamedType.cpp",
         "PointerType.cpp",
         "FmqType.cpp",
+        "RefType.cpp",
         "ScalarType.cpp",
         "Scope.cpp",
         "StringType.cpp",
@@ -86,16 +101,18 @@ cc_library_host_shared {
         "libbase",
         "liblog",
         "libhidl-gen-hash",
-        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
     ],
     export_shared_lib_headers: [
         "libbase",
-        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
     ],
     export_include_dirs: ["."], // for tests
 }
+
+//
+// libhidl-gen-ast
+//
 
 cc_library_host_shared {
     name: "libhidl-gen-ast",
@@ -105,9 +122,7 @@ cc_library_host_shared {
         "generateCpp.cpp",
         "generateCppAdapter.cpp",
         "generateCppImpl.cpp",
-        "generateDependencies.cpp",
         "generateJava.cpp",
-        "generateJavaImpl.cpp",
         "generateVts.cpp",
         "hidl-gen_y.yy",
         "hidl-gen_l.ll",
@@ -118,21 +133,18 @@ cc_library_host_shared {
         "liblog",
         "libhidl-gen",
         "libhidl-gen-hash",
-        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
     ],
     export_shared_lib_headers: [
         "libbase",
-        "libhidl-gen-hash",
         "libhidl-gen-utils",
     ],
     export_include_dirs: ["."], // for tests
-    yacc: {
-        gen_location_hh: true,
-        gen_position_hh: true,
-    }
 }
 
+//
+// hidl-gen
+//
 cc_binary_host {
     name: "hidl-gen",
     defaults: ["hidl-gen-defaults"],
@@ -143,7 +155,6 @@ cc_binary_host {
         "libhidl-gen",
         "libhidl-gen-ast",
         "libhidl-gen-hash",
-        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
     ],
 }

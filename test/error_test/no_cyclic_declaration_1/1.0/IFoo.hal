@@ -15,6 +15,5 @@
  */
 package test.no_cyclic_declaration_1@1.0;
 
-/* extends itself */
-interface IFoo extends IFoo {
+interface IFoo extends IFoo /* extends itself */ {
 };

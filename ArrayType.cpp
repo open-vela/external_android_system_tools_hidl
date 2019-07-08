@@ -80,7 +80,7 @@ status_t ArrayType::resolveInheritance() {
 status_t ArrayType::validate() const {
     CHECK(!mElementType->isArray());
 
-    if (mElementType->isInterface()) {
+    if (mElementType->isBinder()) {
         std::cerr << "ERROR: Arrays of interface types are not supported"
                   << " at " << mElementType.location() << "\n";
 
@@ -97,7 +97,14 @@ std::string ArrayType::getCppType(StorageMode mode,
     std::string arrayType = space + "hidl_array<" + base;
 
     for (size_t i = 0; i < mSizes.size(); ++i) {
-        arrayType += ", " + mSizes[i]->cppValue();
+        arrayType += ", ";
+        arrayType += mSizes[i]->cppValue();
+
+        if (!mSizes[i]->descriptionIsTrivial()) {
+            arrayType += " /* ";
+            arrayType += mSizes[i]->description();
+            arrayType += " */";
+        }
     }
 
     arrayType += ">";
@@ -135,14 +142,22 @@ std::string ArrayType::getJavaType(bool forInitializer) const {
 
         if (forInitializer) {
             base += mSizes[i]->javaValue();
-        } else {
-            base += "/* " + mSizes[i]->expression() + " */";
+        }
+
+        if (!forInitializer || !mSizes[i]->descriptionIsTrivial()) {
+            if (forInitializer)
+                base += " ";
+            base += "/* " + mSizes[i]->description() + " */";
         }
 
         base += "]";
     }
 
     return base;
+}
+
+std::string ArrayType::getJavaWrapperType() const {
+    return mElementType->getJavaWrapperType();
 }
 
 std::string ArrayType::getVtsType() const {
@@ -270,6 +285,80 @@ void ArrayType::emitReaderWriterEmbedded(
     out << "}\n\n";
 }
 
+void ArrayType::emitResolveReferences(
+            Formatter &out,
+            const std::string &name,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode) const {
+    emitResolveReferencesEmbedded(
+        out,
+        0 /* depth */,
+        name,
+        name /* sanitizedName */,
+        nameIsPointer,
+        parcelObj,
+        parcelObjIsPointer,
+        isReader,
+        mode,
+        "_hidl_" + name + "_parent",
+        "0 /* parentOffset */");
+}
+
+void ArrayType::emitResolveReferencesEmbedded(
+            Formatter &out,
+            size_t depth,
+            const std::string &name,
+            const std::string &sanitizedName,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode,
+            const std::string &parentName,
+            const std::string &offsetText) const {
+    CHECK(needsResolveReferences() && mElementType->needsResolveReferences());
+
+    const std::string nameDeref = name + (nameIsPointer ? "->" : ".");
+
+    std::string baseType = mElementType->getCppStackType();
+
+    std::string iteratorName = "_hidl_index_" + std::to_string(depth);
+
+    out << "for (size_t "
+        << iteratorName
+        << " = 0; "
+        << iteratorName
+        << " < "
+        << dimension()
+        << "; ++"
+        << iteratorName
+        << ") {\n";
+
+    out.indent();
+
+    mElementType->emitResolveReferencesEmbedded(
+        out,
+        depth + 1,
+        nameDeref + "data()[" + iteratorName + "]",
+        sanitizedName + "_indexed",
+        false /* nameIsPointer */,
+        parcelObj,
+        parcelObjIsPointer,
+        isReader,
+        mode,
+        parentName,
+        offsetText + " + " + iteratorName + " * sizeof("
+        + baseType
+        + ")");
+
+    out.unindent();
+
+    out << "}\n\n";
+}
+
 void ArrayType::emitJavaDump(
         Formatter &out,
         const std::string &streamName,
@@ -277,13 +366,19 @@ void ArrayType::emitJavaDump(
     out << streamName << ".append(java.util.Arrays."
         << (countDimensions() > 1 ? "deepToString" : "toString")
         << "("
-        << name
-        << "));\n";
+        << name << "));\n";
 }
 
 
 bool ArrayType::needsEmbeddedReadWrite() const {
     return mElementType->needsEmbeddedReadWrite();
+}
+
+bool ArrayType::deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const {
+    if (mElementType->needsResolveReferences(visited)) {
+        return true;
+    }
+    return Type::deepNeedsResolveReferences(visited);
 }
 
 bool ArrayType::resultNeedsDeref() const {
@@ -339,17 +434,15 @@ void ArrayType::emitJavaReaderWriter(
 
 void ArrayType::emitJavaFieldInitializer(
         Formatter &out, const std::string &fieldName) const {
-    const std::string typeName = getJavaType(false /* forInitializer */);
-    const std::string fieldDeclaration = typeName + " " + fieldName;
+    std::string typeName = getJavaType(false /* forInitializer */);
+    std::string initName = getJavaType(true /* forInitializer */);
 
-    emitJavaFieldDefaultInitialValue(out, fieldDeclaration);
-}
-
-void ArrayType::emitJavaFieldDefaultInitialValue(
-        Formatter &out, const std::string &declaredFieldName) const {
-    out << declaredFieldName
+    out << "final "
+        << typeName
+        << " "
+        << fieldName
         << " = new "
-        << getJavaType(true /* forInitializer */)
+        << initName
         << ";\n";
 }
 
@@ -395,13 +488,15 @@ void ArrayType::emitJavaFieldReaderWriter(
         indexString += "[" + iteratorName + "]";
     }
 
-    const bool isIndexed = (loopDimensions > 0);
-    const std::string fieldNameWithCast = isIndexed
-            ? "(" + getJavaTypeCast(fieldName) + ")" + indexString
-            : getJavaTypeCast(fieldName);
-
     if (isReader && mElementType->isCompoundType()) {
-        mElementType->emitJavaFieldDefaultInitialValue(out, fieldNameWithCast);
+        std::string typeName =
+            mElementType->getJavaType(false /* forInitializer */);
+
+        out << fieldName
+            << indexString
+            << " = new "
+            << typeName
+            << "();\n";
     }
 
     if (!isPrimitiveArray) {
@@ -410,7 +505,7 @@ void ArrayType::emitJavaFieldReaderWriter(
                 depth + 1,
                 parcelName,
                 blobName,
-                fieldNameWithCast,
+                fieldName + indexString,
                 offsetName,
                 isReader);
 
@@ -426,43 +521,20 @@ void ArrayType::emitJavaFieldReaderWriter(
                 << "Array("
                 << offsetName
                 << ", "
-                << fieldNameWithCast
+                << fieldName
+                << indexString
                 << ", "
                 << mSizes.back()->javaValue()
                 << " /* size */);\n";
         } else {
-            std::string elemName = "_hidl_array_item_" + std::to_string(depth);
-
-            out << mElementType->getJavaType(false /* forInitializer */)
-                << "[] "
-                << elemName
-                << " = "
-                << fieldNameWithCast
-                << ";\n\n";
-
-            out << "if ("
-                << elemName
-                << " == null || "
-                << elemName
-                << ".length != "
-                << mSizes.back()->javaValue()
-                << ") {\n";
-
-            out.indent();
-
-            out << "throw new IllegalArgumentException("
-                << "\"Array element is not of the expected length\");\n";
-
-            out.unindent();
-            out << "}\n\n";
-
             out << blobName
                 << ".put"
                 << mElementType->getJavaSuffix()
                 << "Array("
                 << offsetName
                 << ", "
-                << elemName
+                << fieldName
+                << indexString
                 << ");\n";
         }
 
@@ -488,7 +560,7 @@ void ArrayType::emitJavaFieldReaderWriter(
 
 void ArrayType::emitVtsTypeDeclarations(Formatter& out) const {
     out << "type: " << getVtsType() << "\n";
-    out << "vector_size: " << mSizes[0]->rawValue() << "\n";
+    out << "vector_size: " << mSizes[0]->value() << "\n";
     out << "vector_value: {\n";
     out.indent();
     // Simple array case.
@@ -497,7 +569,7 @@ void ArrayType::emitVtsTypeDeclarations(Formatter& out) const {
     } else {  // Multi-dimension array case.
         for (size_t index = 1; index < mSizes.size(); index++) {
             out << "type: " << getVtsType() << "\n";
-            out << "vector_size: " << mSizes[index]->rawValue() << "\n";
+            out << "vector_size: " << mSizes[index]->value() << "\n";
             out << "vector_value: {\n";
             out.indent();
             if (index == mSizes.size() - 1) {
