@@ -406,19 +406,19 @@ type manuallyInheritCommonProperties struct {
 			Compile_multilib *string
 		}
 	}
-	Proprietary         *bool
-	Owner               *string
-	Vendor              *bool
-	Soc_specific        *bool
-	Device_specific     *bool
-	Product_specific    *bool
-	System_ext_specific *bool
-	Recovery            *bool
-	Init_rc             []string
-	Vintf_fragments     []string
-	Required            []string
-	Notice              *string
-	Dist                struct {
+	Proprietary               *bool
+	Owner                     *string
+	Vendor                    *bool
+	Soc_specific              *bool
+	Device_specific           *bool
+	Product_specific          *bool
+	Product_services_specific *bool
+	Recovery                  *bool
+	Init_rc                   []string
+	Vintf_fragments           []string
+	Required                  []string
+	Notice                    *string
+	Dist                      struct {
 		Targets []string
 		Dest    *string
 		Dir     *string
@@ -862,11 +862,13 @@ func hidlInterfaceFactory() android.Module {
 }
 
 var doubleLoadablePackageNames = []string{
+	"android.frameworks.bufferhub@1.0",
 	"android.hardware.cas@1.0",
 	"android.hardware.cas.native@1.0",
 	"android.hardware.configstore@",
 	"android.hardware.drm@1.0",
 	"android.hardware.drm@1.1",
+	"android.hardware.drm@1.2",
 	"android.hardware.graphics.allocator@",
 	"android.hardware.graphics.bufferqueue@",
 	"android.hardware.media@",
