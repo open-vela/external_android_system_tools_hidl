@@ -24,6 +24,7 @@
 
 #include <android-base/logging.h>
 #include <hidl-hash/Hash.h>
+#include <hidl-util/Formatter.h>
 #include <hidl-util/StringHelper.h>
 #include <iostream>
 
@@ -33,7 +34,7 @@
 
 static bool existdir(const char *name) {
     DIR *dir = opendir(name);
-    if (dir == NULL) {
+    if (dir == nullptr) {
         return false;
     }
     closedir(dir);
@@ -173,7 +174,7 @@ void Coordinator::onFileAccess(const std::string& path, const std::string& mode)
         // 1). If there is a bug in hidl-gen, the dependencies on the first project from
         //     the second would be required to recover correctly when the bug is fixed.
         // 2). This option is never used in Android builds.
-        mReadFiles.insert(StringHelper::LTrim(path, mRootPath));
+        mReadFiles.insert(makeRelative(path));
     }
 
     if (!mVerbose) {
@@ -200,7 +201,7 @@ status_t Coordinator::writeDepFile(const std::string& forFile) const {
     out << StringHelper::LTrim(forFile, mOutputPath) << ": \\\n";
     out.indent([&] {
         for (const std::string& file : mReadFiles) {
-            out << StringHelper::LTrim(file, mRootPath) << " \\\n";
+            out << makeRelative(file) << " \\\n";
         }
     });
     return OK;
@@ -262,7 +263,7 @@ status_t Coordinator::parseOptional(const FQName& fqName, AST** ast, std::set<AS
 
     *ast = new AST(this, &Hash::getHash(path));
 
-    if (typesAST != NULL) {
+    if (typesAST != nullptr) {
         // If types.hal for this AST's package existed, make it's defined
         // types available to the (about to be parsed) AST right away.
         (*ast)->addImportedAST(typesAST);
@@ -320,7 +321,7 @@ status_t Coordinator::parseOptional(const FQName& fqName, AST** ast, std::set<AS
                     fqName.name().c_str());
 
             err = UNKNOWN_ERROR;
-        } else if ((*ast)->containsInterfaces()) {
+        } else if ((*ast)->definesInterfaces()) {
             fprintf(stderr,
                     "ERROR: types.hal file at '%s' declares at least one "
                     "interface type.\n",
@@ -397,9 +398,13 @@ std::string Coordinator::makeAbsolute(const std::string& path) const {
     return mRootPath + path;
 }
 
+std::string Coordinator::makeRelative(const std::string& filename) const {
+    return StringHelper::LTrim(filename, mRootPath);
+}
+
 status_t Coordinator::getPackageRoot(const FQName& fqName, std::string* root) const {
     const PackageRoot* packageRoot = findPackageRoot(fqName);
-    if (root == nullptr) {
+    if (packageRoot == nullptr) {
         return UNKNOWN_ERROR;
     }
     *root = packageRoot->root.package();
@@ -442,7 +447,7 @@ status_t Coordinator::getPackagePath(const FQName& fqName, bool relative, bool s
 status_t Coordinator::getPackageInterfaceFiles(
         const FQName &package,
         std::vector<std::string> *fileNames) const {
-    fileNames->clear();
+    if (fileNames) fileNames->clear();
 
     std::string packagePath;
     status_t err =
@@ -450,18 +455,33 @@ status_t Coordinator::getPackageInterfaceFiles(
     if (err != OK) return err;
 
     const std::string path = makeAbsolute(packagePath);
-    DIR* dir = opendir(path.c_str());
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(path.c_str()), closedir);
 
-    if (dir == NULL) {
+    if (dir == nullptr) {
         fprintf(stderr, "ERROR: Could not open package path %s for package %s:\n%s\n",
                 packagePath.c_str(), package.string().c_str(), path.c_str());
         return -errno;
     }
 
+    if (fileNames == nullptr) {
+        return OK;
+    }
+
     struct dirent *ent;
-    while ((ent = readdir(dir)) != NULL) {
-        if (ent->d_type != DT_REG) {
-            continue;
+    while ((ent = readdir(dir.get())) != nullptr) {
+        // filesystems may not support d_type and return DT_UNKNOWN
+        if (ent->d_type == DT_UNKNOWN) {
+            struct stat sb;
+            const auto filename = packagePath + std::string(ent->d_name);
+            if (stat(filename.c_str(), &sb) == -1) {
+                fprintf(stderr, "ERROR: Could not stat %s\n", filename.c_str());
+                return -errno;
+            }
+            if ((sb.st_mode & S_IFMT) != S_IFREG) {
+                continue;
+            }
+        } else if (ent->d_type != DT_REG) {
+             continue;
         }
 
         const auto suffix = ".hal";
@@ -475,9 +495,6 @@ status_t Coordinator::getPackageInterfaceFiles(
 
         fileNames->push_back(std::string(ent->d_name, d_namelen - suffix_len));
     }
-
-    closedir(dir);
-    dir = NULL;
 
     std::sort(fileNames->begin(), fileNames->end(),
               [](const std::string& lhs, const std::string& rhs) -> bool {
@@ -847,9 +864,17 @@ status_t Coordinator::getUnfrozenDependencies(const FQName& fqName,
 
         for (const FQName& importedName : packageInterfaces) {
             HashStatus status = checkHash(importedName);
-            if (status == HashStatus::ERROR) return UNKNOWN_ERROR;
-            if (status == HashStatus::UNFROZEN) {
-                result->insert(importedName);
+            switch (status) {
+                case HashStatus::CHANGED:
+                case HashStatus::ERROR:
+                    return UNKNOWN_ERROR;
+                case HashStatus::FROZEN:
+                    continue;
+                case HashStatus::UNFROZEN:
+                    result->insert(importedName);
+                    continue;
+                default:
+                    LOG(FATAL) << static_cast<uint64_t>(status);
             }
         }
     }
@@ -866,27 +891,30 @@ status_t Coordinator::enforceHashes(const FQName& currentPackage) const {
 
     for (const FQName& currentFQName : packageInterfaces) {
         HashStatus status = checkHash(currentFQName);
-
-        if (status == HashStatus::ERROR) return UNKNOWN_ERROR;
-        if (status == HashStatus::CHANGED) return UNKNOWN_ERROR;
-
-        // frozen interface can only depend on a frozen interface
-        if (status == HashStatus::FROZEN) {
-            std::set<FQName> unfrozenDependencies;
-            err = getUnfrozenDependencies(currentFQName, &unfrozenDependencies);
-            if (err != OK) return err;
-
-            if (!unfrozenDependencies.empty()) {
-                std::cerr << "ERROR: Frozen interface " << currentFQName.string()
-                          << " cannot depend on unfrozen thing(s):" << std::endl;
-                for (const FQName& name : unfrozenDependencies) {
-                    std::cerr << " (unfrozen) " << name.string() << std::endl;
-                }
+        switch (status) {
+            case HashStatus::CHANGED:
+            case HashStatus::ERROR:
                 return UNKNOWN_ERROR;
-            }
-        }
+            case HashStatus::FROZEN: {
+                std::set<FQName> unfrozenDependencies;
+                err = getUnfrozenDependencies(currentFQName, &unfrozenDependencies);
+                if (err != OK) return err;
 
-        // UNFROZEN, ignore
+                if (!unfrozenDependencies.empty()) {
+                    std::cerr << "ERROR: Frozen interface " << currentFQName.string()
+                              << " cannot depend on unfrozen thing(s):" << std::endl;
+                    for (const FQName& name : unfrozenDependencies) {
+                        std::cerr << " (unfrozen) " << name.string() << std::endl;
+                    }
+                    return UNKNOWN_ERROR;
+                }
+            }
+                continue;
+            case HashStatus::UNFROZEN:
+                continue;
+            default:
+                LOG(FATAL) << static_cast<uint64_t>(status);
+        }
     }
 
     return err;
@@ -918,6 +946,89 @@ bool Coordinator::MakeParentHierarchy(const std::string &path) {
     }
 
     return true;
+}
+
+void Coordinator::emitOptionsUsageString(Formatter& out) {
+    out << "[-p <root path>] (-r <interface root>)+ [-R] [-v] [-d <depfile>]";
+}
+
+void Coordinator::emitOptionsDetailString(Formatter& out) {
+    out << "-p <root path>: Android build root, defaults to $ANDROID_BUILD_TOP or pwd.\n"
+        << "-R: Do not add default package roots if not specified in -r.\n"
+        << "-r <package:path root>: E.g., android.hardware:hardware/interfaces.\n"
+        << "-v: verbose output.\n"
+        << "-d <depfile>: location of depfile to write to.\n";
+}
+
+void Coordinator::parseOptions(int argc, char** argv, const std::string& options,
+                               const HandleArg& handleArg) {
+    // reset global state for getopt
+    optind = 1;
+
+    bool suppressDefaultPackagePaths = false;
+
+    int res;
+    std::string optstr = options + "p:r:Rvd:";
+    while ((res = getopt(argc, argv, optstr.c_str())) >= 0) {
+        switch (res) {
+            case 'v': {
+                setVerbose(true);
+                break;
+            }
+            case 'd': {
+                setDepFile(optarg);
+                break;
+            }
+            case 'p': {
+                if (!getRootPath().empty()) {
+                    fprintf(stderr, "ERROR: -p <root path> can only be specified once.\n");
+                    exit(1);
+                }
+                setRootPath(optarg);
+                break;
+            }
+            case 'r': {
+                std::string val(optarg);
+                auto index = val.find_first_of(':');
+                if (index == std::string::npos) {
+                    fprintf(stderr, "ERROR: -r option must contain ':': %s\n", val.c_str());
+                    exit(1);
+                }
+
+                auto root = val.substr(0, index);
+                auto path = val.substr(index + 1);
+
+                std::string error;
+                status_t err = addPackagePath(root, path, &error);
+                if (err != OK) {
+                    fprintf(stderr, "%s\n", error.c_str());
+                    exit(1);
+                }
+
+                break;
+            }
+            case 'R': {
+                suppressDefaultPackagePaths = true;
+                break;
+            }
+            // something downstream should handle these cases
+            default: { handleArg(res, optarg); }
+        }
+    }
+
+    if (getRootPath().empty()) {
+        const char* ANDROID_BUILD_TOP = getenv("ANDROID_BUILD_TOP");
+        if (ANDROID_BUILD_TOP != nullptr) {
+            setRootPath(ANDROID_BUILD_TOP);
+        }
+    }
+
+    if (!suppressDefaultPackagePaths) {
+        addDefaultPackagePath("android.hardware", "hardware/interfaces");
+        addDefaultPackagePath("android.hidl", "system/libhidl/transport");
+        addDefaultPackagePath("android.frameworks", "frameworks/hardware/interfaces");
+        addDefaultPackagePath("android.system", "system/hardware/interfaces");
+    }
 }
 
 }  // namespace android

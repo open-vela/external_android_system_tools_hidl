@@ -7,13 +7,17 @@ function run() {
         hidl_error_test \
         hidl_export_test \
         hidl_hash_test \
-        hidl_impl_test \
+        hidl_cpp_impl_test \
+        hidl_java_impl_test \
+        hidl_system_api_test \
         android.hardware.tests.foo@1.0-vts.driver \
         android.hardware.tests.foo@1.0-vts.profiler)
 
     local RUN_TIME_TESTS=(\
         libhidl-gen-utils_test \
+        libhidl-gen-host-utils_test \
         hidl-gen-host_test \
+        hidl-lint_test \
     )
 
     $ANDROID_BUILD_TOP/build/soong/soong_ui.bash --make-mode -j \
