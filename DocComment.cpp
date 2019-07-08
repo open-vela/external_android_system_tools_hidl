@@ -16,16 +16,18 @@
 
 #include "DocComment.h"
 
+#include <android-base/strings.h>
 #include <hidl-util/StringHelper.h>
 
 #include <cctype>
 #include <sstream>
 
+#include "Location.h"
+
 namespace android {
 
-DocComment::DocComment(const std::string& comment) {
-    std::vector<std::string> lines;
-    StringHelper::SplitString(comment, '\n', &lines);
+DocComment::DocComment(const std::string& comment, const Location& location) : mLocation(location) {
+    std::vector<std::string> lines = base::Split(base::Trim(comment), "\n");
 
     bool foundFirstLine = false;
 
@@ -40,17 +42,12 @@ DocComment::DocComment(const std::string& comment) {
         if (idx < line.size() && line[idx] == '*') idx++;
         if (idx < line.size() && line[idx] == ' ') idx++;
 
-        if (idx < line.size()) {
-            foundFirstLine = true;
-        }
+        bool isEmptyLine = idx == line.size();
 
+        foundFirstLine = foundFirstLine || !isEmptyLine;
         if (!foundFirstLine) continue;
 
-        is << line.substr(idx);
-
-        if (l + 1 < lines.size()) {
-            is << "\n";
-        }
+        is << line.substr(idx) << "\n";
     }
 
     mComment = is.str();
@@ -58,6 +55,7 @@ DocComment::DocComment(const std::string& comment) {
 
 void DocComment::merge(const DocComment* comment) {
     mComment = mComment + "\n\n" + comment->mComment;
+    mLocation.setLocation(mLocation.begin(), comment->mLocation.end());
 }
 
 void DocComment::emit(Formatter& out) const {

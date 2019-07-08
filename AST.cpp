@@ -22,6 +22,7 @@
 #include "HandleType.h"
 #include "Interface.h"
 #include "Location.h"
+#include "Method.h"
 #include "Scope.h"
 #include "TypeDef.h"
 
@@ -30,19 +31,27 @@
 #include <hidl-util/Formatter.h>
 #include <hidl-util/StringHelper.h>
 #include <stdlib.h>
+
 #include <algorithm>
 #include <iostream>
+#include <map>
+#include <string>
 
 namespace android {
 
 AST::AST(const Coordinator* coordinator, const Hash* fileHash)
     : mCoordinator(coordinator),
       mFileHash(fileHash),
-      mRootScope("(root scope)", FQName(), Location::startOf(fileHash->getPath()),
+      mRootScope("(root scope)", FQName(),
+                 Location::startOf(coordinator->makeRelative(fileHash->getPath())),
                  nullptr /* parent */) {}
 
-Scope* AST::getRootScope() {
+Scope* AST::getMutableRootScope() {
     return &mRootScope;
+}
+
+const Scope& AST::getRootScope() const {
+    return mRootScope;
 }
 
 // used by the parser.
@@ -59,6 +68,10 @@ const std::string& AST::getFilename() const {
 }
 const Hash* AST::getFileHash() const {
     return mFileHash;
+}
+
+const Coordinator& AST::getCoordinator() const {
+    return *mCoordinator;
 }
 
 bool AST::setPackage(const char *package) {
@@ -83,16 +96,21 @@ bool AST::isInterface() const {
     return mRootScope.getInterface() != nullptr;
 }
 
-bool AST::containsInterfaces() const {
-    return mRootScope.containsInterfaces();
+bool AST::definesInterfaces() const {
+    return mRootScope.definesInterfaces();
 }
 
 status_t AST::postParse() {
     status_t err;
 
-    // lookupTypes is the first pass.
+    // lookupTypes is the first pass for references to be resolved.
     err = lookupTypes();
     if (err != OK) return err;
+
+    // Indicate that all types are now in "postParse" stage.
+    err = setParseStage(Type::ParseStage::PARSE, Type::ParseStage::POST_PARSE);
+    if (err != OK) return err;
+
     // validateDefinedTypesUniqueNames is the first call
     // after lookup, as other errors could appear because
     // user meant different type than we assumed.
@@ -104,13 +122,15 @@ status_t AST::postParse() {
     if (err != OK) return err;
     err = resolveInheritance();
     if (err != OK) return err;
-    err = lookupLocalIdentifiers();
+    err = lookupConstantExpressions();
     if (err != OK) return err;
     // checkAcyclicConstantExpressions is after resolveInheritance,
     // as resolveInheritance autofills enum values.
     err = checkAcyclicConstantExpressions();
     if (err != OK) return err;
-    err = evaluate();
+    err = validateConstantExpressions();
+    if (err != OK) return err;
+    err = evaluateConstantExpressions();
     if (err != OK) return err;
     err = validate();
     if (err != OK) return err;
@@ -127,13 +147,9 @@ status_t AST::postParse() {
             return OK;
         },
         true /* processBeforeDependencies */);
-    std::unordered_set<const Type*> visited;
-    mRootScope.recursivePass(
-        [](Type* type) {
-            type->setPostParseCompleted();
-            return OK;
-        },
-        &visited);
+
+    err = setParseStage(Type::ParseStage::POST_PARSE, Type::ParseStage::COMPLETED);
+    if (err != OK) return err;
 
     return OK;
 }
@@ -142,20 +158,50 @@ status_t AST::constantExpressionRecursivePass(
     const std::function<status_t(ConstantExpression*)>& func, bool processBeforeDependencies) {
     std::unordered_set<const Type*> visitedTypes;
     std::unordered_set<const ConstantExpression*> visitedCE;
-    return mRootScope.recursivePass(
-        [&](Type* type) -> status_t {
-            for (auto* ce : type->getConstantExpressions()) {
-                status_t err = ce->recursivePass(func, &visitedCE, processBeforeDependencies);
-                if (err != OK) return err;
-            }
-            return OK;
-        },
-        &visitedTypes);
+    return mRootScope.recursivePass(Type::ParseStage::POST_PARSE,
+                                    [&](Type* type) -> status_t {
+                                        for (auto* ce : type->getConstantExpressions()) {
+                                            status_t err = ce->recursivePass(
+                                                func, &visitedCE, processBeforeDependencies);
+                                            if (err != OK) return err;
+                                        }
+                                        return OK;
+                                    },
+                                    &visitedTypes);
+}
+
+status_t AST::constantExpressionRecursivePass(
+    const std::function<status_t(const ConstantExpression*)>& func,
+    bool processBeforeDependencies) const {
+    std::unordered_set<const Type*> visitedTypes;
+    std::unordered_set<const ConstantExpression*> visitedCE;
+    return mRootScope.recursivePass(Type::ParseStage::POST_PARSE,
+                                    [&](const Type* type) -> status_t {
+                                        for (auto* ce : type->getConstantExpressions()) {
+                                            status_t err = ce->recursivePass(
+                                                func, &visitedCE, processBeforeDependencies);
+                                            if (err != OK) return err;
+                                        }
+                                        return OK;
+                                    },
+                                    &visitedTypes);
+}
+
+status_t AST::setParseStage(Type::ParseStage oldStage, Type::ParseStage newStage) {
+    std::unordered_set<const Type*> visited;
+    return mRootScope.recursivePass(oldStage,
+                                    [oldStage, newStage](Type* type) {
+                                        CHECK(type->getParseStage() == oldStage);
+                                        type->setParseStage(newStage);
+                                        return OK;
+                                    },
+                                    &visited);
 }
 
 status_t AST::lookupTypes() {
     std::unordered_set<const Type*> visited;
     return mRootScope.recursivePass(
+        Type::ParseStage::PARSE,
         [&](Type* type) -> status_t {
             Scope* scope = type->isScope() ? static_cast<Scope*>(type) : type->parent();
 
@@ -182,6 +228,7 @@ status_t AST::lookupTypes() {
 status_t AST::gatherReferencedTypes() {
     std::unordered_set<const Type*> visited;
     return mRootScope.recursivePass(
+        Type::ParseStage::POST_PARSE,
         [&](Type* type) -> status_t {
             for (auto* nextRef : type->getReferences()) {
                 const Type *targetType = nextRef->get();
@@ -196,11 +243,12 @@ status_t AST::gatherReferencedTypes() {
         &visited);
 }
 
-status_t AST::lookupLocalIdentifiers() {
+status_t AST::lookupConstantExpressions() {
     std::unordered_set<const Type*> visitedTypes;
     std::unordered_set<const ConstantExpression*> visitedCE;
 
     return mRootScope.recursivePass(
+        Type::ParseStage::POST_PARSE,
         [&](Type* type) -> status_t {
             Scope* scope = type->isScope() ? static_cast<Scope*>(type) : type->parent();
 
@@ -213,6 +261,18 @@ status_t AST::lookupLocalIdentifiers() {
                             LocalIdentifier* iden = lookupLocalIdentifier(*nextRef, scope);
                             if (iden == nullptr) return UNKNOWN_ERROR;
                             nextRef->set(iden);
+                        }
+                        for (auto* nextRef : ce->getTypeReferences()) {
+                            if (nextRef->isResolved()) continue;
+
+                            Type* nextType = lookupType(nextRef->getLookupFqName(), scope);
+                            if (nextType == nullptr) {
+                                std::cerr << "ERROR: Failed to lookup type '"
+                                          << nextRef->getLookupFqName().string() << "' at "
+                                          << nextRef->location() << "\n";
+                                return UNKNOWN_ERROR;
+                            }
+                            nextRef->set(nextType);
                         }
                         return OK;
                     },
@@ -228,6 +288,7 @@ status_t AST::lookupLocalIdentifiers() {
 status_t AST::validateDefinedTypesUniqueNames() const {
     std::unordered_set<const Type*> visited;
     return mRootScope.recursivePass(
+        Type::ParseStage::POST_PARSE,
         [&](const Type* type) -> status_t {
             // We only want to validate type definition names in this place.
             if (type->isScope()) {
@@ -240,10 +301,17 @@ status_t AST::validateDefinedTypesUniqueNames() const {
 
 status_t AST::resolveInheritance() {
     std::unordered_set<const Type*> visited;
-    return mRootScope.recursivePass(&Type::resolveInheritance, &visited);
+    return mRootScope.recursivePass(Type::ParseStage::POST_PARSE, &Type::resolveInheritance,
+                                    &visited);
 }
 
-status_t AST::evaluate() {
+status_t AST::validateConstantExpressions() const {
+    return constantExpressionRecursivePass(
+        [](const ConstantExpression* ce) { return ce->validate(); },
+        true /* processBeforeDependencies */);
+}
+
+status_t AST::evaluateConstantExpressions() {
     return constantExpressionRecursivePass(
         [](ConstantExpression* ce) {
             ce->evaluate();
@@ -254,7 +322,7 @@ status_t AST::evaluate() {
 
 status_t AST::validate() const {
     std::unordered_set<const Type*> visited;
-    return mRootScope.recursivePass(&Type::validate, &visited);
+    return mRootScope.recursivePass(Type::ParseStage::POST_PARSE, &Type::validate, &visited);
 }
 
 status_t AST::topologicalReorder() {
@@ -264,14 +332,14 @@ status_t AST::topologicalReorder() {
     if (err != OK) return err;
 
     std::unordered_set<const Type*> visited;
-    mRootScope.recursivePass(
-        [&](Type* type) {
-            if (type->isScope()) {
-                static_cast<Scope*>(type)->topologicalReorder(reversedOrder);
-            }
-            return OK;
-        },
-        &visited);
+    mRootScope.recursivePass(Type::ParseStage::POST_PARSE,
+                             [&](Type* type) {
+                                 if (type->isScope()) {
+                                     static_cast<Scope*>(type)->topologicalReorder(reversedOrder);
+                                 }
+                                 return OK;
+                             },
+                             &visited);
     return OK;
 }
 
@@ -279,32 +347,34 @@ status_t AST::checkAcyclicConstantExpressions() const {
     std::unordered_set<const Type*> visitedTypes;
     std::unordered_set<const ConstantExpression*> visitedCE;
     std::unordered_set<const ConstantExpression*> stack;
-    return mRootScope.recursivePass(
-        [&](const Type* type) -> status_t {
-            for (auto* ce : type->getConstantExpressions()) {
-                status_t err = ce->checkAcyclic(&visitedCE, &stack).status;
-                CHECK(err != OK || stack.empty());
-                if (err != OK) return err;
-            }
-            return OK;
-        },
-        &visitedTypes);
+    return mRootScope.recursivePass(Type::ParseStage::POST_PARSE,
+                                    [&](const Type* type) -> status_t {
+                                        for (auto* ce : type->getConstantExpressions()) {
+                                            status_t err =
+                                                ce->checkAcyclic(&visitedCE, &stack).status;
+                                            CHECK(err != OK || stack.empty());
+                                            if (err != OK) return err;
+                                        }
+                                        return OK;
+                                    },
+                                    &visitedTypes);
 }
 
 status_t AST::checkForwardReferenceRestrictions() const {
     std::unordered_set<const Type*> visited;
-    return mRootScope.recursivePass(
-        [](const Type* type) -> status_t {
-            for (const Reference<Type>* ref : type->getReferences()) {
-                status_t err = type->checkForwardReferenceRestrictions(*ref);
-                if (err != OK) return err;
-            }
-            return OK;
-        },
-        &visited);
+    return mRootScope.recursivePass(Type::ParseStage::POST_PARSE,
+                                    [](const Type* type) -> status_t {
+                                        for (const Reference<Type>* ref : type->getReferences()) {
+                                            status_t err =
+                                                type->checkForwardReferenceRestrictions(*ref);
+                                            if (err != OK) return err;
+                                        }
+                                        return OK;
+                                    },
+                                    &visited);
 }
 
-bool AST::addImport(const char *import) {
+bool AST::addImport(const char* import, const Location& location) {
     FQName fqName;
     if (!FQName::parse(import, &fqName)) {
         std::cerr << "ERROR: '" << import << "' is an invalid fully-qualified name." << std::endl;
@@ -312,6 +382,8 @@ bool AST::addImport(const char *import) {
     }
 
     fqName.applyDefaults(mPackage.package(), mPackage.version());
+
+    mImportStatements.push_back({fqName, location});
 
     if (fqName.name().empty()) {
         // import a package
@@ -448,7 +520,6 @@ EnumValue* AST::lookupEnumValue(const FQName& fqName, std::string* errorMsg, Sco
     FQName enumTypeName = fqName.typeName();
     std::string enumValueName = fqName.valueName();
 
-    CHECK(enumTypeName.isValid());
     CHECK(!enumValueName.empty());
 
     Type* type = lookupType(enumTypeName, scope);
@@ -475,8 +546,6 @@ EnumValue* AST::lookupEnumValue(const FQName& fqName, std::string* errorMsg, Sco
 }
 
 Type* AST::lookupType(const FQName& fqName, Scope* scope) {
-    CHECK(fqName.isValid());
-
     if (fqName.name().empty()) {
         // Given a package and version???
         return nullptr;
@@ -695,6 +764,10 @@ Type *AST::findDefinedType(const FQName &fqName, FQName *matchingName) const {
     return nullptr;
 }
 
+const std::vector<ImportStatement>& AST::getImportStatements() const {
+    return mImportStatements;
+}
+
 void AST::getImportedPackages(std::set<FQName> *importSet) const {
     for (const auto& fqName : mImportedNamesGranular) {
         FQName packageName = fqName.getPackageAndVersion();
@@ -785,6 +858,50 @@ void AST::addReferencedTypes(std::set<FQName> *referencedTypes) const {
             [referencedTypes](const auto &fqName) {
                 referencedTypes->insert(fqName);
             });
+}
+
+bool AST::addMethod(Method* method, Interface* iface) {
+    if (iface->isIBase()) {
+        if (!mAllReservedMethods.emplace(method->name(), method).second) {
+            std::cerr << "ERROR: hidl-gen encountered duplicated reserved method " << method->name()
+                      << std::endl;
+            return false;
+        }
+
+        // methods will be added to iface in addAllReservedMethodsToInterface
+        return true;
+    }
+
+    iface->addUserDefinedMethod(method);
+
+    return true;
+}
+
+bool AST::addAllReservedMethodsToInterface(Interface* iface) {
+    std::map<std::string, Method*> allReservedMethods(mAllReservedMethods);
+    // Looking for the IBase AST which is imported for all interfaces that are not IBase
+    for (const AST* importedAST : mImportedASTs) {
+        allReservedMethods.insert(importedAST->mAllReservedMethods.begin(),
+                                  importedAST->mAllReservedMethods.end());
+    }
+
+    return iface->addAllReservedMethods(allReservedMethods);
+}
+
+void AST::setHeader(const DocComment* header) {
+    mHeader = header;
+}
+
+const DocComment* AST::getHeader() const {
+    return mHeader;
+}
+
+void AST::addUnhandledComment(const DocComment* docComment) {
+    if (docComment != nullptr) mUnhandledComments.push_back(docComment);
+}
+
+const std::vector<const DocComment*> AST::getUnhandledComments() const {
+    return mUnhandledComments;
 }
 
 }  // namespace android;

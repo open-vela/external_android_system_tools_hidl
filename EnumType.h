@@ -39,6 +39,9 @@ struct EnumType : public Scope {
 
     void forEachValueFromRoot(const std::function<void(EnumValue*)> f) const;
 
+    // This is the number of distinct keys (even if they have colliding values)
+    size_t numValueNames() const;
+
     LocalIdentifier *lookupIdentifier(const std::string &name) const override;
 
     bool isElidableType() const override;
@@ -52,16 +55,15 @@ struct EnumType : public Scope {
                            bool specifyNamespaces) const override;
 
     std::string getJavaType(bool forInitializer) const override;
+    std::string getJavaTypeClass() const override;
 
     std::string getJavaSuffix() const override;
-
-    std::string getJavaWrapperType() const override;
 
     std::string getVtsType() const override;
 
     std::string getBitfieldCppType(StorageMode mode, bool specifyNamespaces = true) const;
     std::string getBitfieldJavaType(bool forInitializer = false) const;
-    std::string getBitfieldJavaWrapperType() const;
+    std::string getBitfieldJavaTypeClass() const;
 
     // Return the type that corresponds to bitfield<T>.
     const BitFieldType* getBitfieldType() const;
@@ -72,6 +74,10 @@ struct EnumType : public Scope {
     status_t resolveInheritance() override;
     status_t validate() const override;
     status_t validateUniqueNames() const;
+
+    void emitJavaFieldInitializer(Formatter&, const std::string&) const override;
+
+    void emitJavaFieldDefaultInitialValue(Formatter&, const std::string&) const override;
 
     void emitReaderWriter(
             Formatter &out,
@@ -94,6 +100,7 @@ struct EnumType : public Scope {
     void emitTypeForwardDeclaration(Formatter& out) const override;
     void emitGlobalTypeDeclarations(Formatter& out) const override;
     void emitPackageTypeDeclarations(Formatter& out) const override;
+    void emitPackageTypeHeaderDefinitions(Formatter& out) const override;
 
     void emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const override;
 
@@ -141,10 +148,9 @@ struct EnumValue : public LocalIdentifier, DocCommentable {
     EnumValue(const char* name, ConstantExpression* value, const Location& location);
 
     std::string name() const;
-    std::string value(ScalarType::Kind castKind) const;
+    std::string rawValue(ScalarType::Kind castKind) const;
     std::string cppValue(ScalarType::Kind castKind) const;
     std::string javaValue(ScalarType::Kind castKind) const;
-    std::string comment() const;
     void autofill(const EnumType* prevType, EnumValue* prevValue, const ScalarType* type);
     ConstantExpression* constExpr() const override;
 
@@ -183,10 +189,9 @@ struct BitFieldType : public TemplatedType {
                            bool specifyNamespaces) const override;
 
     std::string getJavaType(bool forInitializer) const override;
+    std::string getJavaTypeClass() const override;
 
     std::string getJavaSuffix() const override;
-
-    std::string getJavaWrapperType() const override;
 
     std::string getVtsType() const override;
 
