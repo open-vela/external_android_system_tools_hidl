@@ -34,7 +34,6 @@ namespace android {
 
 struct Coordinator;
 struct ConstantExpression;
-struct DocComment;
 struct EnumValue;
 struct Formatter;
 struct Interface;
@@ -45,21 +44,16 @@ template <class T>
 struct NamedReference;
 struct Type;
 
-struct ImportStatement {
-    FQName fqName;
-    Location location;
-};
-
 struct AST {
     AST(const Coordinator* coordinator, const Hash* fileHash);
 
     bool setPackage(const char *package);
-    bool addImport(const char* import, const Location& location);
+    bool addImport(const char *import);
 
     // package and version really.
     FQName package() const;
     bool isInterface() const;
-    bool definesInterfaces() const;
+    bool containsInterfaces() const;
 
     // Adds package, version and scope stack to local name
     FQName makeFullName(const char* localName, Scope* scope) const;
@@ -68,8 +62,6 @@ struct AST {
 
     const std::string& getFilename() const;
     const Hash* getFileHash() const;
-
-    const Coordinator& getCoordinator() const;
 
     // Look up local identifier.
     // It could be plain identifier or enum value as described by lookupEnumValue.
@@ -92,19 +84,12 @@ struct AST {
     // Recursive pass on constant expression tree
     status_t constantExpressionRecursivePass(
         const std::function<status_t(ConstantExpression*)>& func, bool processBeforeDependencies);
-    status_t constantExpressionRecursivePass(
-        const std::function<status_t(const ConstantExpression*)>& func,
-        bool processBeforeDependencies) const;
-
-    // Recursive tree pass that sets ParseStage of all types to newStage.
-    status_t setParseStage(Type::ParseStage oldStage, Type::ParseStage newStage);
 
     // Recursive tree pass that looks up all referenced types
     status_t lookupTypes();
 
     // Recursive tree pass that looks up all referenced local identifiers
-    // and types referenced by constant expressions
-    status_t lookupConstantExpressions();
+    status_t lookupLocalIdentifiers();
 
     // Recursive tree pass that validates that all defined types
     // have unique names in their scopes.
@@ -114,11 +99,8 @@ struct AST {
     // that depend on super types
     status_t resolveInheritance();
 
-    // Recursive tree pass that validates constant expressions
-    status_t validateConstantExpressions() const;
-
     // Recursive tree pass that evaluates constant expressions
-    status_t evaluateConstantExpressions();
+    status_t evaluate();
 
     // Recursive tree pass that validates all type-related
     // syntax restrictions
@@ -152,14 +134,10 @@ struct AST {
     void generateCppAdapterSource(Formatter& out) const;
 
     void generateJava(Formatter& out, const std::string& limitToType) const;
-    void generateJavaImpl(Formatter& out) const;
     void generateJavaTypes(Formatter& out, const std::string& limitToType) const;
 
     void generateVts(Formatter& out) const;
 
-    void generateDependencies(Formatter& out) const;
-
-    const std::vector<ImportStatement>& getImportStatements() const;
     void getImportedPackages(std::set<FQName> *importSet) const;
 
     // Run getImportedPackages on this, then run getImportedPackages on
@@ -200,8 +178,7 @@ struct AST {
     // types or Interface base name (e.x. Foo)
     std::string getBaseName() const;
 
-    Scope* getMutableRootScope();
-    const Scope& getRootScope() const;
+    Scope* getRootScope();
 
     static void generateCppPackageInclude(Formatter& out, const FQName& package,
                                           const std::string& klass);
@@ -211,33 +188,13 @@ struct AST {
 
     void addToImportedNamesGranular(const FQName &fqName);
 
-    bool addMethod(Method* method, Interface* iface);
-    bool addAllReservedMethodsToInterface(Interface* iface);
-
-    void setHeader(const DocComment* header);
-    const DocComment* getHeader() const;
-
-    // TODO: Clean up all interface usages of unhandled comments and ensure they are attached to the
-    // right element
-    void addUnhandledComment(const DocComment* docComment);
-    const std::vector<const DocComment*> getUnhandledComments() const;
-
-  private:
+   private:
     const Coordinator* mCoordinator;
     const Hash* mFileHash;
 
     RootScope mRootScope;
 
     FQName mPackage;
-
-    // Header for the file
-    const DocComment* mHeader = nullptr;
-
-    // A list of trailing DocComments.
-    std::vector<const DocComment*> mUnhandledComments;
-
-    // A list of the FQNames present in the import statements
-    std::vector<ImportStatement> mImportStatements;
 
     // A set of all external interfaces/types that are _actually_ referenced
     // in this AST, this is a subset of those specified in import statements.
@@ -263,9 +220,6 @@ struct AST {
     // Types keyed by full names defined in this AST.
     std::map<FQName, Type *> mDefinedTypesByFullName;
 
-    // contains all the hidl reserved methods part of this AST
-    std::map<std::string, Method*> mAllReservedMethods;
-
     // used by the parser.
     size_t mSyntaxErrors = 0;
 
@@ -290,6 +244,8 @@ struct AST {
                                 bool indicateGenerated = true) const;
     void enterLeaveNamespace(Formatter &out, bool enter) const;
 
+    static void generateCheckNonNull(Formatter &out, const std::string &nonNull);
+
     void generateTypeSource(Formatter& out, const std::string& ifaceName) const;
 
     // a method, and in which interface is it originally defined.
@@ -304,9 +260,9 @@ struct AST {
                          bool includeParents = true) const;
     void generateStubImplMethod(Formatter& out, const std::string& className,
                                 const Method* method) const;
-    void generatePassthroughMethod(Formatter& out, const Method* method, const Interface* superInterface) const;
+    void generatePassthroughMethod(Formatter& out, const Method* method) const;
     void generateStaticProxyMethodSource(Formatter& out, const std::string& className,
-                                         const Method* method, const Interface* superInterface) const;
+                                         const Method* method) const;
     void generateProxyMethodSource(Formatter& out, const std::string& className,
                                    const Method* method, const Interface* superInterface) const;
     void generateAdapterMethod(Formatter& out, const Method* method) const;
@@ -320,7 +276,7 @@ struct AST {
     void generateStubSourceForMethod(Formatter& out, const Method* method,
                                      const Interface* superInterface) const;
     void generateStaticStubMethodSource(Formatter& out, const FQName& fqName,
-                                        const Method* method, const Interface* superInterface) const;
+                                        const Method* method) const;
 
     void generatePassthroughSource(Formatter& out) const;
 
@@ -347,8 +303,7 @@ struct AST {
     void generateCppInstrumentationCall(
             Formatter &out,
             InstrumentationEvent event,
-            const Method *method,
-            const Interface* superInterface) const;
+            const Method *method) const;
 
     void declareCppReaderLocals(Formatter& out, const std::vector<NamedReference<Type>*>& arg,
                                 bool forResults) const;
@@ -357,10 +312,16 @@ struct AST {
                              const NamedReference<Type>* arg, bool isReader, Type::ErrorMode mode,
                              bool addPrefixToName) const;
 
+    void emitCppResolveReferences(Formatter& out, const std::string& parcelObj,
+                                  bool parcelObjIsPointer, const NamedReference<Type>* arg,
+                                  bool isReader, Type::ErrorMode mode, bool addPrefixToName) const;
+
     void emitJavaReaderWriter(Formatter& out, const std::string& parcelObj,
                               const NamedReference<Type>* arg, bool isReader,
                               bool addPrefixToName) const;
 
+    void emitTypeDeclarations(Formatter& out) const;
+    void emitJavaTypeDeclarations(Formatter& out) const;
     void emitVtsTypeDeclarations(Formatter& out) const;
 
     DISALLOW_COPY_AND_ASSIGN(AST);

@@ -150,12 +150,9 @@ void StringType::emitReaderWriterEmbedded(
 
 void StringType::emitJavaFieldInitializer(
         Formatter &out, const std::string &fieldName) const {
-    emitJavaFieldDefaultInitialValue(out, "String " + fieldName);
-}
-
-void StringType::emitJavaFieldDefaultInitialValue(
-        Formatter &out, const std::string &declaredFieldName) const {
-    out << declaredFieldName << " = new String();\n";
+    out << "String "
+        << fieldName
+        << " = new String();\n";
 }
 
 void StringType::emitJavaFieldReaderWriter(
@@ -183,7 +180,7 @@ void StringType::emitJavaFieldReaderWriter(
 
         // hidl_string's embedded buffer is never null(able), because it defaults to a
         // buffer containing an empty string.
-        out << "(" << getJavaTypeCast(fieldName) << ").getBytes().length + 1,\n"
+        out << fieldName << ".getBytes().length + 1,\n"
             << blobName
             << ".handle(),\n"
             << offset

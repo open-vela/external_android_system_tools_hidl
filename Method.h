@@ -65,6 +65,7 @@ struct Method : DocCommentable {
     void cppImpl(MethodImplType type, Formatter &out) const;
     void javaImpl(MethodImplType type, Formatter &out) const;
     bool isHidlReserved() const { return mIsHidlReserved; }
+    bool isHiddenFromJava() const;
     const std::vector<Annotation *> &annotations() const;
 
     std::vector<Reference<Type>*> getReferences();
@@ -101,7 +102,6 @@ struct Method : DocCommentable {
 
     void emitJavaArgSignature(Formatter &out) const;
     void emitJavaResultSignature(Formatter &out) const;
-    void emitJavaSignature(Formatter& out) const;
 
     const NamedReference<Type>* canElideCallback() const;
 
