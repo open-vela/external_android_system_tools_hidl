@@ -20,7 +20,7 @@
 #include <hidl-util/StringHelper.h>
 
 #include <cctype>
-#include <vector>
+#include <sstream>
 
 #include "Location.h"
 
@@ -31,6 +31,7 @@ DocComment::DocComment(const std::string& comment, const Location& location) : m
 
     bool foundFirstLine = false;
 
+    std::ostringstream is;
     for (size_t l = 0; l < lines.size(); l++) {
         const std::string& line = lines[l];
 
@@ -41,36 +42,26 @@ DocComment::DocComment(const std::string& comment, const Location& location) : m
         if (idx < line.size() && line[idx] == '*') idx++;
         if (idx < line.size() && line[idx] == ' ') idx++;
 
-        const std::string& sanitizedLine = line.substr(idx);
-        int i = sanitizedLine.size();
-        for (; i > 0 && isspace(sanitizedLine[i - 1]); i--)
-            ;
-
-        // Either the size is 0 or everything was whitespace.
-        bool isEmptyLine = i == 0;
+        bool isEmptyLine = idx == line.size();
 
         foundFirstLine = foundFirstLine || !isEmptyLine;
         if (!foundFirstLine) continue;
 
-        // if isEmptyLine, i == 0 so substr == ""
-        mLines.push_back(sanitizedLine.substr(0, i));
+        is << line.substr(idx) << "\n";
     }
+
+    mComment = is.str();
 }
 
 void DocComment::merge(const DocComment* comment) {
-    mLines.insert(mLines.end(), 2, "");
-    mLines.insert(mLines.end(), comment->mLines.begin(), comment->mLines.end());
+    mComment = mComment + "\n\n" + comment->mComment;
     mLocation.setLocation(mLocation.begin(), comment->mLocation.end());
 }
 
 void DocComment::emit(Formatter& out) const {
     out << "/**\n";
-    out.setLinePrefix(" *");
-
-    for (const std::string& line : mLines) {
-        out << (line.empty() ? "" : " ") << line << "\n";
-    }
-
+    out.setLinePrefix(" * ");
+    out << mComment;
     out.unsetLinePrefix();
     out << " */\n";
 }
