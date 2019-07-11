@@ -75,69 +75,40 @@ var (
 		CommandDeps: []string{"${soong_zip}"},
 		Description: "Zipping hidl-lints into ${output}",
 	}, "output", "files")
-
-	inheritanceHierarchyRule = pctx.StaticRule("inheritanceHierarchyRule", blueprint.RuleParams{
-		Command:     "rm -f ${out} && ${hidl} -L inheritance-hierarchy ${roots} ${fqInterface} > ${out}",
-		CommandDeps: []string{"${hidl}"},
-		Description: "HIDL inheritance hierarchy: ${fqInterface} => ${out}",
-	}, "roots", "fqInterface")
-
-	joinJsonObjectsToArrayRule = pctx.StaticRule("joinJsonObjectsToArrayRule", blueprint.RuleParams{
-		Rspfile:        "$out.rsp",
-		RspfileContent: "$files",
-		Command: "rm -rf ${out} && " +
-			// Start the output array with an opening bracket.
-			"echo '[' >> ${out} && " +
-			// Append each input file and a comma to the output.
-			"for file in $$(cat ${out}.rsp); do " +
-			"cat $$file >> ${out}; echo ',' >> ${out}; " +
-			"done && " +
-			// Remove the last comma, replacing it with the closing bracket.
-			"sed -i '$$d' ${out} && echo ']' >> ${out}",
-		Description: "Joining JSON objects into array ${out}",
-	}, "files")
 )
 
 func init() {
 	android.RegisterModuleType("hidl_interface", hidlInterfaceFactory)
 	android.RegisterSingletonType("all_hidl_lints", allHidlLintsFactory)
 	android.RegisterMakeVarsProvider(pctx, makeVarsProvider)
-	android.RegisterSingletonType("hidl_interfaces_metadata", hidlInterfacesMetadataSingletonFactory)
+	android.RegisterSingletonType("known_hidl_interfaces", knownHidlInterfacesSingletonFactory)
 	pctx.Import("android/soong/android")
 }
 
-func hidlInterfacesMetadataSingletonFactory() android.Singleton {
-	return &hidlInterfacesMetadataSingleton{}
+func knownHidlInterfacesSingletonFactory() android.Singleton {
+	return &knownHidlInterfacesSingleton{}
 }
 
-type hidlInterfacesMetadataSingleton struct {
-	inheritanceHierarchyPath android.OutputPath
+type knownHidlInterfacesSingleton struct {
+	outPath android.OutputPath
 }
 
-func (m *hidlInterfacesMetadataSingleton) GenerateBuildActions(ctx android.SingletonContext) {
-	var inheritanceHierarchyOutputs android.Paths
-	ctx.VisitAllModules(func(m android.Module) {
-		if t, ok := m.(*hidlGenRule); ok {
-			if t.properties.Language == "inheritance-hierarchy" {
-				inheritanceHierarchyOutputs = append(inheritanceHierarchyOutputs, t.genOutputs.Paths()...)
-			}
-		}
-	})
-
-	m.inheritanceHierarchyPath = android.PathForIntermediates(ctx, "hidl_inheritance_hierarchy.json")
+func (m *knownHidlInterfacesSingleton) GenerateBuildActions(ctx android.SingletonContext) {
+	m.outPath = android.PathForIntermediates(ctx, "known_hidl_interfaces.txt")
+	interfaceList := *interfaceList(ctx.Config())
+	sort.Strings(interfaceList)
 
 	ctx.Build(pctx, android.BuildParams{
-		Rule:   joinJsonObjectsToArrayRule,
-		Inputs: inheritanceHierarchyOutputs,
-		Output: m.inheritanceHierarchyPath,
+		Rule:   android.WriteFile,
+		Output: m.outPath,
 		Args: map[string]string{
-			"files": strings.Join(inheritanceHierarchyOutputs.Strings(), " "),
+			"content": strings.Join(interfaceList, " "),
 		},
 	})
 }
 
-func (m *hidlInterfacesMetadataSingleton) MakeVars(ctx android.MakeVarsContext) {
-	ctx.Strict("HIDL_INHERITANCE_HIERARCHY", m.inheritanceHierarchyPath.String())
+func (m *knownHidlInterfacesSingleton) MakeVars(ctx android.MakeVarsContext) {
+	ctx.Strict("KNOWN_HIDL_INTERFACES", m.outPath.String())
 }
 
 func allHidlLintsFactory() android.Singleton {
@@ -151,7 +122,8 @@ type allHidlLintsSingleton struct {
 func (m *allHidlLintsSingleton) GenerateBuildActions(ctx android.SingletonContext) {
 	var hidlLintOutputs android.Paths
 	ctx.VisitAllModules(func(m android.Module) {
-		if t, ok := m.(*hidlGenRule); ok {
+		switch t := m.(type) {
+		case *hidlGenRule:
 			if t.properties.Language == "lint" {
 				if len(t.genOutputs) == 1 {
 					hidlLintOutputs = append(hidlLintOutputs, t.genOutputs[0])
@@ -209,21 +181,9 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 		g.genInputs = append(g.genInputs, android.PathForModuleSrc(ctx, input))
 	}
 
-	var interfaces []string
-	for _, src := range g.properties.Inputs {
-		if strings.HasSuffix(src, ".hal") && strings.HasPrefix(src, "I") {
-			interfaces = append(interfaces, strings.TrimSuffix(src, ".hal"))
-		}
-	}
-
-	switch g.properties.Language {
-	case "lint":
+	if g.properties.Language == "lint" {
 		g.genOutputs = append(g.genOutputs, android.PathForModuleGen(ctx, "lint.json"))
-	case "inheritance-hierarchy":
-		for _, intf := range interfaces {
-			g.genOutputs = append(g.genOutputs, android.PathForModuleGen(ctx, intf+"_inheritance_hierarchy.json"))
-		}
-	default:
+	} else {
 		for _, output := range g.properties.Outputs {
 			g.genOutputs = append(g.genOutputs, android.PathForModuleGen(ctx, output))
 		}
@@ -276,22 +236,6 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 				"roots":  strings.Join(fullRootOptions, " "),
 			},
 		})
-
-		return
-	}
-
-	if g.properties.Language == "inheritance-hierarchy" {
-		for i, intf := range interfaces {
-			ctx.Build(pctx, android.BuildParams{
-				Rule:   inheritanceHierarchyRule,
-				Inputs: inputs,
-				Output: g.genOutputs[i],
-				Args: map[string]string{
-					"fqInterface": g.properties.FqName + "::" + intf,
-					"roots":       strings.Join(fullRootOptions, " "),
-				},
-			})
-		}
 
 		return
 	}
@@ -572,6 +516,15 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 	}
 
 	interfaces, types, _ := processSources(mctx, i.properties.Srcs)
+
+	if i.ModuleBase.ExportedToMake() {
+		interfaceList := interfaceList(mctx.AConfig())
+		interfaceListMutex.Lock()
+		for _, intf := range interfaces {
+			*interfaceList = append(*interfaceList, name.string()+"::I"+intf)
+		}
+		interfaceListMutex.Unlock()
+	}
 
 	if len(interfaces) == 0 && len(types) == 0 {
 		mctx.PropertyErrorf("srcs", "No sources provided.")
@@ -875,18 +828,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		Interfaces: i.properties.Interfaces,
 		Inputs:     i.properties.Srcs,
 	}, &i.inheritCommonProperties)
-
-	if i.ModuleBase.ExportedToMake() {
-		mctx.CreateModule(android.ModuleFactoryAdaptor(hidlGenFactory), &nameProperties{
-			Name: proptools.StringPtr(name.inheritanceHierarchyName()),
-		}, &hidlGenProperties{
-			Language:   "inheritance-hierarchy",
-			FqName:     name.string(),
-			Root:       i.properties.Root,
-			Interfaces: i.properties.Interfaces,
-			Inputs:     i.properties.Srcs,
-		}, &i.inheritCommonProperties)
-	}
 }
 
 func (h *hidlInterface) Name() string {
@@ -989,6 +930,16 @@ func vtsList(config android.Config) *android.Paths {
 }
 
 var vtsListMutex sync.Mutex
+
+var interfaceListKey = android.NewOnceKey("interfaceList")
+
+func interfaceList(config android.Config) *[]string {
+	return config.Once(interfaceListKey, func() interface{} {
+		return &[]string{}
+	}).(*[]string)
+}
+
+var interfaceListMutex sync.Mutex
 
 func makeVarsProvider(ctx android.MakeVarsContext) {
 	vtsList := vtsList(ctx.Config()).Strings()

@@ -153,7 +153,3 @@ func (f *fqName) vtsProfilerName() string {
 func (f *fqName) lintName() string {
 	return f.string() + "-hidl-lint"
 }
-
-func (f *fqName) inheritanceHierarchyName() string {
-	return f.string() + "-inheritance-hierarchy"
-}
