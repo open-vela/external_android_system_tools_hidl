@@ -43,7 +43,6 @@ static void usage(const char* me) {
     out.indent();
 
     out << "-h: Prints this menu.\n";
-    out << "-e: The script only errors if FQNAME does not compile (don't error on lints).\n";
     out << "-j: Prints output in JSON.\n";
     out.indent([&] {
         out << "{\n";
@@ -72,16 +71,12 @@ int main(int argc, char** argv) {
     }
 
     bool machineReadable = false;
-    bool errorOnLints = true;
 
     Coordinator coordinator;
-    coordinator.parseOptions(argc, argv, "hje", [&](int res, char* /* arg */) {
+    coordinator.parseOptions(argc, argv, "hj", [&](int res, char* /* arg */) {
         switch (res) {
             case 'j':
                 machineReadable = true;
-                break;
-            case 'e':
-                errorOnLints = false;
                 break;
             case 'h':
             case '?':
@@ -102,7 +97,6 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    bool haveLints = false;
     Json::Value lintJsonArray(Json::arrayValue);
     for (int i = 0; i < argc; ++i) {
         const char* arg = argv[i];
@@ -125,7 +119,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        std::vector<Lint> lints;
+        std::vector<Lint> errors;
         for (const FQName& target : targets) {
             AST* ast = coordinator.parse(target);
             if (ast == nullptr) {
@@ -134,23 +128,21 @@ int main(int argc, char** argv) {
                 exit(1);
             }
 
-            LintRegistry::get()->runAllLintFunctions(*ast, &lints);
+            LintRegistry::get()->runAllLintFunctions(*ast, &errors);
         }
 
-        haveLints = haveLints || !lints.empty();
-
-        std::sort(lints.begin(), lints.end());
+        std::sort(errors.begin(), errors.end());
         if (machineReadable) {
-            for (const Lint& lint : lints) {
-                lintJsonArray.append(lint.asJson());
+            for (const Lint& error : errors) {
+                lintJsonArray.append(error.asJson());
             }
         } else {
-            if (!lints.empty()) {
+            if (!errors.empty()) {
                 std::cerr << "Lints for: " << fqName.string() << std::endl << std::endl;
             }
 
-            for (const Lint& lint : lints) {
-                std::cerr << lint;
+            for (const Lint& error : errors) {
+                std::cerr << error;
             }
         }
     }
@@ -160,5 +152,5 @@ int main(int argc, char** argv) {
         writer.write(std::cerr, lintJsonArray);
     }
 
-    return errorOnLints && haveLints;
+    return 0;
 }
