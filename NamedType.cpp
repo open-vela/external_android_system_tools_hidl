@@ -16,11 +16,9 @@
 
 #include "NamedType.h"
 
-#include <string>
-
 namespace android {
 
-NamedType::NamedType(const std::string& localName, const FQName& fullName, const Location& loc,
+NamedType::NamedType(const char* localName, const FQName& fullName, const Location& loc,
                      Scope* parent)
     : Type(parent, localName), mLocalName(localName), mFullName(fullName), mLocation(loc) {}
 

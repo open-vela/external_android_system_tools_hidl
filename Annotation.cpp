@@ -20,7 +20,6 @@
 #include <hidl-util/Formatter.h>
 #include <hidl-util/StringHelper.h>
 #include <algorithm>
-#include <string>
 #include <vector>
 
 namespace android {
@@ -105,7 +104,7 @@ std::vector<const ConstantExpression*> ConstantExpressionAnnotationParam::getCon
     return ret;
 }
 
-Annotation::Annotation(const std::string& name, AnnotationParamVector* params)
+Annotation::Annotation(const char* name, AnnotationParamVector* params)
     : mName(name), mParams(params) {}
 
 std::string Annotation::name() const {

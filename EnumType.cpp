@@ -19,7 +19,6 @@
 #include <hidl-util/Formatter.h>
 #include <inttypes.h>
 #include <iostream>
-#include <string>
 #include <unordered_map>
 
 #include "Annotation.h"
@@ -28,7 +27,7 @@
 
 namespace android {
 
-EnumType::EnumType(const std::string& localName, const FQName& fullName, const Location& location,
+EnumType::EnumType(const char* localName, const FQName& fullName, const Location& location,
                    const Reference<Type>& storageType, Scope* parent)
     : Scope(localName, fullName, location, parent), mValues(), mStorageType(storageType) {}
 
@@ -324,7 +323,12 @@ void EnumType::emitIteratorDeclaration(Formatter& out) const {
         elementCount += type->mValues.size();
     }
 
-    out << "template<> constexpr std::array<" << getCppStackType() << ", " << elementCount
+    // TODO(pcc): Remove the pragmas once all users of the hidl headers have
+    // been moved to C++17.
+    out << "#pragma clang diagnostic push\n";
+    out << "#pragma clang diagnostic ignored \"-Wc++17-extensions\"\n";
+
+    out << "template<> inline constexpr std::array<" << getCppStackType() << ", " << elementCount
         << "> hidl_enum_values<" << getCppStackType() << "> = ";
     out.block([&] {
         auto enumerators = typeChain();
@@ -335,6 +339,8 @@ void EnumType::emitIteratorDeclaration(Formatter& out) const {
             }
         }
     }) << ";\n";
+
+    out << "#pragma clang diagnostic pop\n";
 }
 
 void EnumType::emitEnumBitwiseOperator(
@@ -771,7 +777,7 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-EnumValue::EnumValue(const std::string& name, ConstantExpression* value, const Location& location)
+EnumValue::EnumValue(const char* name, ConstantExpression* value, const Location& location)
     : mName(name), mValue(value), mLocation(location), mIsAutoFill(false) {}
 
 std::string EnumValue::name() const {

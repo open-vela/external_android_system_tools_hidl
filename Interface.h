@@ -18,7 +18,6 @@
 
 #define INTERFACE_H_
 
-#include <string>
 #include <vector>
 
 #include <hidl-hash/Hash.h>
@@ -35,7 +34,7 @@ struct InterfaceAndMethod;
 struct Interface : public Scope {
     const static std::unique_ptr<ConstantExpression> FLAG_ONE_WAY;
 
-    Interface(const std::string& localName, const FQName& fullName, const Location& location,
+    Interface(const char* localName, const FQName& fullName, const Location& location,
               Scope* parent, const Reference<Type>& superType, const Hash* fileHash);
 
     const Hash* getFileHash() const;
