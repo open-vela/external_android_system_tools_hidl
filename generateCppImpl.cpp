@@ -80,7 +80,7 @@ void AST::generateCppImplHeader(Formatter& out) const {
     out << "// FIXME: your file license if you have one\n\n";
     out << "#pragma once\n\n";
 
-    generateCppPackageInclude(out, mPackage, iface->definedName());
+    generateCppPackageInclude(out, mPackage, iface->localName());
 
     out << "#include <hidl/MQDescriptor.h>\n";
     out << "#include <hidl/Status.h>\n\n";
@@ -98,7 +98,11 @@ void AST::generateCppImplHeader(Formatter& out) const {
 
     out << "\n";
 
-    out << "struct " << baseName << " : public " << iface->definedName() << " {\n";
+    out << "struct "
+        << baseName
+        << " : public "
+        << iface->localName()
+        << " {\n";
 
     out.indent();
 
@@ -117,8 +121,10 @@ void AST::generateCppImplHeader(Formatter& out) const {
     out << "};\n\n";
 
     out << "// FIXME: most likely delete, this is only for passthrough implementations\n"
-        << "// extern \"C\" " << iface->definedName() << "* ";
-    generateFetchSymbol(out, iface->definedName());
+        << "// extern \"C\" "
+        << iface->localName()
+        << "* ";
+    generateFetchSymbol(out, iface->localName());
     out << "(const char* name);\n\n";
 
     out << "}  // namespace implementation\n";
@@ -145,8 +151,9 @@ void AST::generateCppImplSource(Formatter& out) const {
     });
 
     out.setLinePrefix("//");
-    out << iface->definedName() << "* ";
-    generateFetchSymbol(out, iface->definedName());
+    out << iface->localName()
+        << "* ";
+    generateFetchSymbol(out, iface->localName());
     out << "(const char* /* name */) {\n";
     out.indent();
     out << "return new " << baseName << "();\n";

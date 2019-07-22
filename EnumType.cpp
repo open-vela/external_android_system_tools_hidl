@@ -19,6 +19,7 @@
 #include <hidl-util/Formatter.h>
 #include <inttypes.h>
 #include <iostream>
+#include <string>
 #include <unordered_map>
 
 #include "Annotation.h"
@@ -27,7 +28,7 @@
 
 namespace android {
 
-EnumType::EnumType(const char* localName, const FQName& fullName, const Location& location,
+EnumType::EnumType(const std::string& localName, const FQName& fullName, const Location& location,
                    const Reference<Type>& storageType, Scope* parent)
     : Scope(localName, fullName, location, parent), mValues(), mStorageType(storageType) {}
 
@@ -152,7 +153,7 @@ const ScalarType *EnumType::resolveToScalarType() const {
 }
 
 std::string EnumType::typeName() const {
-    return "enum " + definedName();
+    return "enum " + localName();
 }
 
 bool EnumType::isEnum() const {
@@ -186,7 +187,7 @@ std::string EnumType::getVtsType() const {
 
 std::string EnumType::getBitfieldCppType(StorageMode /* mode */, bool specifyNamespaces) const {
     const std::string space = specifyNamespaces ? "::android::hardware::" : "";
-    return space + "hidl_bitfield<" + (specifyNamespaces ? fullName() : definedName()) + ">";
+    return space + "hidl_bitfield<" + (specifyNamespaces ? fullName() : localName()) + ">";
 }
 
 std::string EnumType::getBitfieldJavaType(bool forInitializer) const {
@@ -282,7 +283,11 @@ void EnumType::emitTypeDeclarations(Formatter& out) const {
 
     const std::string storageType = scalarType->getCppStackType();
 
-    out << "enum class " << definedName() << " : " << storageType << " {\n";
+    out << "enum class "
+        << localName()
+        << " : "
+        << storageType
+        << " {\n";
 
     out.indent();
 
@@ -310,7 +315,7 @@ void EnumType::emitTypeForwardDeclaration(Formatter& out) const {
     const ScalarType* scalarType = mStorageType->resolveToScalarType();
     const std::string storageType = scalarType->getCppStackType();
 
-    out << "enum class " << definedName() << " : " << storageType << ";\n";
+    out << "enum class " << localName() << " : " << storageType << ";\n";
 }
 
 void EnumType::emitIteratorDeclaration(Formatter& out) const {
@@ -491,7 +496,11 @@ void EnumType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const {
     const ScalarType *scalarType = mStorageType->resolveToScalarType();
     CHECK(scalarType != nullptr);
 
-    out << "public " << (atTopLevel ? "" : "static ") << "final class " << definedName() << " {\n";
+    out << "public "
+        << (atTopLevel ? "" : "static ")
+        << "final class "
+        << localName()
+        << " {\n";
 
     out.indent();
 
@@ -660,7 +669,7 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
     const Annotation *annotation = findExportAnnotation();
     CHECK(annotation != nullptr);
 
-    std::string name = definedName();
+    std::string name = localName();
 
     const AnnotationParam *nameParam = annotation->getParam("name");
     if (nameParam != nullptr) {
@@ -703,7 +712,7 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
 
             out.indent();
         } else {
-            out << "// Values declared in " << definedName() << " follow.\n";
+            out << "// Values declared in " << localName() << " follow.\n";
         }
 
         const std::string typeName =
@@ -769,7 +778,7 @@ void EnumType::emitExportedHeader(Formatter& out, bool forJava) const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-EnumValue::EnumValue(const char* name, ConstantExpression* value, const Location& location)
+EnumValue::EnumValue(const std::string& name, ConstantExpression* value, const Location& location)
     : mName(name), mValue(value), mLocation(location), mIsAutoFill(false) {}
 
 std::string EnumValue::name() const {
