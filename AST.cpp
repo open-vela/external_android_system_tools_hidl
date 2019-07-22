@@ -496,7 +496,7 @@ void AST::addImportedAST(AST *ast) {
 FQName AST::makeFullName(const char* localName, Scope* scope) const {
     std::vector<std::string> pathComponents{{localName}};
     for (; scope != &mRootScope; scope = scope->parent()) {
-        pathComponents.push_back(scope->definedName());
+        pathComponents.push_back(scope->localName());
     }
 
     std::reverse(pathComponents.begin(), pathComponents.end());

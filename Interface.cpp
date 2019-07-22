@@ -30,6 +30,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 
 #include <android-base/logging.h>
@@ -71,12 +72,12 @@ enum {
 const std::unique_ptr<ConstantExpression> Interface::FLAG_ONE_WAY =
     std::make_unique<LiteralConstantExpression>(ScalarType::KIND_UINT32, 0x01, "oneway");
 
-Interface::Interface(const char* localName, const FQName& fullName, const Location& location,
+Interface::Interface(const std::string& localName, const FQName& fullName, const Location& location,
                      Scope* parent, const Reference<Type>& superType, const Hash* fileHash)
     : Scope(localName, fullName, location, parent), mSuperType(superType), mFileHash(fileHash) {}
 
 std::string Interface::typeName() const {
-    return "interface " + definedName();
+    return "interface " + localName();
 }
 
 const Hash* Interface::getFileHash() const {
@@ -385,23 +386,23 @@ bool Interface::fillGetDebugInfoMethod(Method *method) const {
             {IMPL_INTERFACE,
                 [](auto &out) {
                     // getDebugInfo returns N/A for local objects.
-                    out << "::android::hidl::base::V1_0::DebugInfo info = {};\n";
-                    out << "info.pid = -1;\n";
-                    out << "info.ptr = 0;\n";
-                    out << "info.arch = \n" << sArch << ";\n";
-                    out << "_hidl_cb(info);\n";
-                    out << "return ::android::hardware::Void();\n";
+                    out << "_hidl_cb({ -1 /* pid */, 0 /* ptr */, \n"
+                        << sArch
+                        << "});\n"
+                        << "return ::android::hardware::Void();\n";
                 }
             },
             {IMPL_STUB_IMPL,
                 [](auto &out) {
-                    out << "::android::hidl::base::V1_0::DebugInfo info = {};\n";
-                    out << "info.pid = ::android::hardware::details::getPidIfSharable();\n";
-                    out << "info.ptr = ::android::hardware::details::debuggable()"
-                        << "? reinterpret_cast<uint64_t>(this) : 0;\n";
-                    out << "info.arch = \n" << sArch << ";\n";
-                    out << "_hidl_cb(info);\n";
-                    out << "return ::android::hardware::Void();\n";
+                    out << "_hidl_cb(";
+                    out.block([&] {
+                        out << "::android::hardware::details::getPidIfSharable(),\n"
+                            << "::android::hardware::details::debuggable()"
+                            << "? reinterpret_cast<uint64_t>(this) : 0 /* ptr */,\n"
+                            << sArch << "\n";
+                    });
+                    out << ");\n"
+                        << "return ::android::hardware::Void();\n";
                 }
             }
         }, /* cppImpl */
@@ -746,7 +747,7 @@ std::string Interface::getJavaType(bool /* forInitializer */) const {
 }
 
 std::string Interface::getVtsType() const {
-    if (StringHelper::EndsWith(definedName(), "Callback")) {
+    if (StringHelper::EndsWith(localName(), "Callback")) {
         return "TYPE_HIDL_CALLBACK";
     } else {
         return "TYPE_HIDL_INTERFACE";
@@ -870,7 +871,7 @@ void Interface::emitPackageTypeHeaderDefinitions(Formatter& out) const {
 void Interface::emitTypeDefinitions(Formatter& out, const std::string& prefix) const {
     std::string space = prefix.empty() ? "" : (prefix + "::");
 
-    Scope::emitTypeDefinitions(out, space + definedName());
+    Scope::emitTypeDefinitions(out, space + localName());
 }
 
 void Interface::emitJavaReaderWriter(

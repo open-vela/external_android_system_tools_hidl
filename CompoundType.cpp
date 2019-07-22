@@ -23,11 +23,12 @@
 #include <android-base/logging.h>
 #include <hidl-util/Formatter.h>
 #include <iostream>
+#include <string>
 #include <unordered_set>
 
 namespace android {
 
-CompoundType::CompoundType(Style style, const char* localName, const FQName& fullName,
+CompoundType::CompoundType(Style style, const std::string& localName, const FQName& fullName,
                            const Location& location, Scope* parent)
     : Scope(localName, fullName, location, parent), mStyle(style), mFields(nullptr) {}
 
@@ -102,9 +103,9 @@ status_t CompoundType::validateUniqueNames() const {
 
 void CompoundType::emitInvalidSubTypeNamesError(const std::string& subTypeName,
                                                 const Location& location) const {
-    std::cerr << "ERROR: Type name '" << subTypeName << "' defined at " << location
-              << " conflicts with a member function of "
-              << "safe_union " << definedName() << ". Consider renaming or "
+    std::cerr << "ERROR: Type name '" << subTypeName << "' defined at "
+              << location << " conflicts with a member function of "
+              << "safe_union " << localName() << ". Consider renaming or "
               << "moving its definition outside the safe_union scope.\n";
 }
 
@@ -113,8 +114,9 @@ status_t CompoundType::validateSubTypeNames() const {
     const auto& subTypes = Scope::getSubTypes();
 
     for (const auto& subType : subTypes) {
-        if (subType->definedName() == "getDiscriminator") {
-            emitInvalidSubTypeNamesError(subType->definedName(), subType->location());
+        if (subType->localName() == "getDiscriminator") {
+            emitInvalidSubTypeNamesError(subType->localName(),
+                                         subType->location());
             return UNKNOWN_ERROR;
         }
     }
@@ -141,13 +143,13 @@ bool CompoundType::deepCanCheckEquality(std::unordered_set<const Type*>* visited
 std::string CompoundType::typeName() const {
     switch (mStyle) {
         case STYLE_STRUCT: {
-            return "struct " + definedName();
+            return "struct " + localName();
         }
         case STYLE_UNION: {
-            return "union " + definedName();
+            return "union " + localName();
         }
         case STYLE_SAFE_UNION: {
-            return "safe_union " + definedName();
+            return "safe_union " + localName();
         }
     }
     CHECK(!"Should not be here");
@@ -499,7 +501,9 @@ void CompoundType::emitLayoutAsserts(Formatter& out, const Layout& layout,
 }
 
 void CompoundType::emitSafeUnionTypeDeclarations(Formatter& out) const {
-    out << "struct " << definedName() << " final {\n";
+    out << "struct "
+        << localName()
+        << " final {\n";
 
     out.indent();
 
@@ -529,12 +533,12 @@ void CompoundType::emitSafeUnionTypeDeclarations(Formatter& out) const {
     });
     out << ";\n\n";
 
-    out << definedName() << "();\n"                                              // Constructor
-        << "~" << definedName() << "();\n"                                       // Destructor
-        << definedName() << "(" << definedName() << "&&);\n"                     // Move constructor
-        << definedName() << "(const " << definedName() << "&);\n"                // Copy constructor
-        << definedName() << "& operator=(" << definedName() << "&&);\n"          // Move assignment
-        << definedName() << "& operator=(const " << definedName() << "&);\n\n";  // Copy assignment
+    out << localName() << "();\n"  // Constructor
+        << "~" << localName() << "();\n"  // Destructor
+        << localName() << "(" << localName() << "&&);\n"  // Move constructor
+        << localName() << "(const " << localName() << "&);\n"  // Copy constructor
+        << localName() << "& operator=(" << localName() << "&&);\n"  // Move assignment
+        << localName() << "& operator=(const " << localName() << "&);\n\n";  // Copy assignment
 
     for (const auto& field : *mFields) {
         // Setter (copy)
@@ -658,7 +662,10 @@ void CompoundType::emitTypeDeclarations(Formatter& out) const {
         return;
     }
 
-    out << ((mStyle == STYLE_STRUCT) ? "struct" : "union") << " " << definedName() << " final {\n";
+    out << ((mStyle == STYLE_STRUCT) ? "struct" : "union")
+        << " "
+        << localName()
+        << " final {\n";
 
     out.indent();
 
@@ -736,7 +743,7 @@ void CompoundType::emitTypeForwardDeclaration(Formatter& out) const {
             CHECK(!"Should not be here");
         }
     }
-    out << " " << definedName() << ";\n";
+    out << " " << localName() << ";\n";
 }
 
 void CompoundType::emitPackageTypeDeclarations(Formatter& out) const {
@@ -754,7 +761,7 @@ void CompoundType::emitPackageTypeDeclarations(Formatter& out) const {
         out << "static inline bool operator!=("
             << getCppArgumentType() << " lhs, " << getCppArgumentType() << " rhs);\n";
     } else {
-        out << "// operator== and operator!= are not generated for " << definedName() << "\n";
+        out << "// operator== and operator!= are not generated for " << localName() << "\n";
     }
 
     out.endl();
@@ -876,7 +883,7 @@ void CompoundType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
             out << "return !(lhs == rhs);\n";
         }).endl().endl();
     } else {
-        out << "// operator== and operator!= are not generated for " << definedName() << "\n\n";
+        out << "// operator== and operator!= are not generated for " << localName() << "\n\n";
     }
 }
 
@@ -1042,34 +1049,24 @@ void CompoundType::emitSafeUnionCopyAndAssignDefinition(Formatter& out,
 void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
 
     // Default constructor
-    out << fullName() << "::" << definedName() << "() ";
+    out << fullName()
+        << "::"
+        << localName()
+        << "() ";
 
     out.block([&] {
         out << "static_assert(offsetof("
             << fullName()
             << ", hidl_d) == 0, \"wrong offset\");\n";
 
-        const CompoundLayout layout = getCompoundAlignmentAndSize();
-
         if (!containsPointer()) {
-            out << "static_assert(offsetof(" << fullName()
-                << ", hidl_u) == " << layout.innerStruct.offset << ", \"wrong offset\");\n";
+            CompoundLayout layout = getCompoundAlignmentAndSize();
+            out << "static_assert(offsetof("
+                << fullName()
+                << ", hidl_u) == "
+                << layout.innerStruct.offset
+                << ", \"wrong offset\");\n";
         }
-
-        out.endl();
-
-        out << "::std::memset(&hidl_u, 0, sizeof(hidl_u));\n";
-
-        // union itself is zero'd when set
-        // padding after descriminator
-        size_t dpad = layout.innerStruct.offset - layout.discriminator.size;
-        emitPaddingZero(out, layout.discriminator.size /*offset*/, dpad /*size*/);
-
-        size_t innerStructEnd = layout.innerStruct.offset + layout.innerStruct.size;
-        // final padding of the struct
-        size_t fpad = layout.overall.size - innerStructEnd;
-        emitPaddingZero(out, innerStructEnd /*offset*/, fpad /*size*/);
-
         out.endl();
 
         CHECK(!mFields->empty());
@@ -1078,34 +1075,54 @@ void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
     }).endl().endl();
 
     // Destructor
-    out << fullName() << "::~" << definedName() << "() ";
+    out << fullName()
+        << "::~"
+        << localName()
+        << "() ";
 
     out.block([&] {
         out << "hidl_destructUnion();\n";
     }).endl().endl();
 
     // Move constructor
-    out << fullName() << "::" << definedName() << "(" << definedName()
-        << "&& other) : " << fullName() << "() ";
+    out << fullName()
+        << "::"
+        << localName()
+        << "("
+        << localName()
+        << "&& other) ";
 
     emitSafeUnionCopyAndAssignDefinition(
             out, "other", true /* isCopyConstructor */, true /* usesMoveSemantics */);
 
     // Copy constructor
-    out << fullName() << "::" << definedName() << "(const " << definedName()
-        << "& other) : " << fullName() << "() ";
+    out << fullName()
+        << "::"
+        << localName()
+        << "(const "
+        << localName()
+        << "& other) ";
 
     emitSafeUnionCopyAndAssignDefinition(
         out, "other", true /* isCopyConstructor */, false /* usesMoveSemantics */);
 
     // Move assignment operator
-    out << fullName() << "& (" << fullName() << "::operator=)(" << definedName() << "&& other) ";
+    out << fullName()
+        << "& ("
+        << fullName()
+        << "::operator=)("
+        << localName()
+        << "&& other) ";
 
     emitSafeUnionCopyAndAssignDefinition(
             out, "other", false /* isCopyConstructor */, true /* usesMoveSemantics */);
 
     // Copy assignment operator
-    out << fullName() << "& (" << fullName() << "::operator=)(const " << definedName()
+    out << fullName()
+        << "& ("
+        << fullName()
+        << "::operator=)(const "
+        << localName()
         << "& other) ";
 
     emitSafeUnionCopyAndAssignDefinition(
@@ -1204,7 +1221,7 @@ void CompoundType::emitSafeUnionTypeDefinitions(Formatter& out) const {
 
 void CompoundType::emitTypeDefinitions(Formatter& out, const std::string& prefix) const {
     std::string space = prefix.empty() ? "" : (prefix + "::");
-    Scope::emitTypeDefinitions(out, space + definedName());
+    Scope::emitTypeDefinitions(out, space + localName());
 
     if (needsEmbeddedReadWrite()) {
         emitStructReaderWriter(out, prefix, true /* isReader */);
@@ -1235,14 +1252,16 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
         out << "static ";
     }
 
-    out << "class " << definedName() << " {\n";
+    out << "class "
+        << localName()
+        << " {\n";
 
     out.indent();
 
     Scope::emitJavaTypeDeclarations(out, false /* atTopLevel */);
 
     if (mStyle == STYLE_SAFE_UNION) {
-        out << "public " << definedName() << "() ";
+        out << "public " << localName() << "() ";
         out.block([&] {
             CHECK(!mFields->empty());
             mFields->at(0)->type().emitJavaFieldDefaultInitialValue(out, "hidl_o");
@@ -1424,7 +1443,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
             out << ");\n";
         }).endl().endl();
     } else {
-        out << "// equals() is not generated for " << definedName() << "\n";
+        out << "// equals() is not generated for " << localName() << "\n";
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -1533,11 +1552,11 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
     size_t vecAlign, vecSize;
     VectorType::getAlignmentAndSizeStatic(&vecAlign, &vecSize);
 
-    out << "public static final java.util.ArrayList<" << definedName()
+    out << "public static final java.util.ArrayList<" << localName()
         << "> readVectorFromParcel(android.os.HwParcel parcel) {\n";
     out.indent();
 
-    out << "java.util.ArrayList<" << definedName() << "> _hidl_vec = new java.util.ArrayList();\n";
+    out << "java.util.ArrayList<" << localName() << "> _hidl_vec = new java.util.ArrayList();\n";
 
     if (containsInterface()) {
         out << "int size = parcel.readInt32();\n";
@@ -1670,8 +1689,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
 
     out << "public static final void writeVectorToParcel(\n";
     out.indent(2);
-    out << "android.os.HwParcel parcel, java.util.ArrayList<" << definedName()
-        << "> _hidl_vec) {\n";
+    out << "android.os.HwParcel parcel, java.util.ArrayList<" << localName() << "> _hidl_vec) {\n";
     out.unindent();
 
     if (containsInterface()) {
@@ -1768,10 +1786,10 @@ void CompoundType::emitStructReaderWriter(
 
     const std::string name = "obj";
     if (isReader) {
-        out << "const " << space << definedName() << " &" << name << ",\n";
+        out << "const " << space << localName() << " &" << name << ",\n";
         out << "const ::android::hardware::Parcel &parcel,\n";
     } else {
-        out << "const " << space << definedName() << " &" << name << ",\n";
+        out << "const " << space << localName() << " &" << name << ",\n";
         out << "::android::hardware::Parcel *parcel,\n";
     }
 
@@ -1998,33 +2016,18 @@ CompoundType::CompoundLayout CompoundType::getCompoundAlignmentAndSize() const {
     innerStruct.offset += Layout::getPad(innerStruct.offset,
                                          innerStruct.align);
 
-    // An empty struct/union still occupies a byte of space in C++.
-    if (innerStruct.size == 0) {
-        innerStruct.size = 1;
-    }
-
     overall.size = innerStruct.offset + innerStruct.size;
+
+    // An empty struct/union still occupies a byte of space in C++.
+    if (overall.size == 0) {
+        overall.size = 1;
+    }
 
     // Pad the overall structure's size
     overall.align = std::max(innerStruct.align, discriminator.align);
     overall.size += Layout::getPad(overall.size, overall.align);
 
-    if (mStyle != STYLE_SAFE_UNION) {
-        CHECK(overall.offset == innerStruct.offset) << overall.offset << " " << innerStruct.offset;
-        CHECK(overall.align == innerStruct.align) << overall.align << " " << innerStruct.align;
-        CHECK(overall.size == innerStruct.size) << overall.size << " " << innerStruct.size;
-    }
-
     return compoundLayout;
-}
-
-void CompoundType::emitPaddingZero(Formatter& out, size_t offset, size_t size) const {
-    if (size > 0) {
-        out << "::std::memset(reinterpret_cast<uint8_t*>(this) + " << offset << ", 0, " << size
-            << ");\n";
-    } else {
-        out << "// no padding to zero starting at offset " << offset << "\n";
-    }
 }
 
 std::unique_ptr<ScalarType> CompoundType::getUnionDiscriminatorType() const {
