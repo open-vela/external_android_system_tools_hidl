@@ -323,12 +323,7 @@ void EnumType::emitIteratorDeclaration(Formatter& out) const {
         elementCount += type->mValues.size();
     }
 
-    // TODO(pcc): Remove the pragmas once all users of the hidl headers have
-    // been moved to C++17.
-    out << "#pragma clang diagnostic push\n";
-    out << "#pragma clang diagnostic ignored \"-Wc++17-extensions\"\n";
-
-    out << "template<> inline constexpr std::array<" << getCppStackType() << ", " << elementCount
+    out << "template<> constexpr std::array<" << getCppStackType() << ", " << elementCount
         << "> hidl_enum_values<" << getCppStackType() << "> = ";
     out.block([&] {
         auto enumerators = typeChain();
@@ -339,8 +334,6 @@ void EnumType::emitIteratorDeclaration(Formatter& out) const {
             }
         }
     }) << ";\n";
-
-    out << "#pragma clang diagnostic pop\n";
 }
 
 void EnumType::emitEnumBitwiseOperator(
