@@ -16,13 +16,12 @@
 
 #include "TypeDef.h"
 
-#include <android-base/logging.h>
 #include <hidl-util/Formatter.h>
-#include <string>
+#include <android-base/logging.h>
 
 namespace android {
 
-TypeDef::TypeDef(const std::string& localName, const FQName& fullName, const Location& location,
+TypeDef::TypeDef(const char* localName, const FQName& fullName, const Location& location,
                  Scope* parent, const Reference<Type>& type)
     : NamedType(localName, fullName, location, parent), mReferencedType(type) {}
 

@@ -22,7 +22,6 @@
 #include "Reference.h"
 #include "Scope.h"
 
-#include <string>
 #include <vector>
 
 namespace android {
@@ -31,7 +30,7 @@ struct EnumValue;
 struct BitFieldType;
 
 struct EnumType : public Scope {
-    EnumType(const std::string& localName, const FQName& fullName, const Location& location,
+    EnumType(const char* localName, const FQName& fullName, const Location& location,
              const Reference<Type>& storageType, Scope* parent);
 
     const Type *storageType() const;
@@ -147,7 +146,7 @@ struct EnumType : public Scope {
 };
 
 struct EnumValue : public LocalIdentifier, DocCommentable {
-    EnumValue(const std::string& name, ConstantExpression* value, const Location& location);
+    EnumValue(const char* name, ConstantExpression* value, const Location& location);
 
     std::string name() const;
     std::string rawValue(ScalarType::Kind castKind) const;

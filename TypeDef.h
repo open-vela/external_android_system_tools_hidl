@@ -20,13 +20,11 @@
 
 #include "NamedType.h"
 
-#include <string>
-
 namespace android {
 
 struct TypeDef : public NamedType {
-    TypeDef(const std::string& localName, const FQName& fullName, const Location& location,
-            Scope* parent, const Reference<Type>& type);
+    TypeDef(const char* localName, const FQName& fullName, const Location& location, Scope* parent,
+            const Reference<Type>& type);
 
     const ScalarType *resolveToScalarType() const override;
 
