@@ -165,6 +165,8 @@ struct Formatter {
     Formatter &operator<<(float c);
     Formatter &operator<<(double c);
     Formatter &operator<<(long double c);
+
+    // This assumes that the formatter is currently on a newline
     Formatter& operator<<(const WrappedOutput& wrappedOutput);
 
     // Puts a prefix before each line. This is useful if
@@ -185,11 +187,10 @@ struct Formatter {
     FILE* mFile;  // invalid if nullptr
     size_t mIndentDepth;
     size_t mSpacesPerIndent;
-    size_t mCurrentPosition;
+    bool mAtStartOfLine;
 
     std::string mLinePrefix;
 
-    void printBlock(const WrappedOutput::Block& block, size_t lineLength);
     void output(const std::string &text) const;
 
     Formatter(const Formatter&) = delete;
