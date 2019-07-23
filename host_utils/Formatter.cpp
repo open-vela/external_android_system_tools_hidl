@@ -19,18 +19,17 @@
 #include <assert.h>
 
 #include <android-base/logging.h>
-#include <string>
 #include <vector>
 
 namespace android {
 
-Formatter::Formatter() : mFile(nullptr /* invalid */), mIndentDepth(0), mCurrentPosition(0) {}
+Formatter::Formatter() : mFile(nullptr /* invalid */), mIndentDepth(0), mAtStartOfLine(true) {}
 
 Formatter::Formatter(FILE* file, size_t spacesPerIndent)
     : mFile(file == nullptr ? stdout : file),
       mIndentDepth(0),
       mSpacesPerIndent(spacesPerIndent),
-      mCurrentPosition(0) {}
+      mAtStartOfLine(true) {}
 
 Formatter::~Formatter() {
     if (mFile != stdout) {
@@ -117,37 +116,34 @@ Formatter& Formatter::sWhile(const std::string& cond, const std::function<void(v
     return this->block(block);
 }
 
-Formatter& Formatter::operator<<(const std::string& out) {
+Formatter &Formatter::operator<<(const std::string &out) {
     const size_t len = out.length();
     size_t start = 0;
     while (start < len) {
         size_t pos = out.find('\n', start);
 
         if (pos == std::string::npos) {
-            if (mCurrentPosition == 0) {
+            if (mAtStartOfLine) {
                 fprintf(mFile, "%*s", (int)(getIndentation()), "");
                 fprintf(mFile, "%s", mLinePrefix.c_str());
-                mCurrentPosition = getIndentation() + mLinePrefix.size();
+                mAtStartOfLine = false;
             }
 
-            std::string sub = out.substr(start);
-            output(sub);
-            mCurrentPosition += sub.size();
+            output(out.substr(start));
             break;
         }
 
-        if (mCurrentPosition == 0 && (pos > start || !mLinePrefix.empty())) {
+        if (mAtStartOfLine && (pos > start || !mLinePrefix.empty())) {
             fprintf(mFile, "%*s", (int)(getIndentation()), "");
             fprintf(mFile, "%s", mLinePrefix.c_str());
-            mCurrentPosition = getIndentation() + mLinePrefix.size();
         }
 
         if (pos == start) {
             fprintf(mFile, "\n");
-            mCurrentPosition = 0;
+            mAtStartOfLine = true;
         } else if (pos > start) {
             output(out.substr(start, pos - start + 1));
-            mCurrentPosition = 0;
+            mAtStartOfLine = true;
         }
 
         start = pos + 1;
@@ -156,46 +152,52 @@ Formatter& Formatter::operator<<(const std::string& out) {
     return *this;
 }
 
-void Formatter::printBlock(const WrappedOutput::Block& block, size_t lineLength) {
-    size_t lineStart = mCurrentPosition ?: (getIndentation() + mLinePrefix.size());
-    size_t blockSize = block.computeSize(false);
-    if (blockSize + lineStart < lineLength) {
-        block.print(*this, false);
-        return;
-    }
-
-    // Everything will not fit on this line. Try to fit it on the next line.
-    blockSize = block.computeSize(true);
-    if ((blockSize + getIndentation() + mSpacesPerIndent + mLinePrefix.size()) < lineLength) {
-        *this << "\n";
-        indent();
-
-        block.print(*this, true);
-
-        unindent();
-        return;
-    }
-
-    if (!block.content.empty()) {
-        // Doesn't have subblocks. This means that the block itself is too big.
-        // Have to print it out.
-        *this << "\n";
-        indent();
-
-        block.print(*this, true);
-
-        unindent();
-        return;
-    }
-
-    // Everything will not fit on this line. Go through all the children
-    for (const WrappedOutput::Block& subBlock : block.blocks) {
-        printBlock(subBlock, lineLength);
-    }
-}
-
 Formatter& Formatter::operator<<(const WrappedOutput& wrappedOutput) {
-    printBlock(wrappedOutput.mRootBlock, wrappedOutput.mLineLength);
+    CHECK(mAtStartOfLine) << "This function should only be called at the start of a new line";
+
+    size_t currentPosition = getIndentation();
+    std::function<void(Formatter&, const WrappedOutput::Block&)> printBlock =
+            [&](Formatter& out, const WrappedOutput::Block& block) {
+                size_t blockSize = block.computeSize(false);
+                if (blockSize + currentPosition < wrappedOutput.mLineLength) {
+                    block.print(out, false);
+                    currentPosition += blockSize;
+                    return;
+                }
+
+                // Everything will not fit on this line. Try to fit it on the next line.
+                blockSize = block.computeSize(true);
+                if (blockSize + getIndentation() + mSpacesPerIndent < wrappedOutput.mLineLength) {
+                    out << "\n";
+                    out.indent();
+
+                    block.print(out, true);
+                    currentPosition = getIndentation() + blockSize;
+
+                    out.unindent();
+                    return;
+                }
+
+                if (!block.content.empty()) {
+                    // Doesn't have subblocks. This means that the block itself is too big.
+                    // Have to print it out.
+                    out << "\n";
+                    out.indent();
+
+                    block.print(out, true);
+                    currentPosition = getIndentation() + blockSize;
+
+                    out.unindent();
+                    return;
+                }
+
+                // Everything will not fit on this line. Go through all the children
+                for (const WrappedOutput::Block& subBlock : block.blocks) {
+                    printBlock(out, subBlock);
+                }
+            };
+
+    printBlock(*this, wrappedOutput.mRootBlock);
 
     return *this;
 }
