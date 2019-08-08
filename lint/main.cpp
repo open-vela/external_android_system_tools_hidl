@@ -146,18 +146,18 @@ int main(int argc, char** argv) {
             }
         } else {
             if (!lints.empty()) {
-                std::cout << "Lints for: " << fqName.string() << std::endl << std::endl;
+                std::cerr << "Lints for: " << fqName.string() << std::endl << std::endl;
             }
 
             for (const Lint& lint : lints) {
-                std::cout << lint;
+                std::cerr << lint;
             }
         }
     }
 
     if (machineReadable) {
         Json::StyledStreamWriter writer;
-        writer.write(std::cout, lintJsonArray);
+        writer.write(std::cerr, lintJsonArray);
     }
 
     return errorOnLints && haveLints;
