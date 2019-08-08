@@ -24,6 +24,7 @@
 #include <android-base/logging.h>
 #include <hidl-util/Formatter.h>
 #include <iostream>
+#include <set>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -638,26 +639,55 @@ void CompoundType::emitSafeUnionTypeDeclarations(Formatter& out) const {
 }
 
 void CompoundType::emitHidlDefinition(Formatter& out) const {
+    emitInlineHidlDefinition(out);
+    out << ";\n";
+}
+
+void CompoundType::emitInlineHidlDefinition(Formatter& out) const {
     if (getDocComment() != nullptr) getDocComment()->emit(out);
     out << typeName() << " ";
 
-    const std::vector<const NamedType*>& sortedTypes = getSortedDefinedTypes();
-    if (sortedTypes.empty() && mFields->empty()) {
+    std::set<FQName> namesDeclaredInScope;
+    for (const NamedReference<Type>* ref : *mFields) {
+        if (ref->definedInline()) {
+            const Type* type = ref->get();
+            CHECK(type->isCompoundType()) << " only compound types can be defined inline";
+            namesDeclaredInScope.insert(static_cast<const CompoundType*>(type)->fqName());
+        }
+    }
+
+    std::vector<const NamedType*> preDeclaredTypes;
+    for (const NamedType* namedType : getSortedDefinedTypes()) {
+        if (namesDeclaredInScope.find(namedType->fqName()) == namesDeclaredInScope.end()) {
+            // have to predeclare it
+            preDeclaredTypes.push_back(namedType);
+        }
+    }
+
+    if (preDeclaredTypes.empty() && mFields->empty()) {
         out << "{}";
     } else {
         out.block([&] {
-            for (const Type* t : sortedTypes) {
+            for (const Type* t : preDeclaredTypes) {
                 t->emitHidlDefinition(out);
             }
 
+            if (!preDeclaredTypes.empty() && !mFields->empty()) out << "\n";
+
             for (const NamedReference<Type>* ref : *mFields) {
                 if (ref->getDocComment() != nullptr) ref->getDocComment()->emit(out);
-                out << ref->localName() << " " << ref->name() << ";\n";
+
+                if (ref->definedInline()) {
+                    // Same check as above, this is for sanity
+                    CHECK(ref->get()->isCompoundType());
+                    static_cast<const CompoundType*>(ref->get())->emitInlineHidlDefinition(out);
+                    out << " " << ref->name() << ";\n";
+                } else {
+                    out << ref->localName() << " " << ref->name() << ";\n";
+                }
             }
         });
     }
-
-    out << ";\n";
 }
 
 void CompoundType::emitTypeDeclarations(Formatter& out) const {
@@ -1057,27 +1087,14 @@ void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
             << fullName()
             << ", hidl_d) == 0, \"wrong offset\");\n";
 
-        const CompoundLayout layout = getCompoundAlignmentAndSize();
-
         if (!containsPointer()) {
-            out << "static_assert(offsetof(" << fullName()
-                << ", hidl_u) == " << layout.innerStruct.offset << ", \"wrong offset\");\n";
+            CompoundLayout layout = getCompoundAlignmentAndSize();
+            out << "static_assert(offsetof("
+                << fullName()
+                << ", hidl_u) == "
+                << layout.innerStruct.offset
+                << ", \"wrong offset\");\n";
         }
-
-        out.endl();
-
-        out << "::std::memset(&hidl_u, 0, sizeof(hidl_u));\n";
-
-        // union itself is zero'd when set
-        // padding after descriminator
-        size_t dpad = layout.innerStruct.offset - layout.discriminator.size;
-        emitPaddingZero(out, layout.discriminator.size /*offset*/, dpad /*size*/);
-
-        size_t innerStructEnd = layout.innerStruct.offset + layout.innerStruct.size;
-        // final padding of the struct
-        size_t fpad = layout.overall.size - innerStructEnd;
-        emitPaddingZero(out, innerStructEnd /*offset*/, fpad /*size*/);
-
         out.endl();
 
         CHECK(!mFields->empty());
@@ -1093,15 +1110,13 @@ void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
     }).endl().endl();
 
     // Move constructor
-    out << fullName() << "::" << definedName() << "(" << definedName()
-        << "&& other) : " << fullName() << "() ";
+    out << fullName() << "::" << definedName() << "(" << definedName() << "&& other) ";
 
     emitSafeUnionCopyAndAssignDefinition(
             out, "other", true /* isCopyConstructor */, true /* usesMoveSemantics */);
 
     // Copy constructor
-    out << fullName() << "::" << definedName() << "(const " << definedName()
-        << "& other) : " << fullName() << "() ";
+    out << fullName() << "::" << definedName() << "(const " << definedName() << "& other) ";
 
     emitSafeUnionCopyAndAssignDefinition(
         out, "other", true /* isCopyConstructor */, false /* usesMoveSemantics */);
@@ -2006,33 +2021,18 @@ CompoundType::CompoundLayout CompoundType::getCompoundAlignmentAndSize() const {
     innerStruct.offset += Layout::getPad(innerStruct.offset,
                                          innerStruct.align);
 
-    // An empty struct/union still occupies a byte of space in C++.
-    if (innerStruct.size == 0) {
-        innerStruct.size = 1;
-    }
-
     overall.size = innerStruct.offset + innerStruct.size;
+
+    // An empty struct/union still occupies a byte of space in C++.
+    if (overall.size == 0) {
+        overall.size = 1;
+    }
 
     // Pad the overall structure's size
     overall.align = std::max(innerStruct.align, discriminator.align);
     overall.size += Layout::getPad(overall.size, overall.align);
 
-    if (mStyle != STYLE_SAFE_UNION) {
-        CHECK(overall.offset == innerStruct.offset) << overall.offset << " " << innerStruct.offset;
-        CHECK(overall.align == innerStruct.align) << overall.align << " " << innerStruct.align;
-        CHECK(overall.size == innerStruct.size) << overall.size << " " << innerStruct.size;
-    }
-
     return compoundLayout;
-}
-
-void CompoundType::emitPaddingZero(Formatter& out, size_t offset, size_t size) const {
-    if (size > 0) {
-        out << "::std::memset(reinterpret_cast<uint8_t*>(this) + " << offset << ", 0, " << size
-            << ");\n";
-    } else {
-        out << "// no padding to zero starting at offset " << offset << "\n";
-    }
 }
 
 std::unique_ptr<ScalarType> CompoundType::getUnionDiscriminatorType() const {
