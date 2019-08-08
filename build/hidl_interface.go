@@ -65,7 +65,7 @@ var (
 	}, "mode", "type", "inputDir", "genDir", "packagePath")
 
 	lintRule = pctx.StaticRule("lintRule", blueprint.RuleParams{
-		Command:     "rm -f ${output} && touch ${output} && ${lint} -j -e -R -p . ${roots} ${fqName} > ${output}",
+		Command:     "rm -f ${output} && touch ${output} && ${lint} -j -e -R -p . ${roots} ${fqName} 2> ${output}",
 		CommandDeps: []string{"${lint}"},
 		Description: "hidl-lint ${fqName}: ${out}",
 	}, "output", "roots", "fqName")
@@ -451,7 +451,7 @@ type hidlInterfaceProperties struct {
 type hidlInterface struct {
 	android.ModuleBase
 
-	properties hidlInterfaceProperties
+	properties              hidlInterfaceProperties
 }
 
 func processSources(mctx android.LoadHookContext, srcs []string) ([]string, []string, bool) {
@@ -605,16 +605,12 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			Generated_headers:  []string{name.headersName()},
 			Shared_libs: concat(cppDependencies, []string{
 				"libhidlbase",
-				"libhidltransport",
-				"libhwbinder",
 				"liblog",
 				"libutils",
 				"libcutils",
 			}),
 			Export_shared_lib_headers: concat(cppDependencies, []string{
 				"libhidlbase",
-				"libhidltransport",
-				"libhwbinder",
 				"libutils",
 			}),
 			Export_generated_headers: []string{name.headersName()},
@@ -706,8 +702,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			"libbase",
 			"libcutils",
 			"libhidlbase",
-			"libhidltransport",
-			"libhwbinder",
 			"liblog",
 			"libutils",
 		},
@@ -716,7 +710,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		}, wrap("", dependencies, "-adapter-helper"), cppDependencies, libraryIfExists),
 		Export_shared_lib_headers: []string{
 			"libhidlbase",
-			"libhidltransport",
 		},
 		Export_static_lib_headers: concat([]string{
 			"libhidladapter",
@@ -741,8 +734,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			"libbase",
 			"libcutils",
 			"libhidlbase",
-			"libhidltransport",
-			"libhwbinder",
 			"liblog",
 			"libutils",
 		},
@@ -886,11 +877,13 @@ func hidlInterfaceFactory() android.Module {
 }
 
 var doubleLoadablePackageNames = []string{
+	"android.frameworks.bufferhub@1.0",
 	"android.hardware.cas@1.0",
 	"android.hardware.cas.native@1.0",
 	"android.hardware.configstore@",
 	"android.hardware.drm@1.0",
 	"android.hardware.drm@1.1",
+	"android.hardware.drm@1.2",
 	"android.hardware.graphics.allocator@",
 	"android.hardware.graphics.bufferqueue@",
 	"android.hardware.media@",
@@ -911,7 +904,7 @@ func isDoubleLoadable(name string) bool {
 	return false
 }
 
-// packages in libhidltransport
+// packages in libhidlbase
 var coreDependencyPackageNames = []string{
 	"android.hidl.base@",
 	"android.hidl.manager@",
