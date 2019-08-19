@@ -33,28 +33,29 @@ namespace android {
 
 CompoundType::CompoundType(Style style, const std::string& localName, const FQName& fullName,
                            const Location& location, Scope* parent)
-    : Scope(localName, fullName, location, parent), mStyle(style) {}
+    : Scope(localName, fullName, location, parent), mStyle(style), mFields(nullptr) {}
 
 CompoundType::Style CompoundType::style() const {
     return mStyle;
 }
 
-void CompoundType::addField(NamedReference<Type>* field) {
-    mFields.push_back(field);
+void CompoundType::setFields(std::vector<NamedReference<Type>*>* fields) {
+    mFields = fields;
 }
 
 std::vector<const NamedReference<Type>*> CompoundType::getFields() const {
-    return std::vector<const NamedReference<Type>*>(mFields.begin(), mFields.end());
+    return mFields ? std::vector<const NamedReference<Type>*>(mFields->begin(), mFields->end())
+                   : std::vector<const NamedReference<Type>*>();
 }
 
 std::vector<const Reference<Type>*> CompoundType::getReferences() const {
     std::vector<const Reference<Type>*> ret;
-    ret.insert(ret.begin(), mFields.begin(), mFields.end());
+    ret.insert(ret.begin(), mFields->begin(), mFields->end());
     return ret;
 }
 
 status_t CompoundType::validate() const {
-    for (const auto* field : mFields) {
+    for (const auto* field : *mFields) {
         const Type& type = field->type();
 
         if ((type.isVector() && static_cast<const VectorType*>(&type)->isVectorOfBinders())) {
@@ -78,7 +79,7 @@ status_t CompoundType::validate() const {
         }
     }
 
-    if (mStyle == STYLE_SAFE_UNION && mFields.size() < 2) {
+    if (mStyle == STYLE_SAFE_UNION && mFields->size() < 2) {
         std::cerr << "ERROR: Safe union must contain at least two types to be useful at "
                   << location() << "\n";
         return UNKNOWN_ERROR;
@@ -96,7 +97,7 @@ status_t CompoundType::validate() const {
 status_t CompoundType::validateUniqueNames() const {
     std::unordered_set<std::string> names;
 
-    for (const auto* field : mFields) {
+    for (const auto* field : *mFields) {
         if (names.find(field->name()) != names.end()) {
             std::cerr << "ERROR: Redefinition of field '" << field->name() << "' at "
                       << field->location() << "\n";
@@ -138,7 +139,7 @@ bool CompoundType::deepCanCheckEquality(std::unordered_set<const Type*>* visited
     if (mStyle == STYLE_UNION) {
         return false;
     }
-    for (const auto* field : mFields) {
+    for (const auto* field : *mFields) {
         if (!field->get()->canCheckEquality(visited)) {
             return false;
         }
@@ -202,7 +203,7 @@ std::string CompoundType::getVtsType() const {
 }
 
 bool CompoundType::containsInterface() const {
-    for (const auto& field : mFields) {
+    for (const auto& field : *mFields) {
         if (field->type().isCompoundType()) {
             const Type& t = field->type();
             const CompoundType* ct = static_cast<const CompoundType*>(&t);
@@ -262,45 +263,60 @@ void CompoundType::emitSafeUnionReaderWriterForInterfaces(
             << "::hidl_discriminator) _hidl_d_primitive) ";
 
         out.block([&] {
-               for (const auto& field : mFields) {
-                   out << "case " << fullName() << "::hidl_discriminator::" << field->name()
-                       << ": ";
+            for (const auto& field : *mFields) {
+                out << "case "
+                    << fullName()
+                    << "::hidl_discriminator::"
+                    << field->name()
+                    << ": ";
 
-                   const std::string tempFieldName = "_hidl_temp_" + field->name();
-                   out.block([&] {
-                          if (isReader) {
-                              out << field->type().getCppResultType() << " " << tempFieldName
-                                  << ";\n";
+                const std::string tempFieldName = "_hidl_temp_" + field->name();
+                out.block([&] {
+                    if (isReader) {
+                        out << field->type().getCppResultType()
+                            << " "
+                            << tempFieldName
+                            << ";\n";
 
-                              field->type().emitReaderWriter(out, tempFieldName, parcelObj,
-                                                             parcelObjIsPointer, isReader, mode);
+                        field->type().emitReaderWriter(out, tempFieldName, parcelObj,
+                                                       parcelObjIsPointer, isReader, mode);
 
-                              const std::string derefOperator =
-                                      field->type().resultNeedsDeref() ? "*" : "";
-                              out << name << "." << field->name() << "(std::move(" << derefOperator
-                                  << tempFieldName << "));\n";
-                          } else {
-                              const std::string fieldValue = name + "." + field->name() + "()";
-                              out << field->type().getCppArgumentType() << " " << tempFieldName
-                                  << " = " << fieldValue << ";\n";
+                        const std::string derefOperator = field->type().resultNeedsDeref()
+                                                          ? "*" : "";
+                        out << name
+                            << "."
+                            << field->name()
+                            << "(std::move("
+                            << derefOperator
+                            << tempFieldName
+                            << "));\n";
+                    } else {
+                        const std::string fieldValue = name + "." + field->name() + "()";
+                        out << field->type().getCppArgumentType()
+                            << " "
+                            << tempFieldName
+                            << " = "
+                            << fieldValue
+                            << ";\n";
 
-                              field->type().emitReaderWriter(out, tempFieldName, parcelObj,
-                                                             parcelObjIsPointer, isReader, mode);
-                          }
-                          out << "break;\n";
-                      }).endl();
-               }
+                        field->type().emitReaderWriter(out, tempFieldName, parcelObj,
+                                                       parcelObjIsPointer, isReader, mode);
+                    }
+                    out << "break;\n";
+                }).endl();
+            }
 
-               out << "default: ";
-               out.block([&] {
-                      emitSafeUnionUnknownDiscriminatorError(out, "_hidl_d_primitive",
-                                                             !isReader /*fatal*/);
-                      if (isReader) {
-                          out << "_hidl_err = BAD_VALUE;\n";
-                          handleError(out, mode);
-                      }
-                  }).endl();
-           }).endl();
+            out << "default: ";
+            out.block([&] {
+                   emitSafeUnionUnknownDiscriminatorError(out, "_hidl_d_primitive",
+                                                          !isReader /*fatal*/);
+                   if (isReader) {
+                       out << "_hidl_err = BAD_VALUE;\n";
+                       handleError(out, mode);
+                   }
+               })
+                .endl();
+        }).endl();
     }).endl();
 }
 
@@ -323,7 +339,7 @@ void CompoundType::emitReaderWriter(
             return;
         }
 
-        for (const auto& field : mFields) {
+        for (const auto& field : *mFields) {
             const std::string tempFieldName = "_hidl_temp_" + field->name();
             const std::string fieldValue = name + "." + field->name();
 
@@ -508,8 +524,8 @@ void CompoundType::emitSafeUnionTypeDeclarations(Formatter& out) const {
         << " ";
 
     out.block([&] {
-        for (size_t idx = 0; idx < mFields.size(); idx++) {
-            const auto& field = mFields.at(idx);
+        for (size_t idx = 0; idx < mFields->size(); idx++) {
+            const auto& field = mFields->at(idx);
 
             field->emitDocComment(out);
             out << field->name()
@@ -529,7 +545,7 @@ void CompoundType::emitSafeUnionTypeDeclarations(Formatter& out) const {
         << definedName() << "& operator=(" << definedName() << "&&);\n"          // Move assignment
         << definedName() << "& operator=(const " << definedName() << "&);\n\n";  // Copy assignment
 
-    for (const auto& field : mFields) {
+    for (const auto& field : *mFields) {
         // Setter (copy)
         out << "void "
             << field->name()
@@ -582,7 +598,8 @@ void CompoundType::emitSafeUnionTypeDeclarations(Formatter& out) const {
     out << "union hidl_union final {\n";
     out.indent();
 
-    for (const auto& field : mFields) {
+    for (const auto& field : *mFields) {
+
         size_t fieldAlign, fieldSize;
         field->type().getAlignmentAndSize(&fieldAlign, &fieldSize);
 
@@ -639,7 +656,7 @@ void CompoundType::emitInlineHidlDefinition(Formatter& out) const {
     out << typeName() << " ";
 
     std::set<FQName> namesDeclaredInScope;
-    for (const NamedReference<Type>* ref : mFields) {
+    for (const NamedReference<Type>* ref : *mFields) {
         if (ref->definedInline()) {
             const Type* type = ref->get();
             CHECK(type->isCompoundType()) << " only compound types can be defined inline";
@@ -659,13 +676,13 @@ void CompoundType::emitInlineHidlDefinition(Formatter& out) const {
     out.indent([&] {
         size_t preDeclaredTypesIdx = 0;
         size_t fieldIdx = 0;
-        while (preDeclaredTypesIdx < preDeclaredTypes.size() && fieldIdx < mFields.size()) {
+        while (preDeclaredTypesIdx < preDeclaredTypes.size() && fieldIdx < mFields->size()) {
             out << "\n";
             if (preDeclaredTypes.at(preDeclaredTypesIdx)->location() <
-                mFields.at(fieldIdx)->location()) {
+                mFields->at(fieldIdx)->location()) {
                 preDeclaredTypes.at(preDeclaredTypesIdx++)->emitHidlDefinition(out);
             } else {
-                emitFieldHidlDefinition(out, *mFields.at(fieldIdx++));
+                emitFieldHidlDefinition(out, *mFields->at(fieldIdx++));
             }
         }
 
@@ -674,9 +691,9 @@ void CompoundType::emitInlineHidlDefinition(Formatter& out) const {
             preDeclaredTypes.at(preDeclaredTypesIdx++)->emitHidlDefinition(out);
         }
 
-        while (fieldIdx < mFields.size()) {
+        while (fieldIdx < mFields->size()) {
             out << "\n";
-            emitFieldHidlDefinition(out, *mFields.at(fieldIdx++));
+            emitFieldHidlDefinition(out, *mFields->at(fieldIdx++));
         }
     });
     out << "}";
@@ -700,7 +717,7 @@ void CompoundType::emitTypeDeclarations(Formatter& out) const {
     Scope::emitTypeDeclarations(out);
 
     if (containsPointer()) {
-        for (const auto& field : mFields) {
+        for (const auto &field : *mFields) {
             field->emitDocComment(out);
             out << field->type().getCppStackType()
                 << " "
@@ -716,7 +733,7 @@ void CompoundType::emitTypeDeclarations(Formatter& out) const {
 
     for (int pass = 0; pass < 2; ++pass) {
         size_t offset = 0;
-        for (const auto& field : mFields) {
+        for (const auto &field : *mFields) {
             size_t fieldAlign, fieldSize;
             field->type().getAlignmentAndSize(&fieldAlign, &fieldSize);
 
@@ -777,8 +794,10 @@ void CompoundType::emitTypeForwardDeclaration(Formatter& out) const {
 void CompoundType::emitPackageTypeDeclarations(Formatter& out) const {
     Scope::emitPackageTypeDeclarations(out);
 
-    out << "static inline std::string toString(" << getCppArgumentType()
-        << (mFields.empty() ? "" : " o") << ");\n";
+    out << "static inline std::string toString("
+        << getCppArgumentType()
+        << (mFields->empty() ? "" : " o")
+        << ");\n";
 
     if (canCheckEquality()) {
         out << "static inline bool operator==("
@@ -796,8 +815,10 @@ void CompoundType::emitPackageTypeDeclarations(Formatter& out) const {
 void CompoundType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
     Scope::emitPackageTypeHeaderDefinitions(out);
 
-    out << "static inline std::string toString(" << getCppArgumentType()
-        << (mFields.empty() ? "" : " o") << ") ";
+    out << "static inline std::string toString("
+        << getCppArgumentType()
+        << (mFields->empty() ? "" : " o")
+        << ") ";
 
     out.block([&] {
         // include toString for scalar types
@@ -810,7 +831,7 @@ void CompoundType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
             out.indent();
         }
 
-        for (const NamedReference<Type>* field : mFields) {
+        for (const NamedReference<Type>* field : *mFields) {
             if (mStyle == STYLE_SAFE_UNION) {
                 out << "case "
                     << fullName()
@@ -829,7 +850,7 @@ void CompoundType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
                 }).endl();
             } else {
                 out << "os += \"";
-                if (field != *(mFields.begin())) {
+                if (field != *(mFields->begin())) {
                     out << ", ";
                 }
                 out << "." << field->name() << " = \";\n";
@@ -852,9 +873,9 @@ void CompoundType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
     }).endl().endl();
 
     if (canCheckEquality()) {
-        out << "static inline bool operator==(" << getCppArgumentType() << " "
-            << (mFields.empty() ? "/* lhs */" : "lhs") << ", " << getCppArgumentType() << " "
-            << (mFields.empty() ? "/* rhs */" : "rhs") << ") ";
+        out << "static inline bool operator==("
+            << getCppArgumentType() << " " << (mFields->empty() ? "/* lhs */" : "lhs") << ", "
+            << getCppArgumentType() << " " << (mFields->empty() ? "/* rhs */" : "rhs") << ") ";
         out.block([&] {
             if (mStyle == STYLE_SAFE_UNION) {
                 out.sIf("lhs.getDiscriminator() != rhs.getDiscriminator()", [&] {
@@ -865,7 +886,7 @@ void CompoundType::emitPackageTypeHeaderDefinitions(Formatter& out) const {
                 out.indent();
             }
 
-            for (const auto& field : mFields) {
+            for (const auto& field : *mFields) {
                 if (mStyle == STYLE_SAFE_UNION) {
                     out << "case "
                         << fullName()
@@ -1024,35 +1045,41 @@ void CompoundType::emitSafeUnionCopyAndAssignDefinition(Formatter& out,
             << ".hidl_d) ";
 
         out.block([&] {
-               for (const auto& field : mFields) {
-                   const std::string parameterFieldName =
-                           (parameterName + ".hidl_u." + field->name());
+            for (const auto& field : *mFields) {
+                const std::string parameterFieldName = (parameterName + ".hidl_u." +
+                                                        field->name());
 
-                   const std::string argumentName =
-                           usesMoveSemantics ? ("std::move(" + parameterFieldName + ")")
-                                             : parameterFieldName;
+                const std::string argumentName = usesMoveSemantics
+                                                 ? ("std::move(" + parameterFieldName + ")")
+                                                 : parameterFieldName;
 
-                   out << "case hidl_discriminator::" << field->name() << ": ";
+                out << "case hidl_discriminator::"
+                    << field->name()
+                    << ": ";
 
-                   if (isCopyConstructor) {
-                       out.block([&] {
-                              emitSafeUnionFieldConstructor(out, field, argumentName);
-                              out << "break;\n";
-                          }).endl();
-                   } else {
-                       out.block([&] {
-                              out << field->name() << "(" << argumentName << ");\n"
-                                  << "break;\n";
-                          }).endl();
-                   }
-               }
+                if (isCopyConstructor) {
+                    out.block([&] {
+                        emitSafeUnionFieldConstructor(out, field, argumentName);
+                        out << "break;\n";
+                    }).endl();
+                } else {
+                    out.block([&] {
+                        out << field->name()
+                            << "("
+                            << argumentName
+                            << ");\n"
+                            << "break;\n";
+                    }).endl();
+                }
+            }
 
-               out << "default: ";
-               out.block([&] {
-                      emitSafeUnionUnknownDiscriminatorError(out, parameterName + ".hidl_d",
-                                                             true /*fatal*/);
-                  }).endl();
-           }).endl();
+            out << "default: ";
+            out.block([&] {
+                   emitSafeUnionUnknownDiscriminatorError(out, parameterName + ".hidl_d",
+                                                          true /*fatal*/);
+               })
+                .endl();
+        }).endl();
 
         if (isCopyConstructor) {
             out << "\nhidl_d = "
@@ -1074,19 +1101,32 @@ void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
             << fullName()
             << ", hidl_d) == 0, \"wrong offset\");\n";
 
+        const CompoundLayout layout = getCompoundAlignmentAndSize();
+
         if (!containsPointer()) {
-            CompoundLayout layout = getCompoundAlignmentAndSize();
-            out << "static_assert(offsetof("
-                << fullName()
-                << ", hidl_u) == "
-                << layout.innerStruct.offset
-                << ", \"wrong offset\");\n";
+            out << "static_assert(offsetof(" << fullName()
+                << ", hidl_u) == " << layout.innerStruct.offset << ", \"wrong offset\");\n";
         }
+
         out.endl();
 
-        CHECK(!mFields.empty());
-        out << "hidl_d = hidl_discriminator::" << mFields.at(0)->name() << ";\n";
-        emitSafeUnionFieldConstructor(out, mFields.at(0), "");
+        out << "::std::memset(&hidl_u, 0, sizeof(hidl_u));\n";
+
+        // union itself is zero'd when set
+        // padding after descriminator
+        size_t dpad = layout.innerStruct.offset - layout.discriminator.size;
+        emitPaddingZero(out, layout.discriminator.size /*offset*/, dpad /*size*/);
+
+        size_t innerStructEnd = layout.innerStruct.offset + layout.innerStruct.size;
+        // final padding of the struct
+        size_t fpad = layout.overall.size - innerStructEnd;
+        emitPaddingZero(out, innerStructEnd /*offset*/, fpad /*size*/);
+
+        out.endl();
+
+        CHECK(!mFields->empty());
+        out << "hidl_d = hidl_discriminator::" << mFields->at(0)->name() << ";\n";
+        emitSafeUnionFieldConstructor(out, mFields->at(0), "");
     }).endl().endl();
 
     // Destructor
@@ -1097,13 +1137,15 @@ void CompoundType::emitSafeUnionTypeConstructors(Formatter& out) const {
     }).endl().endl();
 
     // Move constructor
-    out << fullName() << "::" << definedName() << "(" << definedName() << "&& other) ";
+    out << fullName() << "::" << definedName() << "(" << definedName()
+        << "&& other) : " << fullName() << "() ";
 
     emitSafeUnionCopyAndAssignDefinition(
             out, "other", true /* isCopyConstructor */, true /* usesMoveSemantics */);
 
     // Copy constructor
-    out << fullName() << "::" << definedName() << "(const " << definedName() << "& other) ";
+    out << fullName() << "::" << definedName() << "(const " << definedName()
+        << "& other) : " << fullName() << "() ";
 
     emitSafeUnionCopyAndAssignDefinition(
         out, "other", true /* isCopyConstructor */, false /* usesMoveSemantics */);
@@ -1132,26 +1174,28 @@ void CompoundType::emitSafeUnionTypeDefinitions(Formatter& out) const {
     out.block([&] {
         out << "switch (hidl_d) ";
         out.block([&] {
-               for (const auto& field : mFields) {
-                   out << "case hidl_discriminator::" << field->name() << ": ";
 
-                   out.block([&] {
-                          out << "::android::hardware::details::destructElement(&(hidl_u."
-                              << field->name() << "));\n"
-                              << "break;\n";
-                      }).endl();
-               }
+            for (const auto& field : *mFields) {
+                out << "case hidl_discriminator::"
+                    << field->name()
+                    << ": ";
 
-               out << "default: ";
-               out.block([&] {
-                      emitSafeUnionUnknownDiscriminatorError(out, "hidl_d", true /*fatal*/);
-                  }).endl();
-           })
-                .endl()
+                out.block([&] {
+                    out << "::android::hardware::details::destructElement(&(hidl_u."
+                        << field->name()
+                        << "));\n"
+                        << "break;\n";
+                }).endl();
+            }
+
+            out << "default: ";
+            out.block(
+                   [&] { emitSafeUnionUnknownDiscriminatorError(out, "hidl_d", true /*fatal*/); })
                 .endl();
+        }).endl().endl();
     }).endl().endl();
 
-    for (const NamedReference<Type>* field : mFields) {
+    for (const NamedReference<Type>* field : *mFields) {
         // Setter (copy)
         out << "void "
             << fullName()
@@ -1252,54 +1296,58 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
     if (mStyle == STYLE_SAFE_UNION) {
         out << "public " << definedName() << "() ";
         out.block([&] {
-               CHECK(!mFields.empty());
-               mFields.at(0)->type().emitJavaFieldDefaultInitialValue(out, "hidl_o");
-           })
-                .endl()
-                .endl();
+            CHECK(!mFields->empty());
+            mFields->at(0)->type().emitJavaFieldDefaultInitialValue(out, "hidl_o");
+        }).endl().endl();
 
         const std::string discriminatorStorageType = (
                 getUnionDiscriminatorType()->getJavaType(false));
 
         out << "public static final class hidl_discriminator ";
         out.block([&] {
-               for (size_t idx = 0; idx < mFields.size(); idx++) {
-                   const auto& field = mFields.at(idx);
+            for (size_t idx = 0; idx < mFields->size(); idx++) {
+                const auto& field = mFields->at(idx);
 
-                   field->emitDocComment(out);
-                   out << "public static final " << discriminatorStorageType << " " << field->name()
-                       << " = " << idx << ";  // "
-                       << field->type().getJavaType(true /* forInitializer */) << "\n";
-               }
+                field->emitDocComment(out);
+                out << "public static final "
+                    << discriminatorStorageType
+                    << " "
+                    << field->name()
+                    << " = "
+                    << idx
+                    << ";  // "
+                    << field->type().getJavaType(true /* forInitializer */)
+                    << "\n";
+            }
 
-               out << "\n"
-                   << "public static final String getName(" << discriminatorStorageType
-                   << " value) ";
+            out << "\n"
+                << "public static final String getName("
+                << discriminatorStorageType
+                << " value) ";
 
-               out.block([&] {
-                      out << "switch (value) ";
-                      out.block([&] {
-                             for (size_t idx = 0; idx < mFields.size(); idx++) {
-                                 const auto& field = mFields.at(idx);
+            out.block([&] {
+                out << "switch (value) ";
+                out.block([&] {
+                    for (size_t idx = 0; idx < mFields->size(); idx++) {
+                        const auto& field = mFields->at(idx);
 
-                                 out << "case " << idx << ": { return \"" << field->name()
-                                     << "\"; }\n";
-                             }
-                             out << "default: { return \"Unknown\"; }\n";
-                         }).endl();
-                  })
-                       .endl()
-                       .endl();
+                        out << "case "
+                            << idx
+                            << ": { return \""
+                            << field->name()
+                            << "\"; }\n";
+                    }
+                    out << "default: { return \"Unknown\"; }\n";
+                }).endl();
+            }).endl().endl();
 
-               out << "private hidl_discriminator() {}\n";
-           })
-                .endl()
-                .endl();
+            out << "private hidl_discriminator() {}\n";
+        }).endl().endl();
 
         out << "private " << discriminatorStorageType << " hidl_d = 0;\n";
         out << "private Object hidl_o = null;\n";
 
-        for (const auto& field : mFields) {
+        for (const auto& field : *mFields) {
             // Setter
             out << "public void "
                 << field->name()
@@ -1364,7 +1412,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
             << " getDiscriminator() { return hidl_d; }\n\n";
 
     } else {
-        for (const auto& field : mFields) {
+        for (const auto& field : *mFields) {
             field->emitDocComment(out);
 
             out << "public ";
@@ -1399,7 +1447,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
                     out << "return false;\n";
                 }).endl();
             } else {
-                for (const auto& field : mFields) {
+                for (const auto &field : *mFields) {
                     std::string condition = (field->type().isScalar() || field->type().isEnum())
                         ? "this." + field->name() + " != other." + field->name()
                         : ("!android.os.HidlSupport.deepEquals(this." + field->name()
@@ -1420,7 +1468,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
                     out << "android.os.HidlSupport.deepHashCode(this.hidl_o),\n"
                         << "java.util.Objects.hashCode(this.hidl_d)";
                 } else {
-                    out.join(mFields.begin(), mFields.end(), ", \n", [&](const auto& field) {
+                    out.join(mFields->begin(), mFields->end(), ", \n", [&] (const auto &field) {
                         out << "android.os.HidlSupport.deepHashCode(this." << field->name() << ")";
                     });
                 }
@@ -1443,7 +1491,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
             out.indent();
         }
 
-        for (const auto& field : mFields) {
+        for (const auto &field : *mFields) {
             if (mStyle == STYLE_SAFE_UNION) {
                 out << "case hidl_discriminator."
                     << field->name()
@@ -1461,7 +1509,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
             }
             else {
                 out << "builder.append(\"";
-                if (field != *(mFields.begin())) {
+                if (field != *(mFields->begin())) {
                     out << ", ";
                 }
                 out << "." << field->name() << " = \");\n";
@@ -1498,7 +1546,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
             out.indent();
         }
 
-        for (const auto& field : mFields) {
+        for (const auto& field : *mFields) {
             if (mStyle == STYLE_SAFE_UNION) {
                 out << "case hidl_discriminator."
                     << field->name()
@@ -1583,7 +1631,8 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
         }
 
         size_t offset = layout.innerStruct.offset;
-        for (const auto& field : mFields) {
+        for (const auto& field : *mFields) {
+
             if (mStyle == STYLE_SAFE_UNION) {
                 out << "case hidl_discriminator."
                     << field->name()
@@ -1635,7 +1684,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
             out.indent();
         }
 
-        for (const auto& field : mFields) {
+        for (const auto& field : *mFields) {
             if (mStyle == STYLE_SAFE_UNION) {
                 out << "case hidl_discriminator."
                     << field->name()
@@ -1716,7 +1765,7 @@ void CompoundType::emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) con
         }
 
         size_t offset = layout.innerStruct.offset;
-        for (const auto& field : mFields) {
+        for (const auto& field : *mFields) {
             if (mStyle == STYLE_SAFE_UNION) {
                 out << "case hidl_discriminator."
                     << field->name()
@@ -1793,7 +1842,7 @@ void CompoundType::emitStructReaderWriter(
         out.indent();
     }
 
-    for (const auto& field : mFields) {
+    for (const auto &field : *mFields) {
         if (!field->type().needsEmbeddedReadWrite()) {
             continue;
         }
@@ -1850,7 +1899,7 @@ bool CompoundType::needsEmbeddedReadWrite() const {
         return false;
     }
 
-    for (const auto& field : mFields) {
+    for (const auto &field : *mFields) {
         if (field->type().needsEmbeddedReadWrite()) {
             return true;
         }
@@ -1897,7 +1946,7 @@ void CompoundType::emitVtsTypeDeclarations(Formatter& out) const {
     }
 
     // Emit declaration for each field.
-    for (const auto& field : mFields) {
+    for (const auto &field : *mFields) {
         switch (mStyle) {
             case STYLE_STRUCT:
             {
@@ -1937,7 +1986,7 @@ bool CompoundType::deepIsJavaCompatible(std::unordered_set<const Type*>* visited
         return false;
     }
 
-    for (const auto* field : mFields) {
+    for (const auto* field : *mFields) {
         if (!field->get()->isJavaCompatible(visited)) {
             return false;
         }
@@ -1947,7 +1996,7 @@ bool CompoundType::deepIsJavaCompatible(std::unordered_set<const Type*>* visited
 }
 
 bool CompoundType::deepContainsPointer(std::unordered_set<const Type*>* visited) const {
-    for (const auto* field : mFields) {
+    for (const auto* field : *mFields) {
         if (field->get()->containsPointer(visited)) {
             return true;
         }
@@ -1977,7 +2026,8 @@ CompoundType::CompoundLayout CompoundType::getCompoundAlignmentAndSize() const {
         innerStruct.offset = discriminator.size;
     }
 
-    for (const auto& field : mFields) {
+    for (const auto &field : *mFields) {
+
         // Each field is aligned according to its alignment requirement.
         // The surrounding structure's alignment is the maximum of its
         // fields' aligments.
@@ -2000,18 +2050,33 @@ CompoundType::CompoundLayout CompoundType::getCompoundAlignmentAndSize() const {
     innerStruct.offset += Layout::getPad(innerStruct.offset,
                                          innerStruct.align);
 
-    overall.size = innerStruct.offset + innerStruct.size;
-
     // An empty struct/union still occupies a byte of space in C++.
-    if (overall.size == 0) {
-        overall.size = 1;
+    if (innerStruct.size == 0) {
+        innerStruct.size = 1;
     }
+
+    overall.size = innerStruct.offset + innerStruct.size;
 
     // Pad the overall structure's size
     overall.align = std::max(innerStruct.align, discriminator.align);
     overall.size += Layout::getPad(overall.size, overall.align);
 
+    if (mStyle != STYLE_SAFE_UNION) {
+        CHECK(overall.offset == innerStruct.offset) << overall.offset << " " << innerStruct.offset;
+        CHECK(overall.align == innerStruct.align) << overall.align << " " << innerStruct.align;
+        CHECK(overall.size == innerStruct.size) << overall.size << " " << innerStruct.size;
+    }
+
     return compoundLayout;
+}
+
+void CompoundType::emitPaddingZero(Formatter& out, size_t offset, size_t size) const {
+    if (size > 0) {
+        out << "::std::memset(reinterpret_cast<uint8_t*>(this) + " << offset << ", 0, " << size
+            << ");\n";
+    } else {
+        out << "// no padding to zero starting at offset " << offset << "\n";
+    }
 }
 
 std::unique_ptr<ScalarType> CompoundType::getUnionDiscriminatorType() const {
@@ -2021,7 +2086,7 @@ std::unique_ptr<ScalarType> CompoundType::getUnionDiscriminatorType() const {
         {32, ScalarType::Kind::KIND_UINT32},
     };
 
-    size_t numFields = mFields.size();
+    size_t numFields = mFields->size();
     auto kind = ScalarType::Kind::KIND_UINT64;
 
     for (const auto& scalar : scalars) {
