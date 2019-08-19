@@ -231,10 +231,8 @@ struct FQName {
 
     // minor-- if result doesn't underflow, else abort.
     FQName downRev() const;
-    // minor++
-    FQName upRev() const;
 
-  private:
+   private:
     bool mIsIdentifier;
     std::string mPackage;
     // mMajor == 0 means empty.
