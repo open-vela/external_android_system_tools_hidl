@@ -39,7 +39,7 @@ struct CompoundType : public Scope {
     Style style() const;
 
     std::vector<const NamedReference<Type>*> getFields() const;
-    void addField(NamedReference<Type>* field);
+    void setFields(std::vector<NamedReference<Type>*>* fields);
 
     bool isCompoundType() const override;
 
@@ -137,13 +137,17 @@ private:
     };
 
     struct CompoundLayout {
+        // Layout of this entire object including metadata.
+        // For struct/union, this is the same as innerStruct.
         Layout overall;
+        // Layout of user-specified data
         Layout innerStruct;
+        // Layout of discriminator for safe union (otherwise zero)
         Layout discriminator;
     };
 
     Style mStyle;
-    std::vector<NamedReference<Type>*> mFields;
+    std::vector<NamedReference<Type>*>* mFields;
 
     // only emits the struct body. doesn't emit the last ";\n" from the definition
     void emitInlineHidlDefinition(Formatter& out) const;
@@ -170,6 +174,7 @@ private:
                                               bool usesMoveSemantics) const;
 
     CompoundLayout getCompoundAlignmentAndSize() const;
+    void emitPaddingZero(Formatter& out, size_t offset, size_t size) const;
 
     void emitSafeUnionReaderWriterForInterfaces(
             Formatter &out,
