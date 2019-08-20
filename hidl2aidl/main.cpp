@@ -15,7 +15,6 @@
  */
 
 #include <android-base/logging.h>
-#include <android-base/strings.h>
 #include <hidl-util/FQName.h>
 #include <hidl-util/Formatter.h>
 
@@ -26,7 +25,6 @@
 #include "AST.h"
 #include "AidlHelper.h"
 #include "Coordinator.h"
-#include "DocComment.h"
 
 using namespace android;
 
@@ -107,27 +105,6 @@ static bool packageExists(const Coordinator& coordinator, const FQName& fqName) 
     }
 
     return result;
-}
-
-static AST* parse(const Coordinator& coordinator, const FQName& target) {
-    AST* ast = coordinator.parse(target);
-    if (ast == nullptr) {
-        std::cerr << "ERROR: Could not parse " << target.name() << ". Aborting." << std::endl;
-        exit(1);
-    }
-
-    if (!ast->getUnhandledComments().empty()) {
-        AidlHelper::notes()
-                << "Unhandled comments from " << target.string()
-                << " follow. Consider using hidl-lint to locate these and fixup as many "
-                << "as possible.\n";
-        for (const DocComment* docComment : ast->getUnhandledComments()) {
-            docComment->emit(AidlHelper::notes());
-        }
-        AidlHelper::notes() << "\n";
-    }
-
-    return ast;
 }
 
 int main(int argc, char** argv) {
@@ -231,20 +208,16 @@ int main(int argc, char** argv) {
             }
         }
 
-        // Set up AIDL conversion log
-        std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
-        std::string aidlName = AidlHelper::getAidlName(fqName);
-        Formatter err = coordinator.getFormatter(
-                fqName, Coordinator::Location::DIRECT,
-                base::Join(base::Split(aidlPackage, "."), "/") + "/" +
-                        (aidlName.empty() ? "" : (aidlName + "-")) + "conversion.log");
-        AidlHelper::setNotes(&err);
-
         std::vector<const NamedType*> namedTypesInPackage;
         for (const FQName& target : targets) {
             if (target.name() != "types") continue;
 
-            AST* ast = parse(coordinator, target);
+            AST* ast = coordinator.parse(target);
+            if (ast == nullptr) {
+                std::cerr << "ERROR: Could not parse " << target.name() << ". Aborting."
+                          << std::endl;
+                exit(1);
+            }
 
             CHECK(!ast->isInterface());
 
@@ -267,7 +240,12 @@ int main(int argc, char** argv) {
         for (const FQName& target : targets) {
             if (target.name() == "types") continue;
 
-            AST* ast = parse(coordinator, target);
+            AST* ast = coordinator.parse(target);
+            if (ast == nullptr) {
+                std::cerr << "ERROR: Could not parse " << target.name() << ". Aborting."
+                          << std::endl;
+                exit(1);
+            }
 
             const Interface* iface = ast->getInterface();
             CHECK(iface);
