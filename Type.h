@@ -56,7 +56,6 @@ struct Type : DocCommentable {
     virtual bool isTemplatedType() const;
     virtual bool isTypeDef() const;
     virtual bool isVector() const;
-    virtual bool isFmq() const;
 
     // Resolves the type by unwrapping typedefs
     Type* resolve();

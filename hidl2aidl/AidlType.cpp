@@ -17,16 +17,11 @@
 #include <string>
 
 #include "AidlHelper.h"
-#include "FmqType.h"
 #include "NamedType.h"
 #include "Type.h"
 #include "VectorType.h"
 
 namespace android {
-
-static std::string getPlaceholderType(const std::string& type) {
-    return "IBinder /* FIXME: " + type + " */";
-}
 
 std::string AidlHelper::getAidlType(const Type& type) {
     if (type.isVector()) {
@@ -34,18 +29,10 @@ std::string AidlHelper::getAidlType(const Type& type) {
         const Type* elementType = vec.getElementType();
 
         // Aidl doesn't support List<*> for C++ and NDK backends
-        return getAidlType(*elementType) + "[]";
+        return AidlHelper::getAidlType(*elementType) + "[]";
     } else if (type.isNamedType()) {
         const NamedType& namedType = static_cast<const NamedType&>(type);
-        return getAidlFQName(namedType.fqName());
-    } else if (type.isMemory()) {
-        return getPlaceholderType("memory");
-    } else if (type.isFmq()) {
-        const FmqType& fmq = static_cast<const FmqType&>(type);
-        return getPlaceholderType(fmq.templatedTypeName() + "<" +
-                                  getAidlType(*fmq.getElementType()) + ">");
-    } else if (type.isPointer()) {
-        return getPlaceholderType("pointer");
+        return AidlHelper::getAidlFQName(namedType.fqName());
     } else {
         return type.getJavaType();
     }

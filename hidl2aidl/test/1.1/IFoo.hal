@@ -29,6 +29,4 @@ interface IFoo extends @1.0::IFoo {
 
     useStruct() generates (BigStruct type);
     useImportedStruct(Outer outer);
-
-    useMemory(memory mem);
 };
