@@ -94,10 +94,6 @@ bool Type::isPointer() const {
     return false;
 }
 
-bool Type::isFmq() const {
-    return false;
-}
-
 Type* Type::resolve() {
     return const_cast<Type*>(static_cast<const Type*>(this)->resolve());
 }
