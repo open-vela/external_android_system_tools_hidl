@@ -24,11 +24,11 @@
 namespace android {
 
 static void emitConversionNotes(Formatter& out, const NamedType& namedType) {
-    out << "// This is the HIDL definition of " << namedType.fqName().string() << "\n";
-    out.pushLinePrefix("// ");
-    namedType.emitHidlDefinition(out);
-    out.popLinePrefix();
-    out << "\n";
+    out << "// Check the conversion.log file to see the hidl definition.\n";
+
+    AidlHelper::notes() << "This is the HIDL definition of " << namedType.fqName().string() << "\n";
+    namedType.emitHidlDefinition(AidlHelper::notes());
+    AidlHelper::notes() << "\n";
 }
 
 static void emitTypeDefAidlDefinition(Formatter& out, const TypeDef& typeDef) {
