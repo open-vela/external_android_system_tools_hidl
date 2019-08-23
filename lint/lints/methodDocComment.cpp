@@ -34,7 +34,7 @@ namespace android {
 // returns true if the line contained a prefix and false otherwise
 static bool getFirstWordAfterPrefix(const std::string& str, const std::string& prefix,
                                     std::string* out) {
-    std::string line = str;
+    std::string line = base::Trim(str);
     if (base::StartsWith(line, prefix)) {
         line = StringHelper::LTrim(line, prefix);
 
