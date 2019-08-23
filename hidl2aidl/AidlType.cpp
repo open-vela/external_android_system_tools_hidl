@@ -38,11 +38,7 @@ std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo) 
         return getAidlType(*elementType, relativeTo) + "[]";
     } else if (type.isNamedType()) {
         const NamedType& namedType = static_cast<const NamedType&>(type);
-        if (getAidlPackage(relativeTo) == getAidlPackage(namedType.fqName())) {
-            return getAidlName(namedType.fqName());
-        } else {
-            return getAidlFQName(namedType.fqName());
-        }
+        return getAidlFQName(namedType.fqName());
     } else if (type.isMemory()) {
         return getPlaceholderType("memory");
     } else if (type.isFmq()) {
@@ -51,6 +47,14 @@ std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo) 
                                   getAidlType(*fmq.getElementType(), relativeTo) + ">");
     } else if (type.isPointer()) {
         return getPlaceholderType("pointer");
+    } else if (type.isNamedType()) {
+        const NamedType& namedType = static_cast<const NamedType&>(type);
+
+        if (getAidlPackage(relativeTo) == getAidlPackage(namedType.fqName())) {
+            return getAidlName(namedType.fqName());
+        } else {
+            return getAidlFQName(namedType.fqName());
+        }
     } else {
         return type.getJavaType();
     }
