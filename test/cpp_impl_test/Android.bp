@@ -38,6 +38,7 @@ cc_test_library {
     generated_headers: ["hidl_cpp_impl_test_gen-headers"],
     shared_libs: [
         "libhidlbase",
+        "libhidltransport",
         "libutils",
         "android.hardware.tests.foo@1.0",
     ],
