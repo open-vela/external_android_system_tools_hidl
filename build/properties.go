@@ -28,7 +28,6 @@ type ccProperties struct {
 	Name                      *string
 	Owner                     *string
 	Defaults                  []string
-	Host_supported            *bool
 	Vendor_available          *bool
 	Recovery_available        *bool
 	Generated_sources         []string
