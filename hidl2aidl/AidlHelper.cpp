@@ -111,10 +111,7 @@ void AidlHelper::emitFileHeader(Formatter& out, const NamedType& type) {
         }
     }
 
-    // anything other than implicit IBase import
-    if (imports.size() > 1) {
-        out << "\n";
-    }
+    out << "\n";
 }
 
 Formatter AidlHelper::getFileWithHeader(const NamedType& namedType,
