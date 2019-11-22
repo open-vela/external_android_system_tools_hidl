@@ -7,7 +7,6 @@ hidl_interface {
     product_specific: true,
     srcs: [
         "IVendor.hal",
-        "types.hal",
     ],
     interfaces: [
         "android.frameworks.displayservice@1.0",
@@ -17,3 +16,4 @@ hidl_interface {
     ],
     gen_java: true,
 }
+
