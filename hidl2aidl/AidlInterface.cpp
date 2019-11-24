@@ -128,16 +128,6 @@ struct ResultTransformation {
     TransformType type;
 };
 
-static bool shouldWarnStatusType(const std::string& typeName) {
-    static const std::vector<std::string> kUppercaseIgnoreStatusTypes = {"ERROR", "STATUS"};
-
-    const std::string uppercase = StringHelper::Uppercase(typeName);
-    for (const std::string& ignore : kUppercaseIgnoreStatusTypes) {
-        if (uppercase.find(ignore) != std::string::npos) return true;
-    }
-    return false;
-}
-
 void AidlHelper::emitAidl(const Interface& interface, const Coordinator& coordinator) {
     for (const NamedType* type : interface.getSubTypes()) {
         emitAidl(*type, coordinator);
@@ -194,11 +184,15 @@ void AidlHelper::emitAidl(const Interface& interface, const Coordinator& coordin
             for (NamedReference<Type>* res : method->results()) {
                 const std::string aidlType = getAidlType(*res->get(), interface.fqName());
 
-                if (shouldWarnStatusType(aidlType)) {
-                    out << "// FIXME: AIDL has built-in status types. Do we need the status type "
-                           "here?\n";
+                if (StringHelper::EndsWith(StringHelper::Uppercase(aidlType), "STATUS") ||
+                    StringHelper::EndsWith(StringHelper::Uppercase(aidlType), "ERROR")) {
+                    out << "// Ignoring result " << aidlType << " " << res->name()
+                        << " since AIDL has built in status types.\n";
+                    transformations.emplace_back(ResultTransformation{
+                            res->name(), ResultTransformation::TransformType::REMOVED});
+                } else {
+                    results.push_back(res);
                 }
-                results.push_back(res);
             }
 
             if (method->name() != name) {
