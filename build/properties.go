@@ -53,7 +53,3 @@ type javaProperties struct {
 	Libs        []string
 	Static_libs []string
 }
-
-type fuzzProperties struct {
-	Data []string
-}

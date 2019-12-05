@@ -841,17 +841,11 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			Cflags: []string{"-Wno-unused-variable"},
 		})
 
-		specDependencies := append(cppDependencies, name.string())
 		mctx.CreateModule(cc.FuzzFactory, &ccProperties{
 			Name:        proptools.StringPtr(name.vtsFuzzerName()),
 			Defaults:    []string{"vts_proto_fuzzer_default"},
-			Shared_libs: []string{name.vtsDriverName()},
-			Cflags: []string{
-				"-DSTATIC_TARGET_FQ_NAME=" + name.string(),
-				"-DSTATIC_SPEC_DATA=" + strings.Join(specDependencies, ":"),
-			},
-		}, &fuzzProperties{
-			Data: wrap(":", specDependencies, "-vts.spec"),
+			Static_libs: []string{name.vtsDriverName()},
+			Cflags:      []string{"-DSTATIC_TARGET_FQ_NAME=" + name.string()},
 		})
 	}
 
