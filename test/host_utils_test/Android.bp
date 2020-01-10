@@ -18,7 +18,6 @@ cc_test_host {
     static_libs: [
         "libbase",
         "libhidl-gen-host-utils",
-        "liblog",
     ],
     srcs: ["main.cpp"],
     test_suites: ["device-tests"],
