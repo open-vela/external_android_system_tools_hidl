@@ -922,8 +922,6 @@ var doubleLoadablePackageNames = []string{
 	"android.hardware.graphics.allocator@",
 	"android.hardware.graphics.bufferqueue@",
 	"android.hardware.media@",
-	"android.hardware.media.bufferpool@",
-	"android.hardware.media.c2@",
 	"android.hardware.media.omx@",
 	"android.hardware.memtrack@1.0",
 	"android.hardware.neuralnetworks@",
@@ -956,18 +954,17 @@ func isCorePackage(name string) bool {
 	return false
 }
 
-// TODO(b/143375436): eventually enable all fuzzers by default
-var fuzzablePackageNames = []string{
-	"android.hardware.light@2.0",
+var fuzzerPackageNameBlacklist = []string{
+	"android.hardware.keymaster@", // to avoid deleteAllKeys()
 }
 
 func isFuzzerEnabled(name string) bool {
-	for _, pkgname := range fuzzablePackageNames {
+	for _, pkgname := range fuzzerPackageNameBlacklist {
 		if strings.HasPrefix(name, pkgname) {
-			return true
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // TODO(b/126383715): centralize this logic/support filtering in core VTS build
