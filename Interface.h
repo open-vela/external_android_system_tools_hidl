@@ -32,9 +32,6 @@ namespace android {
 struct Method;
 struct InterfaceAndMethod;
 
-extern const FQName gIBaseFqName;
-extern const FQName gIManagerFqName;
-
 struct Interface : public Scope {
     const static std::unique_ptr<ConstantExpression> FLAG_ONE_WAY;
 
