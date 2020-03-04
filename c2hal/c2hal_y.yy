@@ -72,7 +72,7 @@ std::string get_last_comment() {
 %parse-param { android::AST *ast }
 %lex-param   { void *scanner }
 %locations
-%define api.pure
+%pure-parser
 %glr-parser
 
 /* These have to do with the fact that

@@ -41,3 +41,8 @@ LOCAL_REQUIRED_MODULES += hidl_test_client$(TARGET_2ND_ARCH_MODULE_SUFFIX)
 endif
 
 include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := VtsHidlUnitTests
+-include test/vts/tools/build/Android.host_config.mk
