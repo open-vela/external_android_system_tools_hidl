@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,12 @@
  * limitations under the License.
  */
 
-package hidl2aidl@2.0;
+#include <hidl-util/FQName.h>
 
-import @1.0::IFoo;
-import @1.0::Value;
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+    if (size > 500) return 0;
 
-/* This should go into a package called hidl2aidl2 */
-interface IFoo {
-    oneway someFoo(int8_t a);
-
-    shouldImportExternalTypes(@1.0::IFoo foo);
-
-    useImportedEnum(Value value);
-};
+    android::FQName fqName;
+    (void)fqName.setTo(std::string((const char*)data, size));
+    return 0;
+}
