@@ -464,10 +464,6 @@ type hidlInterfaceProperties struct {
 
 	// example: -randroid.hardware:hardware/interfaces
 	Full_root_option string `blueprint:"mutated"`
-
-	// Whether this interface library should be installed on product partition.
-	// TODO(b/150902910): remove, since this should be an inherited property.
-	Product_specific *bool
 }
 
 type hidlInterface struct {
@@ -577,9 +573,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 	shouldGenerateJava := proptools.BoolDefault(i.properties.Gen_java, true)
 	shouldGenerateJavaConstants := i.properties.Gen_java_constants
 	shouldGenerateVts := shouldGenerateLibrary && proptools.BoolDefault(i.properties.Gen_vts, true)
-
-	// TODO(b/150902910): re-enable VTS builds for product things
-	shouldGenerateVts = shouldGenerateVts && !proptools.Bool(i.properties.Product_specific)
 
 	var libraryIfExists []string
 	if shouldGenerateLibrary {
