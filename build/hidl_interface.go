@@ -973,12 +973,8 @@ var fuzzerPackageNameBlacklist = []string{
 }
 
 func isFuzzerEnabled(name string) bool {
-	for _, pkgname := range fuzzerPackageNameBlacklist {
-		if strings.HasPrefix(name, pkgname) {
-			return false
-		}
-	}
-	return true
+	// TODO(151338797): re-enable fuzzers
+	return false
 }
 
 // TODO(b/126383715): centralize this logic/support filtering in core VTS build
