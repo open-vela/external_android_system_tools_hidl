@@ -40,7 +40,7 @@ using android::String16;
 using android::binder::Status;
 
 void testIFoo(const sp<hidl2aidl::IFoo>& foo) {
-    Status status1 = foo->someBar(String16());
+    Status status1 = foo->someBar(String16(), String16());
     (void)status1;
     String16 f;
     Status status2 = foo->oneOutput(&f);
