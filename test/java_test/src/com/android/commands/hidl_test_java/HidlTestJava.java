@@ -601,6 +601,18 @@ public final class HidlTestJava {
         }
 
         {
+            // Test proper exceptions are thrown
+            try {
+                // not in manifest, so won't wait
+                IBase proxy = IBase.getService("this-doesn't-exist", true /*retry*/);
+                // this should never run
+                ExpectTrue(false);
+            } catch (Exception e) {
+                ExpectTrue(e instanceof NoSuchElementException);
+            }
+        }
+
+        {
             // Test access through base interface binder.
             IBase baseProxy = IBase.getService();
             baseProxy.someBaseMethod();
@@ -1730,13 +1742,6 @@ public final class HidlTestJava {
 
         Baz baz = new Baz();
         baz.registerAsService("default");
-
-        try {
-            IBaz.getService("default");
-            throw new RuntimeException("Java in-process enabled");
-        } catch (NoSuchElementException e) {
-            // as expected
-        }
 
         SafeUnion safeunionInterface = new SafeUnion();
         safeunionInterface.registerAsService("default");
