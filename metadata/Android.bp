@@ -1,5 +1,5 @@
 // build time C++ available list of all HIDL interfaces in the tree
-cc_test_library {
+cc_library {
     name: "libhidlmetadata",
     host_supported: true,
     srcs: [":hidl_metadata_in_cpp"],
