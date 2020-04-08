@@ -19,12 +19,6 @@ package hidl2aidl@1.2;
 import @1.1::IFoo;
 
 interface IFoo extends @1.1::IFoo {
-    // This struct is currently required to be redefined here because
-    // hidl2aidl does not inherit types defined in interfaces.
-    // TODO(devinmoore): Fix type inheritance inside interfaces
-    struct BigStruct {
-        uint8_t type;
-    };
     // Should take precedence over @1.1::someBar
     someBar_1_2(string a, string b);
 };

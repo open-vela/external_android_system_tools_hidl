@@ -45,6 +45,9 @@ void testIFoo(const sp<hidl2aidl::IFoo>& foo) {
     String16 f;
     Status status2 = foo->oneOutput(&f);
     (void)status2;
+    hidl2aidl::IFooBigStruct big_struct;
+    big_struct.type = 2;
+    big_struct.value = 3;
 }
 
 void testIBar(const sp<hidl2aidl::IBar>& bar) {
