@@ -71,25 +71,21 @@ std::vector<const Method*> AidlHelper::getUserDefinedMethods(const Interface& in
     return methods;
 }
 
-// Represents method which is overriding another method.
+// Represents a node which is potentially overriding another node.
 // e.g. if this is 'foo_1_4'
-struct MethodWithVersion {
+template <class NODE>
+struct NodeWithVersion {
     size_t major;          // 1
     size_t minor;          // 4
-    const Method* method;  // HIDL method object representing foo_1_4
+    const NODE* node;      // HIDL object representing foo_1_4.
     std::string baseName;  // foo
 };
 
-static void pushVersionedMethodOntoMap(
-        MethodWithVersion versionedMethod,
-        std::map<std::string, MethodWithVersion>* latestMethodForBaseName,
-        std::vector<const MethodWithVersion>* supersededMethods) {
-    const Method* method = versionedMethod.method;
-    std::string name = method->name();
-    size_t underscore = name.find('_');
+std::string getBaseName(const std::string& rawName) {
+    size_t underscore = rawName.find('_');
     if (underscore != std::string::npos) {
-        std::string version = name.substr(underscore + 1);  // don't include _
-        std::string baseName = name.substr(0, underscore);
+        std::string version = rawName.substr(underscore + 1);  // don't include _
+        std::string baseName = rawName.substr(0, underscore);
         underscore = version.find('_');
 
         size_t major, minor;
@@ -97,26 +93,32 @@ static void pushVersionedMethodOntoMap(
             base::ParseUint(version.substr(0, underscore), &major) &&
             base::ParseUint(version.substr(underscore + 1), &minor)) {
             // contains major and minor version. consider it's baseName now.
-            name = baseName;
-            versionedMethod.baseName = baseName;
+            return baseName;
         }
     }
+    return rawName;
+}
 
-    // attempt to push name onto latestMethodForBaseName
-    auto [it, inserted] = latestMethodForBaseName->emplace(std::move(name), versionedMethod);
+template <class NODE>
+static void pushVersionedNodeOntoMap(const NODE& versionedNode,
+                                     std::map<std::string, NODE>* latestNodeForBaseName,
+                                     std::vector<const NODE>* supersededNode) {
+    // attempt to push name onto latestNodeForBaseName
+    auto [it, inserted] =
+            latestNodeForBaseName->emplace(std::move(versionedNode.baseName), versionedNode);
     if (!inserted) {
         auto* current = &it->second;
 
-        // Method in the latestMethodForBaseName is more recent
-        if ((current->major > versionedMethod.major) ||
-            (current->major == versionedMethod.major && current->minor > versionedMethod.minor)) {
-            supersededMethods->push_back(versionedMethod);
+        // Node in the latestNodeForBaseName is more recent
+        if ((current->major > versionedNode.major) ||
+            (current->major == versionedNode.major && current->minor > versionedNode.minor)) {
+            supersededNode->push_back(versionedNode);
             return;
         }
 
         // Either current.major < versioned.major OR versioned.minor >= current.minor
-        supersededMethods->push_back(*current);
-        *current = std::move(versionedMethod);
+        supersededNode->push_back(*current);
+        *current = std::move(versionedNode);
     }
 }
 
@@ -141,10 +143,6 @@ static bool shouldWarnStatusType(const std::string& typeName) {
 }
 
 void AidlHelper::emitAidl(const Interface& interface, const Coordinator& coordinator) {
-    for (const NamedType* type : interface.getSubTypes()) {
-        emitAidl(*type, coordinator);
-    }
-
     Formatter out = getFileWithHeader(interface, coordinator);
 
     interface.emitDocComment(out);
@@ -155,36 +153,65 @@ void AidlHelper::emitAidl(const Interface& interface, const Coordinator& coordin
 
     out << "interface " << getAidlName(interface.fqName()) << " ";
     out.block([&] {
-        for (const NamedType* type : interface.getSubTypes()) {
-            emitAidl(*type, coordinator);
-        }
-
-        std::map<std::string, MethodWithVersion> latestMethodForBaseName;
-        std::vector<const MethodWithVersion> supersededMethods;
+        std::map<std::string, NodeWithVersion<NamedType>> latestTypeForBaseName;
+        std::vector<const NodeWithVersion<NamedType>> supersededNamedTypes;
+        std::map<std::string, NodeWithVersion<Method>> latestMethodForBaseName;
+        std::vector<const NodeWithVersion<Method>> supersededMethods;
         std::vector<const Interface*> typeChain = interface.typeChain();
         for (auto iface = typeChain.rbegin(); iface != typeChain.rend(); ++iface) {
             for (const Method* method : (*iface)->userDefinedMethods()) {
-                pushVersionedMethodOntoMap(
-                        {(*iface)->fqName().getPackageMajorVersion(),
-                         (*iface)->fqName().getPackageMinorVersion(), method, method->name()},
-                        &latestMethodForBaseName, &supersededMethods);
+                pushVersionedNodeOntoMap({(*iface)->fqName().getPackageMajorVersion(),
+                                          (*iface)->fqName().getPackageMinorVersion(), method,
+                                          getBaseName(method->name())},
+                                         &latestMethodForBaseName, &supersededMethods);
+            }
+            // Types from other interfaces will be handled while those interfaces
+            // are being emitted.
+            if ((*iface)->getBaseName() != interface.getBaseName()) {
+                continue;
+            }
+            for (const NamedType* type : (*iface)->getSubTypes()) {
+                // The baseName for types is not being stripped of the version
+                // numbers like that of the methods. If a type was named
+                // BigStruct_1_1 and the previous version was named BigStruct,
+                // they will be treated as two different types.
+                pushVersionedNodeOntoMap({(*iface)->fqName().getPackageMajorVersion(),
+                                          (*iface)->fqName().getPackageMinorVersion(), type,
+                                          getAidlName(type->fqName())},
+                                         &latestTypeForBaseName, &supersededNamedTypes);
             }
         }
 
+        // Add comment for superseded types
+        out.join(supersededNamedTypes.begin(), supersededNamedTypes.end(), "\n",
+                 [&](const NodeWithVersion<NamedType>& versionedType) {
+                     out << "// Ignoring type " << getAidlName(versionedType.node->fqName())
+                         << " from " << versionedType.major << "." << versionedType.minor
+                         << "::" << getAidlName(interface.fqName())
+                         << " since a newer alternative is available.";
+                 });
+        if (!supersededNamedTypes.empty()) out << "\n\n";
+
+        // Add comment for superseded methods
         out.join(supersededMethods.begin(), supersededMethods.end(), "\n",
-                 [&](const MethodWithVersion& versionedMethod) {
-                     out << "// Ignoring method " << versionedMethod.method->name() << " from "
+                 [&](const NodeWithVersion<Method>& versionedMethod) {
+                     out << "// Ignoring method " << versionedMethod.node->name() << " from "
                          << versionedMethod.major << "." << versionedMethod.minor
                          << "::" << getAidlName(interface.fqName())
                          << " since a newer alternative is available.";
                  });
         if (!supersededMethods.empty()) out << "\n\n";
 
-        out.join(latestMethodForBaseName.begin(), latestMethodForBaseName.end(), "\n",
-                 [&](const std::pair<std::string, MethodWithVersion>& methodPair) {
-                     const Method* method = methodPair.second.method;
-                     const std::string& baseName = methodPair.first;
+        // Emit latest types defined for this interface only
+        for (auto const& [name, typeWithVersion] : latestTypeForBaseName) {
+            emitAidl(*typeWithVersion.node, coordinator);
+        }
 
+        // Emit latest methods defined for this interface
+        out.join(latestMethodForBaseName.begin(), latestMethodForBaseName.end(), "\n",
+                 [&](const std::pair<std::string, NodeWithVersion<Method>>& methodPair) {
+                     const Method* method = methodPair.second.node;
+                     const std::string& baseName = methodPair.first;
                      std::vector<NamedReference<Type>*> results;
                      std::vector<ResultTransformation> transformations;
                      for (NamedReference<Type>* res : method->results()) {
