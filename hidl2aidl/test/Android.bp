@@ -47,6 +47,7 @@ genrule {
 
 aidl_interface {
     name: "hidl2aidl_test_gen",
+    unstable: true,
     srcs: [":hidl2aidl_test_gen_aidl"],
 }
 
