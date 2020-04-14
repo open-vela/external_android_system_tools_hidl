@@ -41,19 +41,17 @@ type ccProperties struct {
 	Export_generated_headers  []string
 	Double_loadable           *bool
 	Cflags                    []string
-	Apex_available            []string
 }
 
 type javaProperties struct {
-	Name           *string
-	Owner          *string
-	Defaults       []string
-	Installable    *bool
-	Sdk_version    *string
-	Srcs           []string
-	Libs           []string
-	Static_libs    []string
-	Apex_available []string
+	Name        *string
+	Owner       *string
+	Defaults    []string
+	Installable *bool
+	Sdk_version *string
+	Srcs        []string
+	Libs        []string
+	Static_libs []string
 }
 
 type fuzzConfig struct {
