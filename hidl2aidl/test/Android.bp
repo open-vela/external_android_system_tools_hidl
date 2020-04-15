@@ -27,6 +27,7 @@ genrule {
         "1.0/types.hal",
         "1.1/IFoo.hal",
         "1.1/types.hal",
+        "1.2/IFoo.hal",
         "2.0/IFoo.hal",
     ],
     out: [
