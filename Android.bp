@@ -61,9 +61,6 @@ java_defaults {
 cc_library_host_static {
     name: "libhidl-gen",
     defaults: ["hidl-gen-defaults"],
-    cflags: [
-        "-Wno-bool-operation", // found in ConstantExpression.cpp:105
-    ],
     srcs: [
         "Annotation.cpp",
         "ArrayType.cpp",
