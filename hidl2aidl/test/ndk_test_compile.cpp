@@ -36,7 +36,7 @@
 #include <aidl/hidl2aidl2/IFoo.h>
 
 void testIFoo(const std::shared_ptr<aidl::hidl2aidl::IFoo>& foo) {
-    ndk::ScopedAStatus status1 = foo->someBar(std::string());
+    ndk::ScopedAStatus status1 = foo->someBar(std::string(), std::string());
     (void)status1;
     std::string f;
     ndk::ScopedAStatus status2 = foo->oneOutput(&f);
