@@ -14,9 +14,6 @@
     },
     {
       "name": "libhidl-gen-utils_test"
-    },
-    {
-      "name": "hidl_lazy_test"
     }
   ]
 }
