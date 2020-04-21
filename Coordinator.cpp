@@ -346,7 +346,7 @@ status_t Coordinator::parseOptional(const FQName& fqName, AST** ast, std::set<AS
 }
 
 const Coordinator::PackageRoot* Coordinator::findPackageRoot(const FQName& fqName) const {
-    CHECK(!fqName.package().empty());
+    CHECK(!fqName.package().empty()) << fqName.string();
 
     // Find the right package prefix and path for this FQName.  For
     // example, if FQName is "android.hardware.nfc@1.0::INfc", and the
