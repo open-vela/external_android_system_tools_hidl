@@ -655,6 +655,7 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			}),
 			Export_generated_headers: []string{name.headersName()},
 			Apex_available:           i.properties.Apex_available,
+			Min_sdk_version:          getMinSdkVersion(name.string()),
 		}, &i.properties.VndkProperties)
 	}
 
@@ -935,6 +936,37 @@ func hidlInterfaceFactory() android.Module {
 	return i
 }
 
+var minSdkVersion = map[string]string{
+	"android.hardware.cas.native@1.0":           "29",
+	"android.hardware.cas@1.0":                  "29",
+	"android.hardware.graphics.allocator@2.0":   "29",
+	"android.hardware.graphics.allocator@3.0":   "29",
+	"android.hardware.graphics.bufferqueue@1.0": "29",
+	"android.hardware.graphics.bufferqueue@2.0": "29",
+	"android.hardware.graphics.common@1.0":      "29",
+	"android.hardware.graphics.common@1.1":      "29",
+	"android.hardware.graphics.common@1.2":      "29",
+	"android.hardware.graphics.mapper@2.0":      "29",
+	"android.hardware.graphics.mapper@2.1":      "29",
+	"android.hardware.graphics.mapper@3.0":      "29",
+	"android.hardware.media.bufferpool@2.0":     "29",
+	"android.hardware.media.c2@1.0":             "29",
+	"android.hardware.media.omx@1.0":            "29",
+	"android.hardware.media@1.0":                "29",
+	"android.hidl.allocator@1.0":                "29",
+	"android.hidl.memory.token@1.0":             "29",
+	"android.hidl.memory@1.0":                   "29",
+	"android.hidl.safe_union@1.0":               "29",
+	"android.hidl.token@1.0":                    "29",
+}
+
+func getMinSdkVersion(name string) *string {
+	if ver, ok := minSdkVersion[name]; ok {
+		return proptools.StringPtr(ver)
+	}
+	return nil
+}
+
 var doubleLoadablePackageNames = []string{
 	"android.frameworks.bufferhub@1.0",
 	"android.hardware.cas@1.0",
@@ -980,15 +1012,18 @@ func isCorePackage(name string) bool {
 
 var fuzzerPackageNameBlacklist = []string{
 	"android.hardware.keymaster@", // to avoid deleteAllKeys()
+	// Same-process HALs are always opened in the same process as their client.
+	// So stability guarantees don't apply to them, e.g. it's OK to crash on
+	// NULL input from client. Disable corresponding fuzzers as they create too
+	// much noise.
+	"android.hardware.graphics.mapper@",
+	"android.hardware.renderscript@",
+	"android.hidl.memory@",
 }
 
 func isFuzzerEnabled(name string) bool {
-	for _, pkgname := range fuzzerPackageNameBlacklist {
-		if strings.HasPrefix(name, pkgname) {
-			return false
-		}
-	}
-	return true
+	// TODO(151338797): re-enable fuzzers
+	return false
 }
 
 // TODO(b/126383715): centralize this logic/support filtering in core VTS build
