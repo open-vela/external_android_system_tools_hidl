@@ -942,6 +942,7 @@ func hidlInterfaceFactory() android.Module {
 }
 
 var minSdkVersion = map[string]string{
+	"android.frameworks.bufferhub@1.0":          "29",
 	"android.hardware.audio.common@5.0":         "30",
 	"android.hardware.bluetooth.a2dp@1.0":       "30",
 	"android.hardware.bluetooth.audio@2.0":      "30",
