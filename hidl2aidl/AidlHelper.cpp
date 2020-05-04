@@ -104,7 +104,7 @@ void AidlHelper::emitFileHeader(Formatter& out, const NamedType& type) {
 
     // Import all the referenced types
     if (type.isInterface()) {
-        // This is a separate case becase getReferences doesn't traverse all the superTypes and
+        // This is a separate case because getReferences doesn't traverse all the superTypes and
         // sometimes includes references to types that would not exist on AIDL
         const std::vector<const Method*>& methods =
                 getUserDefinedMethods(static_cast<const Interface&>(type));
@@ -115,6 +115,10 @@ void AidlHelper::emitFileHeader(Formatter& out, const NamedType& type) {
         }
     } else {
         for (const Reference<Type>* ref : type.getReferences()) {
+            if (ref->get()->definedName() == type.fqName().name()) {
+                // Don't import the referenced type if this is referencing itself
+                continue;
+            }
             importLocallyReferencedType(*ref->get(), &imports);
         }
     }
