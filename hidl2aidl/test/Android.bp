@@ -35,6 +35,7 @@ genrule {
         "hidl2aidl/IBarInner.aidl",
         "hidl2aidl/IFoo.aidl",
         "hidl2aidl/IFooBigStruct.aidl",
+        "hidl2aidl/NameCollision.aidl",
         "hidl2aidl/OnlyIn10.aidl",
         "hidl2aidl/OnlyIn11.aidl",
         "hidl2aidl/Outer.aidl",
