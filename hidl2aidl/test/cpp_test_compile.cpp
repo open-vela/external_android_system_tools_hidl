@@ -25,6 +25,7 @@
 #include <hidl2aidl/IBarInner.h>
 #include <hidl2aidl/IFoo.h>
 #include <hidl2aidl/IFooBigStruct.h>
+#include <hidl2aidl/NameCollision.h>
 #include <hidl2aidl/OnlyIn10.h>
 #include <hidl2aidl/OnlyIn11.h>
 #include <hidl2aidl/Outer.h>
@@ -48,6 +49,16 @@ void testIFoo(const sp<hidl2aidl::IFoo>& foo) {
     hidl2aidl::IFooBigStruct big_struct;
     big_struct.type = 2;
     big_struct.value = 3;
+    // Test some of the types here as well
+    hidl2aidl::Outer outer;
+    outer.inner.a = 1;
+    outer.a = 2;
+    hidl2aidl::OverrideMe override;
+    override.a = String16();
+    hidl2aidl::NameCollision collision;
+    collision.a = 1;
+    collision.b = String16();
+    collision.c = String16();
 }
 
 void testIBar(const sp<hidl2aidl::IBar>& bar) {
