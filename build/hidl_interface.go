@@ -1013,15 +1013,18 @@ func isCorePackage(name string) bool {
 
 var fuzzerPackageNameBlacklist = []string{
 	"android.hardware.keymaster@", // to avoid deleteAllKeys()
+	// Same-process HALs are always opened in the same process as their client.
+	// So stability guarantees don't apply to them, e.g. it's OK to crash on
+	// NULL input from client. Disable corresponding fuzzers as they create too
+	// much noise.
+	"android.hardware.graphics.mapper@",
+	"android.hardware.renderscript@",
+	"android.hidl.memory@",
 }
 
 func isFuzzerEnabled(name string) bool {
-	for _, pkgname := range fuzzerPackageNameBlacklist {
-		if strings.HasPrefix(name, pkgname) {
-			return false
-		}
-	}
-	return true
+	// TODO(151338797): re-enable fuzzers
+	return false
 }
 
 // TODO(b/126383715): centralize this logic/support filtering in core VTS build
