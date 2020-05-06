@@ -376,6 +376,12 @@ status_t AST::checkForwardReferenceRestrictions() const {
 }
 
 bool AST::importFQName(const FQName& fqName) {
+    if (!fqName.valueName().empty()) {
+        std::cerr << "WARNING: must import type, but importing value: " << fqName.string()
+                  << ". Did you mean to use '::' instead of ':'?" << std::endl;
+        // TODO(b/146215188): consider as error
+    }
+
     if (fqName.name().empty()) {
         // import a package
 
