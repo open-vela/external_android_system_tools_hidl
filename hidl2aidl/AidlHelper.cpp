@@ -67,7 +67,7 @@ std::string AidlHelper::getAidlFQName(const FQName& fqName) {
     return getAidlPackage(fqName) + "." + getAidlName(fqName);
 }
 
-static void importLocallyReferencedType(const Type& type, std::set<std::string>* imports) {
+void AidlHelper::importLocallyReferencedType(const Type& type, std::set<std::string>* imports) {
     if (type.isArray()) {
         return importLocallyReferencedType(*static_cast<const ArrayType*>(&type)->getElementType(),
                                            imports);
