@@ -63,6 +63,10 @@ void Coordinator::setVerbose(bool verbose) {
     mVerbose = verbose;
 }
 
+void Coordinator::setRequireFrozen(bool requireFrozen) {
+    mRequireFrozen = requireFrozen;
+}
+
 bool Coordinator::isVerbose() const {
     return mVerbose;
 }
@@ -836,6 +840,13 @@ Coordinator::HashStatus Coordinator::checkHash(const FQName& fqName) const {
         // This ensures that it can be detected.
         Hash::clearHash(ast->getFilename());
 
+        if (mRequireFrozen) {
+            std::cerr << "ERROR: Unfrozen " << fqName.string()
+                      << " cannot be referenced from context specifying -F (require_frozen)."
+                      << std::endl;
+            return HashStatus::ERROR;
+        }
+
         return HashStatus::UNFROZEN;
     }
 
@@ -957,12 +968,13 @@ bool Coordinator::MakeParentHierarchy(const std::string &path) {
 }
 
 void Coordinator::emitOptionsUsageString(Formatter& out) {
-    out << "[-p <root path>] (-r <interface root>)+ [-R] [-v] [-d <depfile>]";
+    out << "[-p <root path>] (-r <interface root>)+ [-R] [-F] [-v] [-d <depfile>]";
 }
 
 void Coordinator::emitOptionsDetailString(Formatter& out) {
     out << "-p <root path>: Android build root, defaults to $ANDROID_BUILD_TOP or pwd.\n"
         << "-R: Do not add default package roots if not specified in -r.\n"
+        << "-F: Require all referenced ASTs to be frozen.\n"
         << "-r <package:path root>: E.g., android.hardware:hardware/interfaces.\n"
         << "-v: verbose output.\n"
         << "-d <depfile>: location of depfile to write to.\n";
@@ -976,7 +988,7 @@ void Coordinator::parseOptions(int argc, char** argv, const std::string& options
     bool suppressDefaultPackagePaths = false;
 
     int res;
-    std::string optstr = options + "p:r:Rvd:";
+    std::string optstr = options + "p:r:RFvd:";
     while ((res = getopt(argc, argv, optstr.c_str())) >= 0) {
         switch (res) {
             case 'v': {
@@ -1017,6 +1029,10 @@ void Coordinator::parseOptions(int argc, char** argv, const std::string& options
             }
             case 'R': {
                 suppressDefaultPackagePaths = true;
+                break;
+            }
+            case 'F': {
+                setRequireFrozen(true);
                 break;
             }
             // something downstream should handle these cases
