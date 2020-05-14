@@ -872,10 +872,6 @@ status_t Coordinator::getUnfrozenDependencies(const FQName& fqName,
     std::set<FQName> imported;
     ast->getImportedPackages(&imported);
 
-    // consider current package as dependency for types.hal and also to make
-    // sure that if anything is frozen in a package, everything is.
-    imported.insert(fqName.getPackageAndVersion());
-
     // no circular dependency is already guaranteed by parsing
     // indirect dependencies will be checked when the imported interface frozen checks are done
     for (const FQName& importedPackage : imported) {
@@ -925,7 +921,7 @@ status_t Coordinator::enforceHashes(const FQName& currentPackage) const {
 
                 if (!unfrozenDependencies.empty()) {
                     std::cerr << "ERROR: Frozen interface " << currentFQName.string()
-                              << " cannot depend or be adjacent to unfrozen thing(s):" << std::endl;
+                              << " cannot depend on unfrozen thing(s):" << std::endl;
                     for (const FQName& name : unfrozenDependencies) {
                         std::cerr << " (unfrozen) " << name.string() << std::endl;
                     }
