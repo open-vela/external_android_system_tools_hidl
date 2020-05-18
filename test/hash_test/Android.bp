@@ -10,7 +10,7 @@ genrule {
         "&&" +
         "!($(location hidl-gen) -F -L check " +
         "    -r android.hidl:system/libhidl/transport" +
-        "    -r test.hash:system/tools/hidl/test/hash_test/correct_hash" +
+        "    -r test.hash:system/tools/hidl/test/hash_test/missing_hash" +
         "    test.hash.hash@1.0 2> /dev/null)" +
         "&&" +
         "!($(location hidl-gen) -L check " +
@@ -29,9 +29,9 @@ genrule {
     srcs: [
         "correct_hash/current.txt",
         "correct_hash/hash/1.0/IHash.hal",
-        "correct_hash/hash/1.0/IUnhashed.hal",
         "incorrect_hash/current.txt",
         "incorrect_hash/hash/1.0/IHash.hal",
+        "missing_hash/hash/1.0/IUnhashed.hal",
     ],
 }
 
