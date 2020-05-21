@@ -46,6 +46,9 @@ type hidlPackageRoot struct {
 		//
 		// When false, it uses the file only when it exists.
 		Use_current *bool
+
+		// True to require all things referenced by this package root to be frozen.
+		Require_frozen *bool
 	}
 
 	currentPath android.OptionalPath
@@ -60,6 +63,10 @@ func (r *hidlPackageRoot) getFullPackageRoot() string {
 
 func (r *hidlPackageRoot) getCurrentPath() android.OptionalPath {
 	return r.currentPath
+}
+
+func (r *hidlPackageRoot) requireFrozen() bool {
+	return proptools.BoolDefault(r.properties.Require_frozen, false)
 }
 
 func (r *hidlPackageRoot) generateCurrentFile(ctx android.ModuleContext) {
