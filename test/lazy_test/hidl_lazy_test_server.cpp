@@ -29,7 +29,8 @@ class Lazy : public ILazy {};
 
 int main() {
     configureRpcThreadpool(1, true /*willJoin*/);
-    CHECK(OK == LazyServiceRegistrar::getInstance().registerService(new Lazy, "default"));
+    CHECK(OK == LazyServiceRegistrar::getInstance().registerService(new Lazy, "default1"));
+    CHECK(OK == LazyServiceRegistrar::getInstance().registerService(new Lazy, "default2"));
     joinRpcThreadpool();
     return EXIT_FAILURE;  // should not reach
 }
