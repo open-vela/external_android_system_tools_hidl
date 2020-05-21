@@ -44,20 +44,20 @@ var (
 	hidlRule = pctx.StaticRule("hidlRule", blueprint.RuleParams{
 		Depfile:     "${depfile}",
 		Deps:        blueprint.DepsGCC,
-		Command:     "rm -rf ${genDir} && ${hidl} -R -p . -d ${depfile} -o ${genDir} -L ${language} ${options} ${fqName}",
+		Command:     "rm -rf ${genDir} && ${hidl} -R -p . -d ${depfile} -o ${genDir} -L ${language} ${roots} ${fqName}",
 		CommandDeps: []string{"${hidl}"},
 		Description: "HIDL ${language}: ${in} => ${out}",
-	}, "depfile", "fqName", "genDir", "language", "options")
+	}, "depfile", "fqName", "genDir", "language", "roots")
 
 	hidlSrcJarRule = pctx.StaticRule("hidlSrcJarRule", blueprint.RuleParams{
 		Depfile: "${depfile}",
 		Deps:    blueprint.DepsGCC,
 		Command: "rm -rf ${genDir} && " +
-			"${hidl} -R -p . -d ${depfile} -o ${genDir}/srcs -L ${language} ${options} ${fqName} && " +
+			"${hidl} -R -p . -d ${depfile} -o ${genDir}/srcs -L ${language} ${roots} ${fqName} && " +
 			"${soong_zip} -o ${genDir}/srcs.srcjar -C ${genDir}/srcs -D ${genDir}/srcs",
 		CommandDeps: []string{"${hidl}", "${soong_zip}"},
 		Description: "HIDL ${language}: ${in} => srcs.srcjar",
-	}, "depfile", "fqName", "genDir", "language", "options")
+	}, "depfile", "fqName", "genDir", "language", "roots")
 
 	vtsRule = pctx.StaticRule("vtsRule", blueprint.RuleParams{
 		Command:     "rm -rf ${genDir} && ${vtsc} -m${mode} -t${type} ${inputDir}/${packagePath} ${genDir}/${packagePath}",
@@ -66,10 +66,10 @@ var (
 	}, "mode", "type", "inputDir", "genDir", "packagePath")
 
 	lintRule = pctx.StaticRule("lintRule", blueprint.RuleParams{
-		Command:     "rm -f ${output} && touch ${output} && ${lint} -j -e -R -p . ${options} ${fqName} > ${output}",
+		Command:     "rm -f ${output} && touch ${output} && ${lint} -j -e -R -p . ${roots} ${fqName} > ${output}",
 		CommandDeps: []string{"${lint}"},
 		Description: "hidl-lint ${fqName}: ${out}",
-	}, "output", "options", "fqName")
+	}, "output", "roots", "fqName")
 
 	zipLintRule = pctx.StaticRule("zipLintRule", blueprint.RuleParams{
 		Command:     "rm -f ${output} && ${soong_zip} -o ${output} -C ${intermediatesDir} ${files}",
@@ -78,10 +78,10 @@ var (
 	}, "output", "files")
 
 	inheritanceHierarchyRule = pctx.StaticRule("inheritanceHierarchyRule", blueprint.RuleParams{
-		Command:     "rm -f ${out} && ${hidl} -L inheritance-hierarchy ${options} ${fqInterface} > ${out}",
+		Command:     "rm -f ${out} && ${hidl} -L inheritance-hierarchy ${roots} ${fqInterface} > ${out}",
 		CommandDeps: []string{"${hidl}"},
 		Description: "HIDL inheritance hierarchy: ${fqInterface} => ${out}",
-	}, "options", "fqInterface")
+	}, "roots", "fqInterface")
 
 	joinJsonObjectsToArrayRule = pctx.StaticRule("joinJsonObjectsToArrayRule", blueprint.RuleParams{
 		Rspfile:        "$out.rsp",
@@ -256,28 +256,24 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 		vtsListMutex.Unlock()
 	}
 
-	var extraOptions []string // including roots
+	var fullRootOptions []string
 	var currentPath android.OptionalPath
 	ctx.VisitDirectDeps(func(dep android.Module) {
 		switch t := dep.(type) {
 		case *hidlInterface:
-			extraOptions = append(extraOptions, t.properties.Full_root_option)
+			fullRootOptions = append(fullRootOptions, t.properties.Full_root_option)
 		case *hidlPackageRoot:
 			if currentPath.Valid() {
 				panic(fmt.Sprintf("Expecting only one path, but found %v %v", currentPath, t.getCurrentPath()))
 			}
 
 			currentPath = t.getCurrentPath()
-
-			if t.requireFrozen() {
-				extraOptions = append(extraOptions, "-F")
-			}
 		default:
 			panic(fmt.Sprintf("Unrecognized hidlGenProperties dependency: %T", t))
 		}
 	})
 
-	extraOptions = android.FirstUniqueStrings(extraOptions)
+	fullRootOptions = android.FirstUniqueStrings(fullRootOptions)
 
 	inputs := g.genInputs
 	if currentPath.Valid() {
@@ -295,9 +291,9 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 			Inputs: inputs,
 			Output: g.genOutputs[0],
 			Args: map[string]string{
-				"output":  g.genOutputs[0].String(),
-				"fqName":  g.properties.FqName,
-				"options": strings.Join(extraOptions, " "),
+				"output": g.genOutputs[0].String(),
+				"fqName": g.properties.FqName,
+				"roots":  strings.Join(fullRootOptions, " "),
 			},
 		})
 
@@ -312,7 +308,7 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 				Output: g.genOutputs[i],
 				Args: map[string]string{
 					"fqInterface": g.properties.FqName + "::" + intf,
-					"options":     strings.Join(extraOptions, " "),
+					"roots":       strings.Join(fullRootOptions, " "),
 				},
 			})
 		}
@@ -330,7 +326,7 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 			"genDir":   g.genOutputDir.String(),
 			"fqName":   g.properties.FqName,
 			"language": g.properties.Language,
-			"options":  strings.Join(extraOptions, " "),
+			"roots":    strings.Join(fullRootOptions, " "),
 		},
 	})
 }
@@ -1029,18 +1025,15 @@ func isCorePackage(name string) bool {
 
 var fuzzerPackageNameBlacklist = []string{
 	"android.hardware.keymaster@", // to avoid deleteAllKeys()
-	// Same-process HALs are always opened in the same process as their client.
-	// So stability guarantees don't apply to them, e.g. it's OK to crash on
-	// NULL input from client. Disable corresponding fuzzers as they create too
-	// much noise.
-	"android.hardware.graphics.mapper@",
-	"android.hardware.renderscript@",
-	"android.hidl.memory@",
 }
 
 func isFuzzerEnabled(name string) bool {
-	// TODO(151338797): re-enable fuzzers
-	return false
+	for _, pkgname := range fuzzerPackageNameBlacklist {
+		if strings.HasPrefix(name, pkgname) {
+			return false
+		}
+	}
+	return true
 }
 
 // TODO(b/126383715): centralize this logic/support filtering in core VTS build

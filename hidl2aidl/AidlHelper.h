@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <set>
 #include <string>
 #include <vector>
 
@@ -46,7 +45,6 @@ struct AidlHelper {
     static std::string getAidlFQName(const FQName& fqName);
 
     static void emitFileHeader(Formatter& out, const NamedType& type);
-    static void importLocallyReferencedType(const Type& type, std::set<std::string>* imports);
     static Formatter getFileWithHeader(const NamedType& namedType, const Coordinator& coordinator);
 
     /* Methods for Type */
