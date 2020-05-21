@@ -27,7 +27,6 @@ genrule {
         "1.0/types.hal",
         "1.1/IFoo.hal",
         "1.1/types.hal",
-        "1.2/IFoo.hal",
         "2.0/IFoo.hal",
     ],
     out: [
@@ -35,7 +34,6 @@ genrule {
         "hidl2aidl/IBarInner.aidl",
         "hidl2aidl/IFoo.aidl",
         "hidl2aidl/IFooBigStruct.aidl",
-        "hidl2aidl/NameCollision.aidl",
         "hidl2aidl/OnlyIn10.aidl",
         "hidl2aidl/OnlyIn11.aidl",
         "hidl2aidl/Outer.aidl",
