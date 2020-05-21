@@ -73,17 +73,15 @@ void emitGetService(
                 "This will invoke the equivalent of the C++ getService(std::string) if retry is\n"
                 "true or tryGetService(std::string) if retry is false. If the service is\n"
                 "available on the device and retry is true, this will wait for the service to\n"
-                "start.\n\n@throws NoSuchElementException if this service is not available",
+                "start. Otherwise, it will return immediately even if the service is null.",
                 HIDL_LOCATION_HERE)
                 .emit(out);
     } else {
         DocComment(
-                "@throws NoSuchElementException if this service is not available\n"
-                "@deprecated this will not wait for the interface to come up if it hasn't yet\n"
-                "    started. See getService(String,boolean) instead.\n",
+                "Warning: this will not wait for the interface to come up if it hasn't yet\n"
+                "started. See getService(String,boolean) instead.",
                 HIDL_LOCATION_HERE)
                 .emit(out);
-        out << "@Deprecated\n";
     }
     out << "public static "
         << ifaceName
@@ -108,12 +106,10 @@ void emitGetService(
         DocComment("Calls getService(\"default\",retry).", HIDL_LOCATION_HERE).emit(out);
     } else {
         DocComment(
-                "@throws NoSuchElementException if this service is not available\n"
-                "@deprecated this will not wait for the interface to come up if it hasn't yet\n"
-                "    started. See getService(boolean) instead.\n",
+                "Warning: this will not wait for the interface to come up if it hasn't yet "
+                "started. See getService(String,boolean) instead.",
                 HIDL_LOCATION_HERE)
                 .emit(out);
-        out << "@Deprecated\n";
     }
     out << "public static "
         << ifaceName

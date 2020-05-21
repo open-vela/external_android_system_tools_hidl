@@ -42,8 +42,6 @@ struct Coordinator {
     void setVerbose(bool value);
     bool isVerbose() const;
 
-    void setRequireFrozen(bool requireFrozen);
-
     void setDepFile(const std::string& depFile);
 
     const std::string& getOwner() const;
@@ -191,7 +189,6 @@ struct Coordinator {
 
     // hidl-gen options
     bool mVerbose = false;
-    bool mRequireFrozen = false;
     std::string mOwner;
 
     // cache to parse().
