@@ -7,6 +7,7 @@ function usage() {
 }
 
 failed_test_cases=()
+ran_test_cases=0
 
 function run_test() {
     if [ $1 -eq 32 ]; then
@@ -25,6 +26,11 @@ function run_test() {
         LD_LIB_PATH_SERVER=$LD_LIB_PATH64
     fi
 
+    if [ ! -f $SERVER_PATH ] || [ ! -f $CLIENT_PATH ]; then
+        echo "Not running $CLIENT_PATH with $SERVER_PATH since one doesn't exist"
+        return
+    fi
+
     echo "Running $1-bit client with $2-bit servers"
     echo "$LD_LIB_PATH_SERVER=$LD_LIB_PATH_SERVER"
     LD_LIBRARY_PATH=$LD_LIB_PATH_SERVER:$LD_LIBRARY_PATH $SERVER_PATH &
@@ -34,6 +40,7 @@ function run_test() {
         failed_test_cases+=("$1-bit client with $2-bit servers")
     fi
     kill $SERVER_PID
+    ran_test_cases=1
 }
 
 function check_env() {
@@ -122,6 +129,11 @@ function run_all_tests() {
                     run_test $i $j
                 done
         done
+
+    if [ $ran_test_cases -ne 1 ]; then
+        failed_test_cases+=("No tests ran")
+    fi
+
     count_failed_tests=${#failed_test_cases[@]}
     echo "*********************************************************"
     echo "    $TEST_NAME Final Summary:\n"
