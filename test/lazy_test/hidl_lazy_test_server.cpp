@@ -15,7 +15,7 @@
  */
 
 #include <android-base/logging.h>
-#include <android/hardware/tests/lazy/1.0/ILazy.h>
+#include <android/hardware/tests/lazy/1.1/ILazy.h>
 #include <hidl/HidlLazyUtils.h>
 #include <hidl/HidlTransportSupport.h>
 
@@ -23,7 +23,7 @@ using android::OK;
 using android::hardware::configureRpcThreadpool;
 using android::hardware::joinRpcThreadpool;
 using android::hardware::LazyServiceRegistrar;
-using android::hardware::tests::lazy::V1_0::ILazy;
+using android::hardware::tests::lazy::V1_1::ILazy;
 
 class Lazy : public ILazy {};
 
