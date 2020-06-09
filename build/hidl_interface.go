@@ -942,6 +942,7 @@ func hidlInterfaceFactory() android.Module {
 }
 
 var minSdkVersion = map[string]string{
+	"android.frameworks.bufferhub@1.0":          "29",
 	"android.hardware.audio.common@5.0":         "30",
 	"android.hardware.bluetooth.a2dp@1.0":       "30",
 	"android.hardware.bluetooth.audio@2.0":      "30",
@@ -993,8 +994,6 @@ var doubleLoadablePackageNames = []string{
 	"android.hardware.graphics.allocator@",
 	"android.hardware.graphics.bufferqueue@",
 	"android.hardware.media@",
-	"android.hardware.media.bufferpool@",
-	"android.hardware.media.c2@",
 	"android.hardware.media.omx@",
 	"android.hardware.memtrack@1.0",
 	"android.hardware.neuralnetworks@",
