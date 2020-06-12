@@ -498,8 +498,32 @@ bool isCoreAndroidPackage(const FQName& package) {
            package.inPackage("android.hardware");
 }
 
-// TODO(b/69862859): remove special case
-status_t isTestPackage(const FQName& fqName, const Coordinator* coordinator, bool* isTestPackage) {
+// Keep the list of libs which are used by VNDK core libs and should be part of
+// VNDK libs
+static const std::vector<std::string> vndkLibs = {
+        "android.hardware.audio.common@2.0",
+        "android.hardware.configstore@1.0",
+        "android.hardware.configstore@1.1",
+        "android.hardware.graphics.allocator@2.0",
+        "android.hardware.graphics.allocator@3.0",
+        "android.hardware.graphics.allocator@4.0",
+        "android.hardware.graphics.bufferqueue@1.0",
+        "android.hardware.graphics.bufferqueue@2.0",
+        "android.hardware.media.bufferpool@2.0",
+        "android.hardware.media.omx@1.0",
+        "android.hardware.media@1.0",
+        "android.hardware.memtrack@1.0",
+        "android.hardware.soundtrigger@2.0",
+        "android.hidl.token@1.0",
+        "android.system.suspend@1.0",
+};
+
+bool isVndkCoreLib(const FQName& fqName) {
+    return std::find(vndkLibs.begin(), vndkLibs.end(), fqName.string()) != vndkLibs.end();
+}
+
+status_t isSystemExtPackage(const FQName& fqName, const Coordinator* coordinator,
+                            bool* isSystemExt) {
     const auto fileExists = [](const std::string& file) {
         struct stat buf;
         return stat(file.c_str(), &buf) == 0;
@@ -507,7 +531,7 @@ status_t isTestPackage(const FQName& fqName, const Coordinator* coordinator, boo
 
     std::string path;
     status_t err = coordinator->getFilepath(fqName, Coordinator::Location::PACKAGE_ROOT,
-                                            ".hidl_for_test", &path);
+                                            ".hidl_for_system_ext", &path);
     if (err != OK) return err;
 
     const bool exists = fileExists(path);
@@ -516,7 +540,7 @@ status_t isTestPackage(const FQName& fqName, const Coordinator* coordinator, boo
         coordinator->onFileAccess(path, "r");
     }
 
-    *isTestPackage = exists;
+    *isSystemExt = exists;
     return OK;
 }
 
@@ -619,18 +643,15 @@ static status_t generateAndroidBpForPackage(const FQName& packageFQName,
     if (err != OK) return err;
     bool genJavaLibrary = needsJavaCode && isJavaCompatible;
 
-    bool generateForTest;
-    err = isTestPackage(packageFQName, coordinator, &generateForTest);
-    if (err != OK) return err;
-
     bool isCoreAndroid = isCoreAndroidPackage(packageFQName);
 
-    bool isVndk = !generateForTest && isCoreAndroid;
-    bool isVndkSp = isVndk && isSystemProcessSupportedPackage(packageFQName);
+    bool isVndkCore = isVndkCoreLib(packageFQName);
+    bool isVndkSp = isSystemProcessSupportedPackage(packageFQName);
 
-    // Currently, all platform-provided interfaces are in the VNDK, so if it isn't in the VNDK, it
-    // is device specific and so should be put in the system_ext partition.
-    bool isSystemExt = !isCoreAndroid;
+    bool isSystemExtHidl;
+    err = isSystemExtPackage(packageFQName, coordinator, &isSystemExtHidl);
+    if (err != OK) return err;
+    bool isSystemExt = isSystemExtHidl || !isCoreAndroid;
 
     std::string packageRoot;
     err = coordinator->getPackageRoot(packageFQName, &packageRoot);
@@ -650,7 +671,7 @@ static status_t generateAndroidBpForPackage(const FQName& packageFQName,
             out << "owner: \"" << coordinator->getOwner() << "\",\n";
         }
         out << "root: \"" << packageRoot << "\",\n";
-        if (isVndk) {
+        if (isVndkCore || isVndkSp) {
             out << "vndk: ";
             out.block([&]() {
                 out << "enabled: true,\n";
