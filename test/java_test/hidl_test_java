@@ -1,11 +1,13 @@
 export CLASSPATH=/data/framework/hidl_test_java_java.jar
 export TREBLE_TESTING_OVERRIDE=true
 
-e=0
+r=0 # at least one test ran
+e=0 # error
 for SIZE in 64 32; do
     native=/data/nativetest${SIZE/32}/hidl_test_java_native/hidl_test_java_native
 
     if [ -f $native ]; then
+        r=1
         echo "Testing $SIZE bit native client/server"
 
         # Test native server with Java client
@@ -28,12 +30,18 @@ for SIZE in 64 32; do
         kill $NATIVE_PID 2>/dev/null
     else
         echo "FAILED: Not running $native because it doesn't exist."
-        e=1
     fi
 done
 
+
 echo
 echo "Summary: $e"
+
+if [ $r = 0 ]; then
+    echo "NO TESTS RAN"
+    e=1
+fi
+
 [ $e -eq 0 ] && echo "All tests PASSED." || echo "Test(s) FAILED."
 
 export TREBLE_TESTING_OVERRIDE=false
