@@ -20,13 +20,12 @@ import static android.system.OsConstants.MAP_SHARED;
 import static android.system.OsConstants.PROT_READ;
 import static android.system.OsConstants.PROT_WRITE;
 
-import android.hidl.manager.V1_0.IServiceManager;
 import android.hardware.tests.baz.V1_0.IBase;
 import android.hardware.tests.baz.V1_0.IBaz;
-import android.hardware.tests.baz.V1_0.IQuux;
 import android.hardware.tests.baz.V1_0.IBaz.MyHandle;
 import android.hardware.tests.baz.V1_0.IBaz.NestedStruct;
 import android.hardware.tests.baz.V1_0.IBazCallback;
+import android.hardware.tests.baz.V1_0.IQuux;
 import android.hardware.tests.memory.V2_0.IMemoryInterface;
 import android.hardware.tests.memory.V2_0.TwoMemory;
 import android.hardware.tests.safeunion.V1_0.IOtherInterface;
@@ -35,20 +34,21 @@ import android.hardware.tests.safeunion.V1_0.ISafeUnion.HandleTypeSafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.InterfaceTypeSafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.LargeSafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.SmallSafeUnion;
+import android.hidl.manager.V1_0.IServiceManager;
+import android.os.DeadObjectException;
 import android.os.HidlMemory;
 import android.os.HidlMemoryUtil;
+import android.os.HidlSupport;
 import android.os.HwBinder;
 import android.os.HwParcel;
 import android.os.IBinder;
 import android.os.IHwBinder;
 import android.os.NativeHandle;
 import android.os.RemoteException;
-import android.os.HidlSupport;
 import android.os.SharedMemory;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.Log;
-
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -1237,7 +1237,7 @@ public final class HidlTestJava {
         ExpectTrue(proxy.unlinkToDeath(recipient2));
         try {
             proxy.dieNow();
-        } catch (RemoteException e) {
+        } catch (DeadObjectException e) {
             // Expected
         }
         ExpectTrue(recipient1.waitUntilServiceDied(2000 /*timeoutMillis*/));
