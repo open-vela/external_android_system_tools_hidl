@@ -2656,7 +2656,7 @@ static void usage(const char *me) {
 }
 
 int main(int argc, char **argv) {
-    android::hardware::details::setTrebleTestingOverride(true);
+    setenv("TREBLE_TESTING_OVERRIDE", "true", true);
 
     const char *me = argv[0];
     bool b = false;
