@@ -1,5 +1,4 @@
 export CLASSPATH=/data/framework/hidl_test_java_java.jar
-export TREBLE_TESTING_OVERRIDE=true
 
 r=0 # at least one test ran
 e=0 # error
@@ -43,7 +42,5 @@ if [ $r = 0 ]; then
 fi
 
 [ $e -eq 0 ] && echo "All tests PASSED." || echo "Test(s) FAILED."
-
-export TREBLE_TESTING_OVERRIDE=false
 
 exit $e

@@ -76,6 +76,8 @@ public final class HidlTestJava {
     }
 
     public int run(String[] args) throws RemoteException, IOException, ErrnoException {
+        HwBinder.setTrebleTestingOverride(true);
+
         if (args[0].equals("-c")) {
             client();
         } else if (args[0].equals("-s")) {
