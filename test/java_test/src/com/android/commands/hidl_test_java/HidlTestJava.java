@@ -1745,13 +1745,6 @@ public final class HidlTestJava {
         Baz baz = new Baz();
         baz.registerAsService("default");
 
-        try {
-            IBaz.getService("default");
-            throw new RuntimeException("Java in-process enabled");
-        } catch (NoSuchElementException e) {
-            // as expected
-        }
-
         SafeUnion safeunionInterface = new SafeUnion();
         safeunionInterface.registerAsService("default");
 
