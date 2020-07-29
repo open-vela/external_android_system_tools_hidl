@@ -85,6 +85,7 @@ cc_library_host_static {
         "TypeDef.cpp",
         "VectorType.cpp",
     ],
+    header_libs: ["libhwbinder_headers"],  // for constants
     shared_libs: [
         "libbase",
         "liblog",
