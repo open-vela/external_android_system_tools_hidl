@@ -52,6 +52,7 @@ static void emitEnumAidlDefinition(Formatter& out, const EnumType& enumType) {
     CHECK(scalar != nullptr) << enumType.typeName();
 
     enumType.emitDocComment(out);
+    out << "@VintfStability\n";
     out << "@Backing(type=\"" << AidlHelper::getAidlType(*scalar, enumType.fqName()) << "\")\n";
     out << "enum " << enumType.fqName().name() << " ";
     out.block([&] {
@@ -150,6 +151,7 @@ static void emitCompoundTypeAidlDefinition(Formatter& out, const CompoundType& c
     }
 
     compoundType.emitDocComment(out);
+    out << "@VintfStability \n";
     out << "parcelable " << AidlHelper::getAidlName(compoundType.fqName()) << " ";
     if (compoundType.style() == CompoundType::STYLE_STRUCT) {
         out.block([&] {
