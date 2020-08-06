@@ -71,6 +71,6 @@ phony {
     name: "hidl2aidl_test",
     required: [
         "hidl2aidl_test_comp_cc",
-        "hidl2aidl_test_gen",
+        "hidl2aidl_test_gen-java",
     ],
 }
