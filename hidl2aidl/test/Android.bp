@@ -47,8 +47,13 @@ genrule {
 
 aidl_interface {
     name: "hidl2aidl_test_gen",
-    unstable: true,
+    stability: "vintf",
     srcs: [":hidl2aidl_test_gen_aidl"],
+    backend: {
+        java: {
+            sdk_version: "module_current",
+        },
+    },
 }
 
 cc_test_library {

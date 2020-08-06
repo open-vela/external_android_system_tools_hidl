@@ -151,6 +151,7 @@ void AidlHelper::emitAidl(const Interface& interface, const Coordinator& coordin
             << " but AIDL does not support interface inheritance.\n";
     }
 
+    out << "@VintfStability\n";
     out << "interface " << getAidlName(interface.fqName()) << " ";
     out.block([&] {
         std::map<std::string, NodeWithVersion<NamedType>> latestTypeForBaseName;
