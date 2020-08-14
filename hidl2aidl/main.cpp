@@ -33,7 +33,7 @@ using namespace android;
 static void usage(const char* me) {
     Formatter out(stderr);
 
-    out << "Usage: " << me << " [-o <output path>] ";
+    out << "Usage: " << me << " [-fh] [-o <output path>] ";
     Coordinator::emitOptionsUsageString(out);
     out << " FQNAME...\n\n";
 
@@ -43,8 +43,9 @@ static void usage(const char* me) {
     out.indent();
     out.indent();
 
-    out << "-o <output path>: Location to output files.\n";
+    out << "-f: Force hidl2aidl to convert older packages\n";
     out << "-h: Prints this menu.\n";
+    out << "-o <output path>: Location to output files.\n";
     Coordinator::emitOptionsDetailString(out);
 
     out.unindent();
@@ -109,6 +110,30 @@ static bool packageExists(const Coordinator& coordinator, const FQName& fqName) 
     return result;
 }
 
+// assuming fqName exists, find oldest version which does exist
+// e.g. android.hardware.foo@1.7 -> android.hardware.foo@1.1 (if foo@1.0 doesn't
+// exist)
+static FQName getLowestExistingFqName(const Coordinator& coordinator, const FQName& fqName) {
+    FQName lowest(fqName);
+    while (lowest.getPackageMinorVersion() != 0) {
+        if (!packageExists(coordinator, lowest.downRev())) break;
+
+        lowest = lowest.downRev();
+    }
+    return lowest;
+}
+
+// assuming fqName exists, find newest version which does exist
+// e.g. android.hardware.foo@1.1 -> android.hardware.foo@1.7 if that's the
+// newest
+static FQName getHighestExistingFqName(const Coordinator& coordinator, const FQName& fqName) {
+    FQName highest(fqName);
+    while (packageExists(coordinator, highest.upRev())) {
+        highest = highest.upRev();
+    }
+    return highest;
+}
+
 static AST* parse(const Coordinator& coordinator, const FQName& target) {
     AST* ast = coordinator.parse(target);
     if (ast == nullptr) {
@@ -145,7 +170,8 @@ int main(int argc, char** argv) {
 
     Coordinator coordinator;
     std::string outputPath;
-    coordinator.parseOptions(argc, argv, "ho:", [&](int res, char* arg) {
+    bool forceConvertOldInterfaces = false;
+    coordinator.parseOptions(argc, argv, "fho:", [&](int res, char* arg) {
         switch (res) {
             case 'o': {
                 if (!outputPath.empty()) {
@@ -155,6 +181,9 @@ int main(int argc, char** argv) {
                 outputPath = arg;
                 break;
             }
+            case 'f':
+                forceConvertOldInterfaces = true;
+                break;
             case 'h':
             case '?':
             default: {
@@ -189,27 +218,45 @@ int main(int argc, char** argv) {
             exit(1);
         }
 
+        if (fqName.isFullyQualified()) {
+            std::cerr << "ERROR: hidl2aidl only supports converting an entire package, try "
+                         "converting "
+                      << fqName.getPackageAndVersion().string() << " instead." << std::endl;
+            exit(1);
+        }
+
         if (!packageExists(coordinator, fqName)) {
             std::cerr << "ERROR: Could not get sources for: " << arg << "." << std::endl;
             exit(1);
         }
 
-        FQName currentFqName(fqName);
-        while (currentFqName.getPackageMinorVersion() != 0) {
-            if (!packageExists(coordinator, currentFqName.downRev())) break;
-
-            currentFqName = currentFqName.downRev();
+        if (!forceConvertOldInterfaces) {
+            const FQName highestFqName = getHighestExistingFqName(coordinator, fqName);
+            if (fqName != highestFqName) {
+                std::cerr << "ERROR: A newer minor version of " << fqName.string() << " exists ("
+                          << highestFqName.string()
+                          << "). In general, prefer to convert that instead. If you really mean to "
+                             "use an old minor version use '-f'."
+                          << std::endl;
+                exit(1);
+            }
         }
 
+        // This is the list of all types which should be converted
+        // TODO: currently, this list is built throughout the main method, but
+        // additional types are also emitted in other parts of the compiler. We
+        // should move all of the logic to export different types to be in a
+        // single place so that the exact list of output files is known in
+        // advance.
         std::vector<FQName> targets;
-        while (packageExists(coordinator, currentFqName)) {
+        for (FQName version = getLowestExistingFqName(coordinator, fqName);
+             version.getPackageMinorVersion() <= fqName.getPackageMinorVersion();
+             version = version.upRev()) {
             std::vector<FQName> newTargets;
-            status_t err = coordinator.appendPackageInterfacesToVector(currentFqName, &newTargets);
-            if (err != OK) break;
+            status_t err = coordinator.appendPackageInterfacesToVector(version, &newTargets);
+            if (err != OK) exit(1);
 
             targets.insert(targets.end(), newTargets.begin(), newTargets.end());
-
-            currentFqName = currentFqName.upRev();
         }
 
         // targets should not contain duplicates since appendPackageInterfaces is only called once
@@ -221,20 +268,6 @@ int main(int argc, char** argv) {
                     return getLatestMinorVersionFQNameFromList(fqName, targets) != fqName;
                 });
         targets.erase(newEnd, targets.end());
-
-        if (fqName.isFullyQualified()) {
-            // Ensure that this fqName exists in the list.
-            // If not then there is a more recent version
-            if (std::find(targets.begin(), targets.end(), fqName) == targets.end()) {
-                // Not found. Error.
-                std::cerr << "ERROR: A newer minor version of " << fqName.string()
-                          << " exists. Compile that instead." << std::endl;
-                exit(1);
-            } else {
-                targets.clear();
-                targets.push_back(fqName);
-            }
-        }
 
         // Set up AIDL conversion log
         std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
