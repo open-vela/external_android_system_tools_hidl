@@ -271,11 +271,9 @@ int main(int argc, char** argv) {
 
         // Set up AIDL conversion log
         std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
-        std::string aidlName = AidlHelper::getAidlName(fqName);
         Formatter err = coordinator.getFormatter(
                 fqName, Coordinator::Location::DIRECT,
-                base::Join(base::Split(aidlPackage, "."), "/") + "/" +
-                        (aidlName.empty() ? "" : (aidlName + "-")) + "conversion.log");
+                base::Join(base::Split(aidlPackage, "."), "/") + "/" + "conversion.log");
         AidlHelper::setNotes(&err);
 
         std::vector<const NamedType*> namedTypesInPackage;
