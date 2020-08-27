@@ -155,6 +155,34 @@ static AST* parse(const Coordinator& coordinator, const FQName& target) {
     return ast;
 }
 
+static void emitBuildFile(Formatter out, const FQName& fqName) {
+    std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
+
+    out << "// This is the expected build file, but it may not be right in all cases\n";
+    out << "\n";
+    out << "aidl_interface {\n";
+    out << "    name: \"" << aidlPackage << "\",\n";
+    out << "    vendor_available: true,\n";
+    out << "    srcs: [\"" << base::Join(base::Split(aidlPackage, "."), "/") << "/*.aidl\"],\n";
+    out << "    stability: \"vintf\",\n";
+    out << "    backend: {\n";
+    out << "        cpp: {\n";
+    out << "            // disabled for portability\n";
+    out << "            // prefer NDK backend which can be used anywhere\n";
+    out << "            enabled: false,\n";
+    out << "        },\n";
+    out << "        java: {\n";
+    out << "            platform_apis: true,\n";
+    out << "        },\n";
+    out << "        ndk: {\n";
+    out << "            vndk: {\n";
+    out << "                enabled: true,\n";
+    out << "            },\n";
+    out << "        },\n";
+    out << "    },\n";
+    out << "}\n";
+}
+
 // hidl is intentionally leaky. Turn off LeakSanitizer by default.
 extern "C" const char* __asan_default_options() {
     return "detect_leaks=0";
@@ -280,6 +308,9 @@ int main(int argc, char** argv) {
     err << "Notes relating to hidl2aidl conversion of " << fqName.string() << " to " << aidlPackage
         << " (if any) follow:\n";
     AidlHelper::setNotes(&err);
+
+    emitBuildFile(coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "Android.bp"),
+                  fqName);
 
     std::vector<const NamedType*> namedTypesInPackage;
     for (const FQName& target : targets) {
