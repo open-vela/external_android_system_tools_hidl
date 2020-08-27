@@ -1,0 +1,16 @@
+#!/bin/bash
+
+if [[ -z $ANDROID_BUILD_TOP ]]; then
+    echo "ANDROID_BUILD_TOP not defined, lunch?"
+    exit 1
+fi
+
+set -ex
+
+hidl2aidl -o $ANDROID_BUILD_TOP/system/tools/hidl/hidl2aidl/test/build_test_delete_me \
+  -rhidl2aidl:system/tools/hidl/hidl2aidl/test hidl2aidl@3.0
+
+$ANDROID_BUILD_TOP/build/soong/soong_ui.bash --make-mode hidl2aidl3-update-api
+
+$ANDROID_BUILD_TOP/build/soong/soong_ui.bash --make-mode \
+      MODULES-IN-system-tools-hidl-hidl2aidl
