@@ -274,10 +274,9 @@ int main(int argc, char** argv) {
     targets.erase(newEnd, targets.end());
 
     // Set up AIDL conversion log
+    Formatter err =
+            coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "conversion.log");
     std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
-    Formatter err = coordinator.getFormatter(
-            fqName, Coordinator::Location::DIRECT,
-            base::Join(base::Split(aidlPackage, "."), "/") + "/" + "conversion.log");
     err << "Notes relating to hidl2aidl conversion of " << fqName.string() << " to " << aidlPackage
         << " (if any) follow:\n";
     AidlHelper::setNotes(&err);
