@@ -274,6 +274,8 @@ int main(int argc, char** argv) {
         Formatter err = coordinator.getFormatter(
                 fqName, Coordinator::Location::DIRECT,
                 base::Join(base::Split(aidlPackage, "."), "/") + "/" + "conversion.log");
+        err << "Notes relating to hidl2aidl conversion of " << fqName.string() << " to "
+            << aidlPackage << " (if any) follow:\n";
         AidlHelper::setNotes(&err);
 
         std::vector<const NamedType*> namedTypesInPackage;
@@ -310,6 +312,8 @@ int main(int argc, char** argv) {
 
             AidlHelper::emitAidl(*iface, coordinator);
         }
+
+        err << "END OF LOG\n";
     }
 
     return 0;
