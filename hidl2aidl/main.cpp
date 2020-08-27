@@ -35,7 +35,7 @@ static void usage(const char* me) {
 
     out << "Usage: " << me << " [-fh] [-o <output path>] ";
     Coordinator::emitOptionsUsageString(out);
-    out << " FQNAME...\n\n";
+    out << " FQNAME\n\n";
 
     out << "Converts FQNAME, PACKAGE(.SUBPACKAGE)*@[0-9]+.[0-9]+(::TYPE)? to an aidl "
            "equivalent.\n\n";
@@ -208,113 +208,116 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    for (int i = 0; i < argc; ++i) {
-        const char* arg = argv[i];
+    if (argc > 1) {
+        usage(me);
+        std::cerr << "ERROR: only one fqname can be specified." << std::endl;
+        exit(1);
+    }
 
-        FQName fqName;
-        if (!FQName::parse(arg, &fqName)) {
-            std::cerr << "ERROR: Invalid fully-qualified name as argument: " << arg << "."
+    const char* arg = argv[0];
+
+    FQName fqName;
+    if (!FQName::parse(arg, &fqName)) {
+        std::cerr << "ERROR: Invalid fully-qualified name as argument: " << arg << "." << std::endl;
+        exit(1);
+    }
+
+    if (fqName.isFullyQualified()) {
+        std::cerr << "ERROR: hidl2aidl only supports converting an entire package, try "
+                     "converting "
+                  << fqName.getPackageAndVersion().string() << " instead." << std::endl;
+        exit(1);
+    }
+
+    if (!packageExists(coordinator, fqName)) {
+        std::cerr << "ERROR: Could not get sources for: " << arg << "." << std::endl;
+        exit(1);
+    }
+
+    if (!forceConvertOldInterfaces) {
+        const FQName highestFqName = getHighestExistingFqName(coordinator, fqName);
+        if (fqName != highestFqName) {
+            std::cerr << "ERROR: A newer minor version of " << fqName.string() << " exists ("
+                      << highestFqName.string()
+                      << "). In general, prefer to convert that instead. If you really mean to "
+                         "use an old minor version use '-f'."
                       << std::endl;
             exit(1);
         }
-
-        if (fqName.isFullyQualified()) {
-            std::cerr << "ERROR: hidl2aidl only supports converting an entire package, try "
-                         "converting "
-                      << fqName.getPackageAndVersion().string() << " instead." << std::endl;
-            exit(1);
-        }
-
-        if (!packageExists(coordinator, fqName)) {
-            std::cerr << "ERROR: Could not get sources for: " << arg << "." << std::endl;
-            exit(1);
-        }
-
-        if (!forceConvertOldInterfaces) {
-            const FQName highestFqName = getHighestExistingFqName(coordinator, fqName);
-            if (fqName != highestFqName) {
-                std::cerr << "ERROR: A newer minor version of " << fqName.string() << " exists ("
-                          << highestFqName.string()
-                          << "). In general, prefer to convert that instead. If you really mean to "
-                             "use an old minor version use '-f'."
-                          << std::endl;
-                exit(1);
-            }
-        }
-
-        // This is the list of all types which should be converted
-        // TODO: currently, this list is built throughout the main method, but
-        // additional types are also emitted in other parts of the compiler. We
-        // should move all of the logic to export different types to be in a
-        // single place so that the exact list of output files is known in
-        // advance.
-        std::vector<FQName> targets;
-        for (FQName version = getLowestExistingFqName(coordinator, fqName);
-             version.getPackageMinorVersion() <= fqName.getPackageMinorVersion();
-             version = version.upRev()) {
-            std::vector<FQName> newTargets;
-            status_t err = coordinator.appendPackageInterfacesToVector(version, &newTargets);
-            if (err != OK) exit(1);
-
-            targets.insert(targets.end(), newTargets.begin(), newTargets.end());
-        }
-
-        // targets should not contain duplicates since appendPackageInterfaces is only called once
-        // per version. now remove all the elements that are not the "newest"
-        const auto& newEnd =
-                std::remove_if(targets.begin(), targets.end(), [&](const FQName& fqName) -> bool {
-                    if (fqName.name() == "types") return false;
-
-                    return getLatestMinorVersionFQNameFromList(fqName, targets) != fqName;
-                });
-        targets.erase(newEnd, targets.end());
-
-        // Set up AIDL conversion log
-        std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
-        Formatter err = coordinator.getFormatter(
-                fqName, Coordinator::Location::DIRECT,
-                base::Join(base::Split(aidlPackage, "."), "/") + "/" + "conversion.log");
-        err << "Notes relating to hidl2aidl conversion of " << fqName.string() << " to "
-            << aidlPackage << " (if any) follow:\n";
-        AidlHelper::setNotes(&err);
-
-        std::vector<const NamedType*> namedTypesInPackage;
-        for (const FQName& target : targets) {
-            if (target.name() != "types") continue;
-
-            AST* ast = parse(coordinator, target);
-
-            CHECK(!ast->isInterface());
-
-            std::vector<const NamedType*> types = ast->getRootScope().getSortedDefinedTypes();
-            namedTypesInPackage.insert(namedTypesInPackage.end(), types.begin(), types.end());
-        }
-
-        const auto& endNamedTypes = std::remove_if(
-                namedTypesInPackage.begin(), namedTypesInPackage.end(),
-                [&](const NamedType* namedType) -> bool {
-                    return getLatestMinorVersionNamedTypeFromList(
-                                   namedType->fqName(), namedTypesInPackage) != namedType->fqName();
-                });
-        namedTypesInPackage.erase(endNamedTypes, namedTypesInPackage.end());
-
-        for (const NamedType* namedType : namedTypesInPackage) {
-            AidlHelper::emitAidl(*namedType, coordinator);
-        }
-
-        for (const FQName& target : targets) {
-            if (target.name() == "types") continue;
-
-            AST* ast = parse(coordinator, target);
-
-            const Interface* iface = ast->getInterface();
-            CHECK(iface);
-
-            AidlHelper::emitAidl(*iface, coordinator);
-        }
-
-        err << "END OF LOG\n";
     }
+
+    // This is the list of all types which should be converted
+    // TODO: currently, this list is built throughout the main method, but
+    // additional types are also emitted in other parts of the compiler. We
+    // should move all of the logic to export different types to be in a
+    // single place so that the exact list of output files is known in
+    // advance.
+    std::vector<FQName> targets;
+    for (FQName version = getLowestExistingFqName(coordinator, fqName);
+         version.getPackageMinorVersion() <= fqName.getPackageMinorVersion();
+         version = version.upRev()) {
+        std::vector<FQName> newTargets;
+        status_t err = coordinator.appendPackageInterfacesToVector(version, &newTargets);
+        if (err != OK) exit(1);
+
+        targets.insert(targets.end(), newTargets.begin(), newTargets.end());
+    }
+
+    // targets should not contain duplicates since appendPackageInterfaces is only called once
+    // per version. now remove all the elements that are not the "newest"
+    const auto& newEnd =
+            std::remove_if(targets.begin(), targets.end(), [&](const FQName& fqName) -> bool {
+                if (fqName.name() == "types") return false;
+
+                return getLatestMinorVersionFQNameFromList(fqName, targets) != fqName;
+            });
+    targets.erase(newEnd, targets.end());
+
+    // Set up AIDL conversion log
+    std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
+    Formatter err = coordinator.getFormatter(
+            fqName, Coordinator::Location::DIRECT,
+            base::Join(base::Split(aidlPackage, "."), "/") + "/" + "conversion.log");
+    err << "Notes relating to hidl2aidl conversion of " << fqName.string() << " to " << aidlPackage
+        << " (if any) follow:\n";
+    AidlHelper::setNotes(&err);
+
+    std::vector<const NamedType*> namedTypesInPackage;
+    for (const FQName& target : targets) {
+        if (target.name() != "types") continue;
+
+        AST* ast = parse(coordinator, target);
+
+        CHECK(!ast->isInterface());
+
+        std::vector<const NamedType*> types = ast->getRootScope().getSortedDefinedTypes();
+        namedTypesInPackage.insert(namedTypesInPackage.end(), types.begin(), types.end());
+    }
+
+    const auto& endNamedTypes = std::remove_if(
+            namedTypesInPackage.begin(), namedTypesInPackage.end(),
+            [&](const NamedType* namedType) -> bool {
+                return getLatestMinorVersionNamedTypeFromList(
+                               namedType->fqName(), namedTypesInPackage) != namedType->fqName();
+            });
+    namedTypesInPackage.erase(endNamedTypes, namedTypesInPackage.end());
+
+    for (const NamedType* namedType : namedTypesInPackage) {
+        AidlHelper::emitAidl(*namedType, coordinator);
+    }
+
+    for (const FQName& target : targets) {
+        if (target.name() == "types") continue;
+
+        AST* ast = parse(coordinator, target);
+
+        const Interface* iface = ast->getInterface();
+        CHECK(iface);
+
+        AidlHelper::emitAidl(*iface, coordinator);
+    }
+
+    err << "END OF LOG\n";
 
     return 0;
 }
