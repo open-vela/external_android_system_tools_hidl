@@ -55,9 +55,6 @@ struct AidlHelper {
     /* Methods for NamedType */
     static void emitAidl(const NamedType& namedType, const Coordinator& coordinator);
 
-    /* Methods for Scope */
-    static void emitAidl(const Scope& scope, const Coordinator& coordinator);
-
     /* Methods for Interface */
     static void emitAidl(const Interface& interface, const Coordinator& coordinator);
     // Returns all methods that would exist in an AIDL equivalent interface
