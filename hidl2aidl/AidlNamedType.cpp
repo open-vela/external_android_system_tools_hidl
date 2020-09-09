@@ -18,7 +18,6 @@
 #include "CompoundType.h"
 #include "Coordinator.h"
 #include "EnumType.h"
-#include "Interface.h"
 #include "NamedType.h"
 #include "TypeDef.h"
 
@@ -115,11 +114,17 @@ void processCompoundType(const CompoundType& compoundType, ProcessedCompoundType
     }
 }
 
-static void emitCompoundTypeAidlDefinition(Formatter& out, const CompoundType& compoundType) {
+static void emitCompoundTypeAidlDefinition(Formatter& out, const CompoundType& compoundType,
+                                           const Coordinator& coordinator) {
     // Get all of the subtypes and fields from this type and any older versions
     // that it references.
     ProcessedCompoundType processedType;
     processCompoundType(compoundType, &processedType);
+
+    // Emit all of the subtypes
+    for (const NamedType* namedType : processedType.subTypes) {
+        AidlHelper::emitAidl(*namedType, coordinator);
+    }
 
     // Add all of the necessary imports for types that were found in older versions and missed
     // when emitting the file header.
@@ -174,13 +179,10 @@ void AidlHelper::emitAidl(const NamedType& namedType, const Coordinator& coordin
         emitTypeDefAidlDefinition(out, typeDef);
     } else if (namedType.isCompoundType()) {
         const CompoundType& compoundType = static_cast<const CompoundType&>(namedType);
-        emitCompoundTypeAidlDefinition(out, compoundType);
+        emitCompoundTypeAidlDefinition(out, compoundType, coordinator);
     } else if (namedType.isEnum()) {
         const EnumType& enumType = static_cast<const EnumType&>(namedType);
         emitEnumAidlDefinition(out, enumType);
-    } else if (namedType.isInterface()) {
-        const Interface& iface = static_cast<const Interface&>(namedType);
-        emitAidl(iface, coordinator);
     } else {
         out << "// TODO: Fix this " << namedType.definedName() << "\n";
     }
