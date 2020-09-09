@@ -25,8 +25,10 @@
 
 #include "AST.h"
 #include "AidlHelper.h"
+#include "CompoundType.h"
 #include "Coordinator.h"
 #include "DocComment.h"
+#include "Interface.h"
 
 using namespace android;
 
@@ -155,6 +157,16 @@ static AST* parse(const Coordinator& coordinator, const FQName& target) {
     return ast;
 }
 
+static void getSubTypes(const NamedType& namedType, std::vector<const NamedType*>* types) {
+    if (namedType.isScope()) {
+        const Scope& compoundType = static_cast<const Scope&>(namedType);
+        for (const NamedType* subType : compoundType.getSubTypes()) {
+            types->push_back(subType);
+            getSubTypes(*subType, types);
+        }
+    }
+}
+
 static void emitBuildFile(Formatter out, const FQName& fqName) {
     std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
 
@@ -275,11 +287,6 @@ int main(int argc, char** argv) {
     }
 
     // This is the list of all types which should be converted
-    // TODO: currently, this list is built throughout the main method, but
-    // additional types are also emitted in other parts of the compiler. We
-    // should move all of the logic to export different types to be in a
-    // single place so that the exact list of output files is known in
-    // advance.
     std::vector<FQName> targets;
     for (FQName version = getLowestExistingFqName(coordinator, fqName);
          version.getPackageMinorVersion() <= fqName.getPackageMinorVersion();
@@ -312,18 +319,27 @@ int main(int argc, char** argv) {
     emitBuildFile(coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "Android.bp"),
                   fqName);
 
+    // Gather all the types and interfaces
     std::vector<const NamedType*> namedTypesInPackage;
     for (const FQName& target : targets) {
-        if (target.name() != "types") continue;
 
         AST* ast = parse(coordinator, target);
+        CHECK(ast);
 
-        CHECK(!ast->isInterface());
+        getSubTypes(ast->getRootScope(), &namedTypesInPackage);
 
-        std::vector<const NamedType*> types = ast->getRootScope().getSortedDefinedTypes();
-        namedTypesInPackage.insert(namedTypesInPackage.end(), types.begin(), types.end());
+        const Interface* iface = ast->getInterface();
+        if (iface) {
+            namedTypesInPackage.push_back(iface);
+
+            // Get all of the types defined in the interface chain(includes self)
+            for (const Interface* interface : iface->typeChain()) {
+                getSubTypes(*interface, &namedTypesInPackage);
+            }
+        }
     }
 
+    // Remove all of the older repeated versions of types and keep the latest
     const auto& endNamedTypes = std::remove_if(
             namedTypesInPackage.begin(), namedTypesInPackage.end(),
             [&](const NamedType* namedType) -> bool {
@@ -332,19 +348,12 @@ int main(int argc, char** argv) {
             });
     namedTypesInPackage.erase(endNamedTypes, namedTypesInPackage.end());
 
-    for (const NamedType* namedType : namedTypesInPackage) {
+    // Emit all types and interfaces
+    // The interfaces and types are still be further manipulated inside
+    // emitAidl. The interfaces are consolidating methods from their typechains
+    // and the composite types are being flattened.
+    for (const auto& namedType : namedTypesInPackage) {
         AidlHelper::emitAidl(*namedType, coordinator);
-    }
-
-    for (const FQName& target : targets) {
-        if (target.name() == "types") continue;
-
-        AST* ast = parse(coordinator, target);
-
-        const Interface* iface = ast->getInterface();
-        CHECK(iface);
-
-        AidlHelper::emitAidl(*iface, coordinator);
     }
 
     err << "END OF LOG\n";
