@@ -1,6 +1,9 @@
 {
   "presubmit": [
     {
+      "name": "hidl_test"
+    },
+    {
       "name": "hidl-gen-host_test",
       "host": true
     },
