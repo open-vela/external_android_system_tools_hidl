@@ -203,11 +203,6 @@ void AidlHelper::emitAidl(const Interface& interface, const Coordinator& coordin
                  });
         if (!supersededMethods.empty()) out << "\n\n";
 
-        // Emit latest types defined for this interface only
-        for (auto const& [name, typeWithVersion] : latestTypeForBaseName) {
-            emitAidl(*typeWithVersion.node, coordinator);
-        }
-
         // Emit latest methods defined for this interface
         out.join(latestMethodForBaseName.begin(), latestMethodForBaseName.end(), "\n",
                  [&](const std::pair<std::string, NodeWithVersion<Method>>& methodPair) {
