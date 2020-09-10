@@ -1,5 +1,17 @@
+python_test_host {
+    name: "hidl_test",
+    main: "hidl_test.py",
+    srcs: ["hidl_test.py"],
+    test_config: "hidl_test.xml",
+    target_required: [
+        "hidl_test_client",
+        "hidl_test_servers",
+    ],
+    test_suites: ["general-tests"],
+}
+
 cc_defaults {
-    name: "hidl_test_client-defaults",
+    name: "hidl_test-defaults",
     defaults: ["hidl-gen-defaults"],
 
     shared_libs: [
@@ -52,11 +64,22 @@ cc_defaults {
     ],
 
     group_static_libs: true,
+
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
+    test_suites: ["device-tests"],
 }
 
 cc_test {
     name: "hidl_test_client",
-    defaults: ["hidl_test_client-defaults"],
+    defaults: ["hidl_test-defaults"],
 
     srcs: [
         "hidl_test_client.cpp",
@@ -71,11 +94,7 @@ cc_test {
 
 cc_test {
     name: "hidl_test_servers",
-    defaults: ["hidl_test_client-defaults"],
+    defaults: ["hidl_test-defaults"],
     srcs: ["hidl_test_servers.cpp"],
     gtest: false,
-}
-
-vts_config {
-    name: "VtsHidlUnitTests",
 }
