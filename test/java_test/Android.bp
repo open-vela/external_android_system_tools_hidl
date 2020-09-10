@@ -57,7 +57,7 @@ cc_test {
             suffix: "64",
         },
     },
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
 }
 
 java_test {
@@ -72,5 +72,5 @@ java_test {
         "android.hardware.tests.memory-V2.0-java",
         "android.hardware.tests.safeunion-V1.0-java",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
 }

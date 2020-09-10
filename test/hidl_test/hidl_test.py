@@ -41,18 +41,18 @@ def make_test(client, server):
             run_cmd("adb shell killall %s >/dev/null 2>&1" % server, ignore_error=True)
     return test
 
-def has_binary(binary):
-    return 0 == run_cmd("adb shell ls %s >/dev/null" % binary, ignore_error=True)
+def has_bitness(bitness):
+    return 0 == run_cmd("echo '[[ \"$(getprop ro.product.cpu.abilist%s)\" != \"\" ]]' | adb shell sh" % bitness, ignore_error=True)
 
 if __name__ == '__main__':
     clients = []
     servers = []
 
-    if has_binary("/data/nativetest/hidl_test_client/hidl_test_client"):
+    if has_bitness(32):
         clients += ["/data/nativetest/hidl_test_client/hidl_test_client"]
         servers += ["/data/nativetest/hidl_test_servers/hidl_test_servers"]
 
-    if has_binary("/data/nativetest64/hidl_test_client/hidl_test_client"):
+    if has_bitness(64):
         clients += ["/data/nativetest64/hidl_test_client/hidl_test_client"]
         servers += ["/data/nativetest64/hidl_test_servers/hidl_test_servers"]
 

@@ -48,16 +48,16 @@ def make_test(client, server):
             cleanup(server)
     return test
 
-def has_binary(binary):
-    return 0 == run_cmd("adb shell ls %s >/dev/null" % binary, ignore_error=True)
+def has_bitness(bitness):
+    return 0 == run_cmd("echo '[[ \"$(getprop ro.product.cpu.abilist%s)\" != \"\" ]]' | adb shell sh" % bitness, ignore_error=True)
 
 if __name__ == '__main__':
     cmds = ["app_process /data/framework com.android.commands.hidl_test_java.HidlTestJava"]
 
-    if has_binary("/data/nativetest/hidl_test_java_native/hidl_test_java_native"):
+    if has_bitness(32):
         cmds += ["/data/nativetest/hidl_test_java_native/hidl_test_java_native"]
 
-    if has_binary("/data/nativetest64/hidl_test_java_native/hidl_test_java_native"):
+    if has_bitness(64):
         cmds += ["/data/nativetest64/hidl_test_java_native/hidl_test_java_native"]
 
     assert len(cmds) >= 2
