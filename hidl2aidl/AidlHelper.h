@@ -16,12 +16,15 @@
 
 #pragma once
 
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
+#include "Reference.h"
 
 namespace android {
 
+struct CompoundType;
 struct Coordinator;
 struct Formatter;
 struct FQName;
@@ -30,6 +33,19 @@ struct Method;
 struct NamedType;
 struct Scope;
 struct Type;
+
+struct FieldWithVersion {
+    const NamedReference<Type>* field;
+    // name of the field appended by the
+    std::string fullName;
+    std::pair<size_t, size_t> version;
+};
+
+struct ProcessedCompoundType {
+    // map modified name to field. This modified name is old.new
+    std::vector<FieldWithVersion> fields;
+    std::set<const NamedType*> subTypes;
+};
 
 struct AidlHelper {
     /* FQName helpers */
@@ -59,6 +75,9 @@ struct AidlHelper {
     static void emitAidl(const Interface& interface, const Coordinator& coordinator);
     // Returns all methods that would exist in an AIDL equivalent interface
     static std::vector<const Method*> getUserDefinedMethods(const Interface& interface);
+
+    static void processCompoundType(const CompoundType& compoundType,
+                                    ProcessedCompoundType* processedType);
 
     static Formatter& notes();
     static void setNotes(Formatter* formatter);

@@ -25,6 +25,7 @@
 
 #include "AidlHelper.h"
 #include "ArrayType.h"
+#include "CompoundType.h"
 #include "Coordinator.h"
 #include "Interface.h"
 #include "Method.h"
@@ -113,6 +114,17 @@ void AidlHelper::emitFileHeader(Formatter& out, const NamedType& type) {
                 importLocallyReferencedType(*ref->get(), &imports);
             }
         }
+    } else if (type.isCompoundType()) {
+        // Get all of the imports for the flattened compound type that may
+        // include additional fields and subtypes from older versions
+        ProcessedCompoundType processedType;
+        processCompoundType(static_cast<const CompoundType&>(type), &processedType);
+        for (const auto& field : processedType.fields) {
+            importLocallyReferencedType(*field.field->get(), &imports);
+        }
+        for (const auto& subType : processedType.subTypes) {
+            importLocallyReferencedType(*subType, &imports);
+        }
     } else {
         for (const Reference<Type>* ref : type.getReferences()) {
             if (ref->get()->definedName() == type.fqName().name()) {
@@ -140,6 +152,54 @@ Formatter AidlHelper::getFileWithHeader(const NamedType& namedType,
                                                      getAidlName(namedType.fqName()) + ".aidl");
     emitFileHeader(out, namedType);
     return out;
+}
+
+void AidlHelper::processCompoundType(const CompoundType& compoundType,
+                                     ProcessedCompoundType* processedType) {
+    // Gather all of the subtypes defined in this type
+    for (const NamedType* subType : compoundType.getSubTypes()) {
+        processedType->subTypes.insert(subType);
+    }
+    std::pair<size_t, size_t> version = compoundType.fqName().hasVersion()
+                                                ? compoundType.fqName().getVersion()
+                                                : std::pair<size_t, size_t>{0, 0};
+    for (const NamedReference<Type>* field : compoundType.getFields()) {
+        // Check for references to an older version of itself
+        if (field->get()->typeName() == compoundType.typeName()) {
+            processCompoundType(static_cast<const CompoundType&>(*field->get()), processedType);
+        } else {
+            // Handle duplicate field names. Keep only the most recent definitions.
+            auto it = std::find_if(processedType->fields.begin(), processedType->fields.end(),
+                                   [field](auto& processedField) {
+                                       return processedField.field->name() == field->name();
+                                   });
+            if (it != processedType->fields.end()) {
+                AidlHelper::notes()
+                        << "Found conflicting field name \"" << field->name()
+                        << "\" in different versions of " << compoundType.fqName().name() << ". ";
+
+                if (version.first > it->version.first ||
+                    (version.first == it->version.first && version.second > it->version.second)) {
+                    AidlHelper::notes()
+                            << "Keeping " << field->get()->typeName() << " from " << version.first
+                            << "." << version.second << " and discarding "
+                            << (it->field)->get()->typeName() << " from " << it->version.first
+                            << "." << it->version.second << ".\n";
+
+                    it->field = field;
+                    it->version = version;
+                } else {
+                    AidlHelper::notes()
+                            << "Keeping " << (it->field)->get()->typeName() << " from "
+                            << it->version.first << "." << it->version.second << " and discarding "
+                            << field->get()->typeName() << " from " << version.first << "."
+                            << version.second << ".\n";
+                }
+            } else {
+                processedType->fields.push_back({field, field->name(), version});
+            }
+        }
+    }
 }
 
 }  // namespace android
