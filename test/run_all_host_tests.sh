@@ -3,14 +3,27 @@
 function run() {
     local FAILED_TESTS=()
 
-    # the linter test requires having the source tree available in order
-    # to run, so it isn't using TEST_MAPPING/tradefed/etc
+    local COMPILE_TIME_TESTS=(\
+        hidl_hash_test \
+        hidl2aidl_test \
+        hidl_error_test \
+        hidl_export_test \
+        hidl_format_test \
+        hidl_cpp_impl_test \
+        hidl_java_impl_test \
+        hidl_system_api_test \
+        android.hardware.tests.foo@1.0-vts.driver \
+        android.hardware.tests.foo@1.0-vts.profiler)
+
     local RUN_TIME_TESTS=(\
+        libhidl-gen-utils_test \
+        libhidl-gen-host-utils_test \
+        hidl-gen-host_test \
         hidl-lint_test \
     )
 
     $ANDROID_BUILD_TOP/build/soong/soong_ui.bash --make-mode -j \
-        ${RUN_TIME_TESTS[*]} || return
+        ${COMPILE_TIME_TESTS[*]} ${RUN_TIME_TESTS[*]} || return
 
     local BITNESS=("nativetest" "nativetest64")
 
