@@ -167,15 +167,13 @@ static void getSubTypes(const NamedType& namedType, std::set<const NamedType*>* 
     }
 }
 
-static void emitBuildFile(Formatter out, const FQName& fqName) {
-    std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
-
+static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQName>& targets) {
     out << "// This is the expected build file, but it may not be right in all cases\n";
     out << "\n";
     out << "aidl_interface {\n";
-    out << "    name: \"" << aidlPackage << "\",\n";
+    out << "    name: \"" << AidlHelper::getAidlPackage(fqName) << "\",\n";
     out << "    vendor_available: true,\n";
-    out << "    srcs: [\"" << base::Join(base::Split(aidlPackage, "."), "/") << "/*.aidl\"],\n";
+    out << "    srcs: [\"" << AidlHelper::getAidlPackagePath(fqName) << "/*.aidl\"],\n";
     out << "    stability: \"vintf\",\n";
     out << "    backend: {\n";
     out << "        cpp: {\n";
@@ -192,6 +190,26 @@ static void emitBuildFile(Formatter out, const FQName& fqName) {
     out << "            },\n";
     out << "        },\n";
     out << "    },\n";
+    out << "}\n\n";
+
+    // TODO(b/158489355) Handle different languages.
+    out << "cc_library {\n";
+    out << "    name: \"" << AidlHelper::getAidlPackage(fqName) << "-translate-ndk\",\n";
+    out << "    vendor_available: true,\n";
+    out << "    srcs: [\"" << AidlHelper::getAidlPackagePath(fqName) << "/translate-ndk.cpp\"],\n";
+    out << "    shared_libs: [\n";
+    out << "        \"libbinder_ndk\",\n";
+    out << "        \"libhidlbase\",\n";
+    out << "        \"" << AidlHelper::getAidlPackage(fqName) << "-ndk_platform\",\n";
+    std::set<std::string> uniquePackages;
+    for (const auto& target : targets) {
+        uniquePackages.insert(target.getPackageAndVersion().string());
+    }
+    for (const auto& package : uniquePackages) {
+        out << "        \"" << package << "\",\n";
+    }
+    out << "    ],\n";
+    out << "    export_include_dirs: [\"include\"],\n";
     out << "}\n";
 }
 
@@ -311,13 +329,22 @@ int main(int argc, char** argv) {
     // Set up AIDL conversion log
     Formatter err =
             coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "conversion.log");
-    std::string aidlPackage = AidlHelper::getAidlPackage(fqName);
-    err << "Notes relating to hidl2aidl conversion of " << fqName.string() << " to " << aidlPackage
-        << " (if any) follow:\n";
+    err << "Notes relating to hidl2aidl conversion of " << fqName.string() << " to "
+        << AidlHelper::getAidlPackage(fqName) << " (if any) follow:\n";
     AidlHelper::setNotes(&err);
 
-    emitBuildFile(coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "Android.bp"),
-                  fqName);
+    Formatter translateSource =
+            coordinator.getFormatter(fqName, Coordinator::Location::DIRECT,
+                                     AidlHelper::getAidlPackagePath(fqName) + "/translate-ndk.cpp");
+    AidlHelper::setTranslateSource(&translateSource);
+
+    Formatter translateHeader = coordinator.getFormatter(
+            fqName, Coordinator::Location::DIRECT,
+            "include/" + AidlHelper::getAidlPackagePath(fqName) + "/translate-ndk.h");
+    AidlHelper::setTranslateHeader(&translateHeader);
+    Formatter buildFile =
+            coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "Android.bp");
+    emitBuildFile(buildFile, fqName, targets);
 
     // Gather all the types and interfaces
     std::set<const NamedType*> namedTypesInPackage;
@@ -358,11 +385,13 @@ int main(int argc, char** argv) {
         if (namedType->isCompoundType()) {
             ProcessedCompoundType processed;
             AidlHelper::processCompoundType(static_cast<const CompoundType&>(*namedType),
-                                            &processed);
+                                            &processed, std::string());
             processedTypesInPackage.insert(
                     std::pair<const NamedType*, const ProcessedCompoundType>(namedType, processed));
         }
     }
+
+    AidlHelper::emitH2aTranslation(namedTypesInPackage, processedTypesInPackage);
 
     // Emit all types and interfaces
     // The interfaces and types are still be further manipulated inside
