@@ -36,6 +36,8 @@
 namespace android {
 
 Formatter* AidlHelper::notesFormatter = nullptr;
+Formatter* AidlHelper::translateHeaderFormatter = nullptr;
+Formatter* AidlHelper::translateSourceFormatter = nullptr;
 
 Formatter& AidlHelper::notes() {
     CHECK(notesFormatter != nullptr);
@@ -62,6 +64,10 @@ std::string AidlHelper::getAidlPackage(const FQName& fqName) {
     }
 
     return aidlPackage;
+}
+
+std::string AidlHelper::getAidlPackagePath(const FQName& fqName) {
+    return base::Join(base::Split(AidlHelper::getAidlPackage(fqName), "."), "/");
 }
 
 std::string AidlHelper::getAidlFQName(const FQName& fqName) {
@@ -151,16 +157,17 @@ void AidlHelper::emitFileHeader(
 Formatter AidlHelper::getFileWithHeader(
         const NamedType& namedType, const Coordinator& coordinator,
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
-    std::string aidlPackage = getAidlPackage(namedType.fqName());
-    Formatter out = coordinator.getFormatter(namedType.fqName(), Coordinator::Location::DIRECT,
-                                             base::Join(base::Split(aidlPackage, "."), "/") + "/" +
-                                                     getAidlName(namedType.fqName()) + ".aidl");
+    Formatter out =
+            coordinator.getFormatter(namedType.fqName(), Coordinator::Location::DIRECT,
+                                     AidlHelper::getAidlPackagePath(namedType.fqName()) + "/" +
+                                             getAidlName(namedType.fqName()) + ".aidl");
     emitFileHeader(out, namedType, processedTypes);
     return out;
 }
 
 void AidlHelper::processCompoundType(const CompoundType& compoundType,
-                                     ProcessedCompoundType* processedType) {
+                                     ProcessedCompoundType* processedType,
+                                     const std::string& fieldNamePrefix) {
     // Gather all of the subtypes defined in this type
     for (const NamedType* subType : compoundType.getSubTypes()) {
         processedType->subTypes.insert(subType);
@@ -171,7 +178,8 @@ void AidlHelper::processCompoundType(const CompoundType& compoundType,
     for (const NamedReference<Type>* field : compoundType.getFields()) {
         // Check for references to an older version of itself
         if (field->get()->typeName() == compoundType.typeName()) {
-            processCompoundType(static_cast<const CompoundType&>(*field->get()), processedType);
+            processCompoundType(static_cast<const CompoundType&>(*field->get()), processedType,
+                                fieldNamePrefix + field->name() + ".");
         } else {
             // Handle duplicate field names. Keep only the most recent definitions.
             auto it = std::find_if(processedType->fields.begin(), processedType->fields.end(),
@@ -190,7 +198,7 @@ void AidlHelper::processCompoundType(const CompoundType& compoundType,
                             << "." << version.second << " and discarding "
                             << (it->field)->get()->typeName() << " from " << it->version.first
                             << "." << it->version.second << ".\n";
-
+                    it->fullName = fieldNamePrefix + field->name();
                     it->field = field;
                     it->version = version;
                 } else {
@@ -201,7 +209,7 @@ void AidlHelper::processCompoundType(const CompoundType& compoundType,
                             << version.second << ".\n";
                 }
             } else {
-                processedType->fields.push_back({field, field->name(), version});
+                processedType->fields.push_back({field, fieldNamePrefix + field->name(), version});
             }
         }
     }

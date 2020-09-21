@@ -57,6 +57,9 @@ struct AidlHelper {
     // android.hardware.foo@1.x -> android.hardware.foo
     // android.hardware.foo@2.x -> android.hardware.foo2
     static std::string getAidlPackage(const FQName& fqName);
+    // returns getAidlPackage(fqName) with '.' replaced by '/'
+    // android.hardware.foo@1.x -> android/hardware/foo
+    static std::string getAidlPackagePath(const FQName& fqName);
 
     // getAidlFQName = getAidlPackage + "." + getAidlName
     static std::string getAidlFQName(const FQName& fqName);
@@ -84,14 +87,26 @@ struct AidlHelper {
     static std::vector<const Method*> getUserDefinedMethods(const Interface& interface);
 
     static void processCompoundType(const CompoundType& compoundType,
-                                    ProcessedCompoundType* processedType);
+                                    ProcessedCompoundType* processedType,
+                                    const std::string& fieldNamePrefix);
 
     static Formatter& notes();
     static void setNotes(Formatter* formatter);
 
+    static Formatter& translatorHeader();
+    static Formatter& translatorSource();
+    static void setTranslateHeader(Formatter* formatter);
+    static void setTranslateSource(Formatter* formatter);
+
+    static void emitH2aTranslation(
+            const std::set<const NamedType*>& namedTypesInPackage,
+            const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
+
   private:
     // This is the formatter to use for additional conversion output
     static Formatter* notesFormatter;
+    static Formatter* translateHeaderFormatter;
+    static Formatter* translateSourceFormatter;
 };
 
 }  // namespace android
