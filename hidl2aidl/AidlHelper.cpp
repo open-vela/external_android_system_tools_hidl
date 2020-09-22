@@ -89,7 +89,9 @@ void AidlHelper::importLocallyReferencedType(const Type& type, std::set<std::str
 // it has to encode the logic in the rest of hidl2aidl. It would be better
 // if we could iterate over the AIDL structure which has already been
 // processed.
-void AidlHelper::emitFileHeader(Formatter& out, const NamedType& type) {
+void AidlHelper::emitFileHeader(
+        Formatter& out, const NamedType& type,
+        const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
     out << "// FIXME: license file if you have one\n\n";
     out << "package " << getAidlPackage(type.fqName()) << ";\n\n";
 
@@ -117,8 +119,10 @@ void AidlHelper::emitFileHeader(Formatter& out, const NamedType& type) {
     } else if (type.isCompoundType()) {
         // Get all of the imports for the flattened compound type that may
         // include additional fields and subtypes from older versions
-        ProcessedCompoundType processedType;
-        processCompoundType(static_cast<const CompoundType&>(type), &processedType);
+        const auto& it = processedTypes.find(&type);
+        CHECK(it != processedTypes.end()) << "Failed to find " << type.fullName();
+        const ProcessedCompoundType& processedType = it->second;
+
         for (const auto& field : processedType.fields) {
             importLocallyReferencedType(*field.field->get(), &imports);
         }
@@ -144,13 +148,14 @@ void AidlHelper::emitFileHeader(Formatter& out, const NamedType& type) {
     }
 }
 
-Formatter AidlHelper::getFileWithHeader(const NamedType& namedType,
-                                        const Coordinator& coordinator) {
+Formatter AidlHelper::getFileWithHeader(
+        const NamedType& namedType, const Coordinator& coordinator,
+        const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
     std::string aidlPackage = getAidlPackage(namedType.fqName());
     Formatter out = coordinator.getFormatter(namedType.fqName(), Coordinator::Location::DIRECT,
                                              base::Join(base::Split(aidlPackage, "."), "/") + "/" +
                                                      getAidlName(namedType.fqName()) + ".aidl");
-    emitFileHeader(out, namedType);
+    emitFileHeader(out, namedType, processedTypes);
     return out;
 }
 

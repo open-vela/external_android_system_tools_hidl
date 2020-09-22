@@ -58,11 +58,14 @@ static void emitEnumAidlDefinition(Formatter& out, const EnumType& enumType) {
     });
 }
 
-static void emitCompoundTypeAidlDefinition(Formatter& out, const CompoundType& compoundType) {
+static void emitCompoundTypeAidlDefinition(
+        Formatter& out, const CompoundType& compoundType,
+        const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
     // Get all of the subtypes and fields from this type and any older versions
     // that it references.
-    ProcessedCompoundType processedType;
-    AidlHelper::processCompoundType(compoundType, &processedType);
+    const auto& it = processedTypes.find(&compoundType);
+    CHECK(it != processedTypes.end()) << "Failed to find " << compoundType.fullName();
+    const ProcessedCompoundType& processedType = it->second;
 
     compoundType.emitDocComment(out);
     out << "@VintfStability \n";
@@ -86,20 +89,22 @@ static void emitCompoundTypeAidlDefinition(Formatter& out, const CompoundType& c
 }
 
 // TODO: Enum/Typedef should just emit to hidl-error.log or similar
-void AidlHelper::emitAidl(const NamedType& namedType, const Coordinator& coordinator) {
-    Formatter out = getFileWithHeader(namedType, coordinator);
+void AidlHelper::emitAidl(
+        const NamedType& namedType, const Coordinator& coordinator,
+        const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
+    Formatter out = getFileWithHeader(namedType, coordinator, processedTypes);
     if (namedType.isTypeDef()) {
         const TypeDef& typeDef = static_cast<const TypeDef&>(namedType);
         emitTypeDefAidlDefinition(out, typeDef);
     } else if (namedType.isCompoundType()) {
         const CompoundType& compoundType = static_cast<const CompoundType&>(namedType);
-        emitCompoundTypeAidlDefinition(out, compoundType);
+        emitCompoundTypeAidlDefinition(out, compoundType, processedTypes);
     } else if (namedType.isEnum()) {
         const EnumType& enumType = static_cast<const EnumType&>(namedType);
         emitEnumAidlDefinition(out, enumType);
     } else if (namedType.isInterface()) {
         const Interface& iface = static_cast<const Interface&>(namedType);
-        emitAidl(iface, coordinator);
+        emitAidl(iface, coordinator, processedTypes);
     } else {
         out << "// TODO: Fix this " << namedType.definedName() << "\n";
     }

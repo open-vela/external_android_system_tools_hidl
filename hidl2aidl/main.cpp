@@ -348,12 +348,27 @@ int main(int argc, char** argv) {
             });
     namedTypesInPackage.erase(endNamedTypes, namedTypesInPackage.end());
 
+    // Process and flatten all of the types. Many types include fields of older
+    // versions of that type.
+    // This step recursively finds all of those fields and adds their fields to
+    // the most recent top level type.
+    std::map<const NamedType*, const ProcessedCompoundType> processedTypesInPackage;
+    for (const auto& namedType : namedTypesInPackage) {
+        if (namedType->isCompoundType()) {
+            ProcessedCompoundType processed;
+            AidlHelper::processCompoundType(static_cast<const CompoundType&>(*namedType),
+                                            &processed);
+            processedTypesInPackage.insert(
+                    std::pair<const NamedType*, const ProcessedCompoundType>(namedType, processed));
+        }
+    }
+
     // Emit all types and interfaces
     // The interfaces and types are still be further manipulated inside
     // emitAidl. The interfaces are consolidating methods from their typechains
     // and the composite types are being flattened.
     for (const auto& namedType : namedTypesInPackage) {
-        AidlHelper::emitAidl(*namedType, coordinator);
+        AidlHelper::emitAidl(*namedType, coordinator, processedTypesInPackage);
     }
 
     err << "END OF LOG\n";
