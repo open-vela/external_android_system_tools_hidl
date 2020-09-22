@@ -142,8 +142,10 @@ static bool shouldWarnStatusType(const std::string& typeName) {
     return false;
 }
 
-void AidlHelper::emitAidl(const Interface& interface, const Coordinator& coordinator) {
-    Formatter out = getFileWithHeader(interface, coordinator);
+void AidlHelper::emitAidl(
+        const Interface& interface, const Coordinator& coordinator,
+        const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
+    Formatter out = getFileWithHeader(interface, coordinator, processedTypes);
 
     interface.emitDocComment(out);
     if (interface.superType() && interface.superType()->fqName() != gIBaseFqName) {

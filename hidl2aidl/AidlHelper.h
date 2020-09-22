@@ -61,18 +61,25 @@ struct AidlHelper {
     // getAidlFQName = getAidlPackage + "." + getAidlName
     static std::string getAidlFQName(const FQName& fqName);
 
-    static void emitFileHeader(Formatter& out, const NamedType& type);
+    static void emitFileHeader(
+            Formatter& out, const NamedType& type,
+            const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
     static void importLocallyReferencedType(const Type& type, std::set<std::string>* imports);
-    static Formatter getFileWithHeader(const NamedType& namedType, const Coordinator& coordinator);
+    static Formatter getFileWithHeader(
+            const NamedType& namedType, const Coordinator& coordinator,
+            const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
 
     /* Methods for Type */
     static std::string getAidlType(const Type& type, const FQName& relativeTo);
 
     /* Methods for NamedType */
-    static void emitAidl(const NamedType& namedType, const Coordinator& coordinator);
+    static void emitAidl(
+            const NamedType& namedType, const Coordinator& coordinator,
+            const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
 
     /* Methods for Interface */
-    static void emitAidl(const Interface& interface, const Coordinator& coordinator);
+    static void emitAidl(const Interface& interface, const Coordinator& coordinator,
+                         const std::map<const NamedType*, const ProcessedCompoundType>&);
     // Returns all methods that would exist in an AIDL equivalent interface
     static std::vector<const Method*> getUserDefinedMethods(const Interface& interface);
 
