@@ -1889,7 +1889,7 @@ TEST_F(HidlTest, EmptyTransactionTest) {
     sp<IBinder> binder = ::android::hardware::toBinder(bar);
 
     Parcel request, reply;
-    EXPECT_EQ(::android::BAD_TYPE, binder->transact(2 /*someBoolMethod*/, request, &reply));
+    EXPECT_EQ(::android::BAD_TYPE, binder->transact(3 /*someBoolMethod*/, request, &reply));
 
     EXPECT_OK(bar->ping());  // still works
 }
@@ -1904,7 +1904,7 @@ TEST_F(HidlTest, WrongDescriptorTest) {
     Parcel request, reply;
     // wrong descriptor
     EXPECT_EQ(::android::OK, request.writeInterfaceToken("not a real descriptor"));
-    EXPECT_EQ(::android::BAD_TYPE, binder->transact(2 /*someBoolMethod*/, request, &reply));
+    EXPECT_EQ(::android::BAD_TYPE, binder->transact(3 /*someBoolMethod*/, request, &reply));
 
     EXPECT_OK(bar->ping());  // still works
 }
@@ -1920,7 +1920,7 @@ TEST_F(HidlTest, TwowayMethodOnewayEnabledTest) {
     EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBaz::descriptor));
     EXPECT_EQ(::android::OK, request.writeInt64(1234));
     // IBaz::doThatAndReturnSomething is two-way but we call it using FLAG_ONEWAY.
-    EXPECT_EQ(::android::OK, binder->transact(18 /*doThatAndReturnSomething*/, request, &reply,
+    EXPECT_EQ(::android::OK, binder->transact(19 /*doThatAndReturnSomething*/, request, &reply,
                                               IBinder::FLAG_ONEWAY));
 
     ::android::hardware::Status status;
@@ -1952,7 +1952,7 @@ TEST_F(HidlTest, OnewayMethodOnewayDisabledTest) {
             // sends an empty reply for two-way transactions if the transaction itself
             // did not send a reply.
             ::android::OK,
-            binder->transact(17 /*doThis*/, request, &reply, 0 /* Not FLAG_ONEWAY */));
+            binder->transact(18 /*doThis*/, request, &reply, 0 /* Not FLAG_ONEWAY */));
     if (gHidlEnvironment->enableDelayMeasurementTests) {
         // IBaz::doThis is oneway, should return instantly.
         EXPECT_LT(systemTime() - now, ONEWAY_TOLERANCE_NS);
