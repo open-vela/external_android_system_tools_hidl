@@ -71,9 +71,6 @@ if __name__ == '__main__':
 
     for client in cmds:
         for server in cmds:
-            # TODO(b/168152294) test all combinations
-            if client == server:
-                continue
             test_name = 'test_%s_to_%s' % (short_name(client), short_name(server))
             test = make_test(client, server)
             setattr(TestHidlJava, test_name, test)
