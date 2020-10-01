@@ -28,7 +28,6 @@ import android.hardware.tests.baz.V1_0.IBazCallback;
 import android.hardware.tests.baz.V1_0.IQuux;
 import android.hardware.tests.memory.V2_0.IMemoryInterface;
 import android.hardware.tests.memory.V2_0.TwoMemory;
-import android.hardware.tests.safeunion.V1_0.IOtherInterface;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.HandleTypeSafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.InterfaceTypeSafeUnion;
@@ -369,8 +368,6 @@ public final class HidlTestJava {
             String testStringA = "Hello";
             String testStringB = "World";
 
-            IOtherInterface otherInterface = IOtherInterface.getService();
-
             ArrayList<NativeHandle> testHandlesVector = new ArrayList<>();
             for (int i = 0; i < 128; i++) {
                 testHandlesVector.add(new NativeHandle());
@@ -381,11 +378,10 @@ public final class HidlTestJava {
             ExpectTrue(safeUnion.getDiscriminator() == InterfaceTypeSafeUnion.hidl_discriminator.b);
             ExpectDeepEq(testArray, safeUnion.b());
 
-            safeUnion.c(otherInterface);
+            IServiceManager anInterface = IServiceManager.getService();
+            safeUnion.c(anInterface);
             ExpectTrue(safeUnion.getDiscriminator() == InterfaceTypeSafeUnion.hidl_discriminator.c);
-            ExpectTrue(HidlSupport.interfacesEqual(otherInterface, safeUnion.c()));
-            String result = safeUnion.c().concatTwoStrings(testStringA, testStringB);
-            Expect(result, testStringA + testStringB);
+            ExpectTrue(HidlSupport.interfacesEqual(anInterface, safeUnion.c()));
 
             safeUnion = safeunionInterface.setInterfaceD(safeUnion, testStringA);
             ExpectTrue(safeUnion.getDiscriminator() == InterfaceTypeSafeUnion.hidl_discriminator.d);
@@ -1218,15 +1214,12 @@ public final class HidlTestJava {
             IBaz baz = IBaz.getService();
             ExpectTrue(baz != null);
             IBaz.StructWithInterface swi = new IBaz.StructWithInterface();
-            swi.dummy = baz;
+            swi.iface = IServiceManager.getService();
             swi.number = 12345678;
             IBaz.StructWithInterface swi_back = baz.haveSomeStructWithInterface(swi);
             ExpectTrue(swi_back != null);
-            // TODO(b/169369810)
-            if (!proxy.isJava()) {
-                ExpectTrue(swi_back.dummy != null);
-                ExpectTrue(HidlSupport.interfacesEqual(baz, swi_back.dummy));
-            }
+            ExpectTrue(swi_back.iface != null);
+            ExpectTrue(HidlSupport.interfacesEqual(swi.iface, swi_back.iface));
             ExpectTrue(swi_back.number == 12345678);
         }
 
@@ -1676,7 +1669,7 @@ public final class HidlTestJava {
 
         @Override
         public InterfaceTypeSafeUnion setInterfaceC(
-            InterfaceTypeSafeUnion safeUnion, IOtherInterface c) {
+                InterfaceTypeSafeUnion safeUnion, android.hidl.base.V1_0.IBase c) {
             Log.d(TAG, "SERVER: setInterfaceC(" + c + ")");
             safeUnion.c(c);
 
@@ -1750,13 +1743,6 @@ public final class HidlTestJava {
         }
     }
 
-    class OtherInterface extends IOtherInterface.Stub {
-        @Override
-        public String concatTwoStrings(String a, String b) {
-            return a.concat(b);
-        }
-    }
-
     private void server() throws RemoteException {
         HwBinder.configureRpcThreadpool(1, true);
 
@@ -1772,9 +1758,6 @@ public final class HidlTestJava {
 
         SafeUnion safeunionInterface = new SafeUnion();
         safeunionInterface.registerAsService("default");
-
-        OtherInterface otherInterface = new OtherInterface();
-        otherInterface.registerAsService("default");
 
         HwBinder.joinRpcThreadpool();
     }
