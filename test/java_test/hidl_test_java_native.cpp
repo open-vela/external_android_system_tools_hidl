@@ -23,9 +23,9 @@
 #include <android/hardware/tests/baz/1.0/IBaz.h>
 #include <android/hardware/tests/memory/2.0/IMemoryInterface.h>
 #include <android/hardware/tests/memory/2.0/types.h>
-#include <android/hardware/tests/safeunion/1.0/IOtherInterface.h>
 #include <android/hardware/tests/safeunion/1.0/ISafeUnion.h>
 #include <android/hidl/allocator/1.0/IAllocator.h>
+#include <android/hidl/manager/1.0/IServiceManager.h>
 
 #include <hidlmemory/mapping.h>
 #include <hidl/LegacySupport.h>
@@ -44,7 +44,6 @@ using ::android::hardware::tests::baz::V1_0::IBaz;
 using ::android::hardware::tests::baz::V1_0::IBazCallback;
 using ::android::hardware::tests::memory::V2_0::IMemoryInterface;
 using ::android::hardware::tests::memory::V2_0::TwoMemory;
-using ::android::hardware::tests::safeunion::V1_0::IOtherInterface;
 using ::android::hardware::tests::safeunion::V1_0::ISafeUnion;
 
 using ::android::hardware::hidl_array;
@@ -82,16 +81,6 @@ Return<void> BazCallback::hey() {
 
     return Void();
 }
-
-struct OtherInterface : public IOtherInterface {
-    Return<void> concatTwoStrings(const hidl_string& a, const hidl_string& b,
-                                  concatTwoStrings_cb _hidl_cb) override {
-        hidl_string result = std::string(a) + std::string(b);
-        _hidl_cb(result);
-
-        return Void();
-    }
-};
 
 struct MemoryInterface : public IMemoryInterface {
     MemoryInterface() {
@@ -222,7 +211,6 @@ struct HidlEnvironment : public ::testing::Environment {
 struct HidlTest : public ::testing::Test {
     sp<IBaz> baz;
     sp<ISafeUnion> safeunionInterface;
-    sp<IOtherInterface> otherInterface;
 
     void SetUp() override {
         using namespace ::android::hardware;
@@ -236,11 +224,6 @@ struct HidlTest : public ::testing::Test {
         safeunionInterface = ISafeUnion::getService();
         CHECK(safeunionInterface != nullptr);
         CHECK(safeunionInterface->isRemote());
-
-        ::android::hardware::details::waitForHwService(IOtherInterface::descriptor, "default");
-        otherInterface = IOtherInterface::getService();
-        CHECK(otherInterface != nullptr);
-        CHECK(otherInterface->isRemote());
     }
 
     void TearDown() override {
@@ -979,17 +962,14 @@ TEST_F(HidlTest, SafeUnionInterfaceTest) {
                 }));
         }));
 
-    // Same-process interface calls are not supported in Java, so we use
-    // a safe_union instance bound to this (client) process instead of
-    // safeunionInterface to exercise this test-case. Ref: b/110957763.
+    using android::hardware::defaultServiceManager;
+    using android::hardware::interfacesEqual;
+
     InterfaceTypeSafeUnion safeUnion;
-    safeUnion.c(otherInterface);
+    safeUnion.c(defaultServiceManager());
 
     EXPECT_EQ(InterfaceTypeSafeUnion::hidl_discriminator::c, safeUnion.getDiscriminator());
-    EXPECT_OK(safeUnion.c()->concatTwoStrings(
-        hidl_string(testStringA), hidl_string(testStringB), [&](const hidl_string& result) {
-            EXPECT_EQ(testStringA + testStringB, std::string(result));
-        }));
+    EXPECT_TRUE(interfacesEqual(safeUnion.c(), defaultServiceManager()));
 
     native_handle_delete(h);
 }
@@ -1299,10 +1279,6 @@ int main(int argc, char **argv) {
 
     status = registerPassthroughServiceImplementation<ISafeUnion>();
     CHECK(status == ::android::OK) << "ISafeUnion didn't register";
-
-    sp<IOtherInterface> otherInterface = new OtherInterface();
-    status = otherInterface->registerAsService();
-    CHECK(status == ::android::OK) << "IOtherInterface didn't register";
 
     sp<IMemoryInterface> memoryInterface = new MemoryInterface();
     status = memoryInterface->registerAsService();
