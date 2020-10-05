@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package hidl2aidl@1.1;
+package hidl2aidl.test@1.1;
 
 import @1.0::Value;
 import @1.0::Outer;

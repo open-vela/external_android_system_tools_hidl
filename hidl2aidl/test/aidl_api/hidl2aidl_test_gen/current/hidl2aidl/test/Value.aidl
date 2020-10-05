@@ -15,8 +15,13 @@
 // with such a backward incompatible change, it has a high risk of breaking
 // later when a module using the interface is updated, e.g., Mainline modules.
 
-package hidl2aidl;
-@VintfStability
-parcelable OnlyIn10 {
-  String str;
+package hidl2aidl.test;
+@Backing(type="int") @VintfStability
+enum Value {
+  A = 3,
+  B = 7,
+  C = 8,
+  D = 9,
+  E = 27,
+  F = 28,
 }

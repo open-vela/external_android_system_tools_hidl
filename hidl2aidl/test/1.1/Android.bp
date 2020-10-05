@@ -1,0 +1,13 @@
+hidl_interface {
+    name: "hidl2aidl.test@1.1",
+    root: "hidl2aidl.test",
+    srcs: [
+        "types.hal",
+        "IFoo.hal",
+    ],
+    interfaces: [
+        "hidl2aidl.test@1.0",
+        "android.hidl.base@1.0",
+    ],
+    gen_java: false,
+}

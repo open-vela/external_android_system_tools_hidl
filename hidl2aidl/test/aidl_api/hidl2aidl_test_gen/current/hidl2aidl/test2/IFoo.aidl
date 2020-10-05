@@ -15,10 +15,10 @@
 // with such a backward incompatible change, it has a high risk of breaking
 // later when a module using the interface is updated, e.g., Mainline modules.
 
-package hidl2aidl2;
+package hidl2aidl.test2;
 @VintfStability
 interface IFoo {
-  void shouldImportExternalTypes(in hidl2aidl.IFoo foo);
+  void shouldImportExternalTypes(in hidl2aidl.test.IFoo foo);
   oneway void someFoo(in byte a);
-  void useImportedEnum(in hidl2aidl.Value value);
+  void useImportedEnum(in hidl2aidl.test.Value value);
 }

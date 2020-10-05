@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package hidl2aidl@1.2;
+package hidl2aidl.test@1.2;
 
 import @1.1::NameCollision;
 

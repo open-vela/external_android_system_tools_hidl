@@ -15,13 +15,12 @@
 // with such a backward incompatible change, it has a high risk of breaking
 // later when a module using the interface is updated, e.g., Mainline modules.
 
-package hidl2aidl;
-@Backing(type="int") @VintfStability
-enum Value {
-  A = 3,
-  B = 7,
-  C = 8,
-  D = 9,
-  E = 27,
-  F = 28,
+package hidl2aidl.test;
+@VintfStability
+interface IBar {
+  void extraMethod(in hidl2aidl.test.IBarInner inner);
+  IBinder fmqMethod(in IBinder sync, in IBinder unsync);
+  String[] retVec(in byte a);
+  String someBar(in String a, in byte b);
+  oneway void someFoo(in byte a);
 }
