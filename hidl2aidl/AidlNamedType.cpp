@@ -68,7 +68,7 @@ static void emitCompoundTypeAidlDefinition(
     const ProcessedCompoundType& processedType = it->second;
 
     compoundType.emitDocComment(out);
-    out << "@VintfStability \n";
+    out << "@VintfStability\n";
     out << "parcelable " << AidlHelper::getAidlName(compoundType.fqName()) << " ";
     if (compoundType.style() == CompoundType::STYLE_STRUCT) {
         out.block([&] {

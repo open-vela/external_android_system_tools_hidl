@@ -289,16 +289,18 @@ void AidlHelper::emitAidl(
                          emitAidlMethodParams(&wrappedOutput, method->args(), /* prefix */ "in ",
                                               /* attachToLast */ ");\n", interface);
                      } else {
-                         if (!method->args().empty()) {
+                         const bool emitArgs = !method->args().empty();
+                         if (emitArgs) {
                              emitAidlMethodParams(&wrappedOutput, method->args(),
                                                   /* prefix */ "in ",
                                                   /* attachToLast */ ",", interface);
-                             wrappedOutput.printUnlessWrapped(" ");
                          }
-
-                         // TODO: Emit warning if a primitive is given as a out param.
-                         emitAidlMethodParams(&wrappedOutput, results, /* prefix */ "out ",
-                                              /* attachToLast */ ");\n", interface);
+                         wrappedOutput.group([&] {
+                             if (emitArgs) wrappedOutput.printUnlessWrapped(" ");
+                             // TODO: Emit warning if a primitive is given as a out param.
+                             emitAidlMethodParams(&wrappedOutput, results, /* prefix */ "out ",
+                                                  /* attachToLast */ ");\n", interface);
+                         });
                      }
 
                      out << wrappedOutput;
