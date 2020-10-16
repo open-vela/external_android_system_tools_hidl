@@ -35,7 +35,7 @@ using namespace android;
 static void usage(const char* me) {
     Formatter out(stderr);
 
-    out << "Usage: " << me << " [-fh] [-o <output path>] [-l <header file>] ";
+    out << "Usage: " << me << " [-fh] [-o <output path>] ";
     Coordinator::emitOptionsUsageString(out);
     out << " FQNAME\n\n";
 
@@ -48,7 +48,6 @@ static void usage(const char* me) {
     out << "-f: Force hidl2aidl to convert older packages\n";
     out << "-h: Prints this menu.\n";
     out << "-o <output path>: Location to output files.\n";
-    out << "-l <header file>: File containing a header to prepend to generated files.\n";
     Coordinator::emitOptionsDetailString(out);
 
     out.unindent();
@@ -183,7 +182,7 @@ static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQNa
     out << "            enabled: false,\n";
     out << "        },\n";
     out << "        java: {\n";
-    out << "            sdk_version: \"module_current\",\n";
+    out << "            platform_apis: true,\n";
     out << "        },\n";
     out << "        ndk: {\n";
     out << "            vndk: {\n";
@@ -229,9 +228,8 @@ int main(int argc, char** argv) {
 
     Coordinator coordinator;
     std::string outputPath;
-    std::string fileHeader;
     bool forceConvertOldInterfaces = false;
-    coordinator.parseOptions(argc, argv, "fho:l:", [&](int res, char* arg) {
+    coordinator.parseOptions(argc, argv, "fho:", [&](int res, char* arg) {
         switch (res) {
             case 'o': {
                 if (!outputPath.empty()) {
@@ -241,13 +239,6 @@ int main(int argc, char** argv) {
                 outputPath = arg;
                 break;
             }
-            case 'l':
-                if (!fileHeader.empty()) {
-                    fprintf(stderr, "ERROR: -l <header file> can only be specified once.\n");
-                    exit(1);
-                }
-                fileHeader = arg;
-                break;
             case 'f':
                 forceConvertOldInterfaces = true;
                 break;
@@ -265,7 +256,6 @@ int main(int argc, char** argv) {
         outputPath += "/";
     }
     coordinator.setOutputPath(outputPath);
-    AidlHelper::setFileHeader(fileHeader);
 
     argc -= optind;
     argv += optind;
