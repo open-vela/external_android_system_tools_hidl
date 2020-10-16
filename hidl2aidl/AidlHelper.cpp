@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <hidl-util/FQName.h>
 #include <hidl-util/Formatter.h>
 #include <hidl-util/StringHelper.h>
-#include <iostream>
 #include <set>
 #include <string>
 #include <vector>
@@ -40,7 +38,6 @@ namespace android {
 Formatter* AidlHelper::notesFormatter = nullptr;
 Formatter* AidlHelper::translateHeaderFormatter = nullptr;
 Formatter* AidlHelper::translateSourceFormatter = nullptr;
-std::string AidlHelper::fileHeader = "";
 
 Formatter& AidlHelper::notes() {
     CHECK(notesFormatter != nullptr);
@@ -101,7 +98,7 @@ void AidlHelper::importLocallyReferencedType(const Type& type, std::set<std::str
 void AidlHelper::emitFileHeader(
         Formatter& out, const NamedType& type,
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
-    AidlHelper::emitFileHeader(out);
+    out << "// FIXME: license file if you have one\n\n";
     out << "package " << getAidlPackage(type.fqName()) << ";\n\n";
 
     std::set<std::string> imports;
@@ -215,24 +212,6 @@ void AidlHelper::processCompoundType(const CompoundType& compoundType,
                 processedType->fields.push_back({field, fieldNamePrefix + field->name(), version});
             }
         }
-    }
-}
-
-void AidlHelper::setFileHeader(const std::string& file) {
-    if (!file.empty()) {
-        if (!android::base::ReadFileToString(file, &fileHeader)) {
-            std::cerr << "ERROR: Failed to find license file: " << file << "\n";
-            exit(1);
-        }
-    }
-}
-
-void AidlHelper::emitFileHeader(Formatter& out) {
-    if (fileHeader.empty()) {
-        out << "// FIXME: license file, or use the -l option to generate the files with the "
-               "header.\n\n";
-    } else {
-        out << fileHeader << "\n";
     }
 }
 
