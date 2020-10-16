@@ -101,12 +101,15 @@ struct AidlHelper {
     static void emitH2aTranslation(
             const std::set<const NamedType*>& namedTypesInPackage,
             const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
+    static void setFileHeader(const std::string& file);
+    static void emitFileHeader(Formatter& out);
 
   private:
     // This is the formatter to use for additional conversion output
     static Formatter* notesFormatter;
     static Formatter* translateHeaderFormatter;
     static Formatter* translateSourceFormatter;
+    static std::string fileHeader;
 };
 
 }  // namespace android

@@ -150,7 +150,7 @@ static void emitNdkTranslateHeader(
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
     std::set<std::string> includes;
 
-    AidlHelper::translatorHeader() << "// FIXME: license file if you have one\n\n";
+    AidlHelper::emitFileHeader(AidlHelper::translatorHeader());
     AidlHelper::translatorHeader() << "#pragma once\n\n";
     for (const auto& type : namedTypes) {
         const auto& it = processedTypes.find(type);
@@ -176,7 +176,7 @@ static void emitNdkTranslateHeader(
 static void emitNdkTranslateSource(
         const std::set<const NamedType*>& namedTypes,
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
-    AidlHelper::translatorSource() << "// FIXME: license file if you have one\n\n";
+    AidlHelper::emitFileHeader(AidlHelper::translatorSource());
     AidlHelper::translatorSource()
             << "#include \"" << AidlHelper::getAidlPackagePath((*namedTypes.begin())->fqName())
             << "/translate-ndk.h\"\n\n";
