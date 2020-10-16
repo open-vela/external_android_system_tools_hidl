@@ -45,7 +45,7 @@ static void emitEnumAidlDefinition(Formatter& out, const EnumType& enumType) {
     enumType.emitDocComment(out);
     out << "@VintfStability\n";
     out << "@Backing(type=\"" << AidlHelper::getAidlType(*scalar, enumType.fqName()) << "\")\n";
-    out << "enum " << AidlHelper::getAidlType(enumType, enumType.fqName()) << " ";
+    out << "enum " << enumType.fqName().name() << " ";
     out.block([&] {
         enumType.forEachValueFromRoot([&](const EnumValue* value) {
             value->emitDocComment(out);
