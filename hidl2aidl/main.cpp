@@ -183,7 +183,7 @@ static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQNa
     out << "            enabled: false,\n";
     out << "        },\n";
     out << "        java: {\n";
-    out << "            platform_apis: true,\n";
+    out << "            sdk_version: \"module_current\",\n";
     out << "        },\n";
     out << "        ndk: {\n";
     out << "            vndk: {\n";
