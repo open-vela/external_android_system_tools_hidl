@@ -279,6 +279,8 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 			if t.requireFrozen() {
 				extraOptions = append(extraOptions, "-F")
 			}
+		default:
+			panic(fmt.Sprintf("Unrecognized hidlGenProperties dependency: %T", t))
 		}
 	})
 
@@ -949,13 +951,11 @@ func (h *hidlInterface) Name() string {
 func (h *hidlInterface) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 	visited := false
 	ctx.VisitDirectDeps(func(dep android.Module) {
-		if r, ok := dep.(*hidlPackageRoot); ok {
-			if visited {
-				panic("internal error, multiple dependencies found but only one added")
-			}
-			visited = true
-			h.properties.Full_root_option = r.getFullPackageRoot()
+		if visited {
+			panic("internal error, multiple dependencies found but only one added")
 		}
+		visited = true
+		h.properties.Full_root_option = dep.(*hidlPackageRoot).getFullPackageRoot()
 	})
 	if !visited {
 		panic("internal error, no dependencies found but dependency added")
