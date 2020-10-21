@@ -197,7 +197,7 @@ static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQNa
     out << "cc_library {\n";
     out << "    name: \"" << AidlHelper::getAidlPackage(fqName) << "-translate-ndk\",\n";
     out << "    vendor_available: true,\n";
-    out << "    srcs: [\"" << AidlHelper::getAidlPackagePath(fqName) << "/translate-ndk.cpp\"],\n";
+    out << "    srcs: [\"" << AidlHelper::translateSourceFile(AidlBackend::NDK, fqName) + "\"],\n";
     out << "    shared_libs: [\n";
     out << "        \"libbinder_ndk\",\n";
     out << "        \"libhidlbase\",\n";
@@ -343,15 +343,6 @@ int main(int argc, char** argv) {
         << AidlHelper::getAidlPackage(fqName) << " (if any) follow:\n";
     AidlHelper::setNotes(&err);
 
-    Formatter translateSource =
-            coordinator.getFormatter(fqName, Coordinator::Location::DIRECT,
-                                     AidlHelper::getAidlPackagePath(fqName) + "/translate-ndk.cpp");
-    AidlHelper::setTranslateSource(&translateSource);
-
-    Formatter translateHeader = coordinator.getFormatter(
-            fqName, Coordinator::Location::DIRECT,
-            "include/" + AidlHelper::getAidlPackagePath(fqName) + "/translate-ndk.h");
-    AidlHelper::setTranslateHeader(&translateHeader);
     Formatter buildFile =
             coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "Android.bp");
     emitBuildFile(buildFile, fqName, targets);
@@ -401,7 +392,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    AidlHelper::emitH2aTranslation(namedTypesInPackage, processedTypesInPackage);
+    AidlHelper::emitTranslation(coordinator, fqName, namedTypesInPackage, processedTypesInPackage);
 
     // Emit all types and interfaces
     // The interfaces and types are still be further manipulated inside

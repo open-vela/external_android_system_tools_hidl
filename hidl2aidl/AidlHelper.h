@@ -47,6 +47,8 @@ struct ProcessedCompoundType {
     std::set<const NamedType*> subTypes;
 };
 
+enum class AidlBackend { UNKNOWN, NDK, CPP, JAVA };
+
 struct AidlHelper {
     /* FQName helpers */
     // getAidlName returns the type names
@@ -93,12 +95,12 @@ struct AidlHelper {
     static Formatter& notes();
     static void setNotes(Formatter* formatter);
 
-    static Formatter& translatorHeader();
-    static Formatter& translatorSource();
-    static void setTranslateHeader(Formatter* formatter);
-    static void setTranslateSource(Formatter* formatter);
+    // return the full file names for the header/source files based on the backend
+    static std::string translateHeaderFile(AidlBackend backend, const FQName& fqName);
+    static std::string translateSourceFile(AidlBackend backend, const FQName& fqName);
 
-    static void emitH2aTranslation(
+    static void emitTranslation(
+            const Coordinator& coordinator, const FQName& fqName,
             const std::set<const NamedType*>& namedTypesInPackage,
             const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
     static void setFileHeader(const std::string& file);
@@ -107,8 +109,6 @@ struct AidlHelper {
   private:
     // This is the formatter to use for additional conversion output
     static Formatter* notesFormatter;
-    static Formatter* translateHeaderFormatter;
-    static Formatter* translateSourceFormatter;
     static std::string fileHeader;
 };
 
