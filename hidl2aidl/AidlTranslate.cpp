@@ -25,30 +25,31 @@
 #include <vector>
 
 #include "AidlHelper.h"
+#include "Coordinator.h"
 #include "NamedType.h"
 #include "ScalarType.h"
 #include "Scope.h"
 
 namespace android {
 
-Formatter& AidlHelper::translatorHeader() {
-    CHECK(translateHeaderFormatter != nullptr);
-    return *translateHeaderFormatter;
+std::string AidlHelper::translateHeaderFile(AidlBackend backend, const FQName& fqName) {
+    switch (backend) {
+        case AidlBackend::NDK:
+            return AidlHelper::getAidlPackagePath(fqName) + "/translate-ndk.h";
+        default:
+            LOG(FATAL) << "Unexpected AidlBackend value";
+            return "";
+    }
 }
 
-Formatter& AidlHelper::translatorSource() {
-    CHECK(translateSourceFormatter != nullptr);
-    return *translateSourceFormatter;
-}
-
-void AidlHelper::setTranslateSource(Formatter* formatter) {
-    CHECK(formatter != nullptr);
-    translateSourceFormatter = formatter;
-}
-
-void AidlHelper::setTranslateHeader(Formatter* formatter) {
-    CHECK(formatter != nullptr);
-    translateHeaderFormatter = formatter;
+std::string AidlHelper::translateSourceFile(AidlBackend backend, const FQName& fqName) {
+    switch (backend) {
+        case AidlBackend::NDK:
+            return AidlHelper::getAidlPackagePath(fqName) + "/translate-ndk.cpp";
+        default:
+            LOG(FATAL) << "Unexpected AidlBackend value";
+            return "";
+    }
 }
 
 static const std::string namedTypeTranslation(const std::set<const NamedType*>& namedTypes,
@@ -146,12 +147,16 @@ static const std::string ndkAidlIncludeFile(const NamedType* type) {
 }
 
 static void emitNdkTranslateHeader(
+        const Coordinator& coordinator, const FQName& fqName,
         const std::set<const NamedType*>& namedTypes,
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
     std::set<std::string> includes;
+    Formatter out = coordinator.getFormatter(
+            fqName, Coordinator::Location::DIRECT,
+            "include/" + AidlHelper::translateHeaderFile(AidlBackend::NDK, fqName));
 
-    AidlHelper::emitFileHeader(AidlHelper::translatorHeader());
-    AidlHelper::translatorHeader() << "#pragma once\n\n";
+    AidlHelper::emitFileHeader(out);
+    out << "#pragma once\n\n";
     for (const auto& type : namedTypes) {
         const auto& it = processedTypes.find(type);
         if (it == processedTypes.end()) {
@@ -160,53 +165,58 @@ static void emitNdkTranslateHeader(
         includes.insert(ndkAidlIncludeFile(type));
         includes.insert(ndkHidlIncludeFile(type));
     }
-    AidlHelper::translatorHeader() << base::Join(includes, "") << "\n\n";
+    out << base::Join(includes, "") << "\n\n";
 
-    AidlHelper::translatorHeader() << "namespace android::h2a {\n\n";
+    out << "namespace android::h2a {\n\n";
     for (const auto& type : namedTypes) {
         const auto& it = processedTypes.find(type);
         if (it == processedTypes.end()) {
             continue;
         }
-        AidlHelper::translatorHeader() << declareAidlFunctionSignature(type) << ";\n";
+        out << declareAidlFunctionSignature(type) << ";\n";
     }
-    AidlHelper::translatorHeader() << "\n}  // namespace android::h2a\n";
+    out << "\n}  // namespace android::h2a\n";
 }
 
 static void emitNdkTranslateSource(
+        const Coordinator& coordinator, const FQName& fqName,
         const std::set<const NamedType*>& namedTypes,
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
-    AidlHelper::emitFileHeader(AidlHelper::translatorSource());
-    AidlHelper::translatorSource()
-            << "#include \"" << AidlHelper::getAidlPackagePath((*namedTypes.begin())->fqName())
-            << "/translate-ndk.h\"\n\n";
-    AidlHelper::translatorSource() << "namespace android::h2a {\n\n";
+    Formatter out =
+            coordinator.getFormatter(fqName, Coordinator::Location::DIRECT,
+                                     AidlHelper::translateSourceFile(AidlBackend::NDK, fqName));
+    AidlHelper::emitFileHeader(out);
+    out << "#include \""
+        << AidlHelper::translateHeaderFile(AidlBackend::NDK, (*namedTypes.begin())->fqName()) +
+                    "\"\n\n";
+    out << "namespace android::h2a {\n\n";
     for (const auto& type : namedTypes) {
         const auto& it = processedTypes.find(type);
         if (it == processedTypes.end()) {
             continue;
         }
-        AidlHelper::translatorSource() << declareAidlFunctionSignature(type) << " {\n";
-        AidlHelper::translatorSource().indent([&] {
+        out << declareAidlFunctionSignature(type) << " {\n";
+        out.indent([&] {
             const ProcessedCompoundType& processedType = it->second;
             for (const auto& field : processedType.fields) {
-                fieldTranslation(AidlHelper::translatorSource(), namedTypes, field);
+                fieldTranslation(out, namedTypes, field);
             }
 
-            AidlHelper::translatorSource() << "return true;\n";
+            out << "return true;\n";
         });
-        AidlHelper::translatorSource() << "}\n\n";
+        out << "}\n\n";
     }
-    AidlHelper::translatorSource() << "}  // namespace android::h2a";
+    out << "}  // namespace android::h2a";
 }
 
-void AidlHelper::emitH2aTranslation(
+void AidlHelper::emitTranslation(
+        const Coordinator& coordinator, const FQName& fqName,
         const std::set<const NamedType*>& namedTypes,
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
-    // TODO(b/158489355) Need to support Java and cpp as well
     if (processedTypes.empty()) return;
-    emitNdkTranslateHeader(namedTypes, processedTypes);
-    emitNdkTranslateSource(namedTypes, processedTypes);
+    emitNdkTranslateHeader(coordinator, fqName, namedTypes, processedTypes);
+    emitNdkTranslateSource(coordinator, fqName, namedTypes, processedTypes);
+    // TODO(b/158489355) Other backends to follow
 }
 
 }  // namespace android

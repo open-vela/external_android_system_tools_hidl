@@ -55,7 +55,7 @@ genrule {
 }
 
 genrule {
-    name: "hidl2aidl_translate_test_gen_src",
+    name: "hidl2aidl_translate_ndk_test_gen_src",
     defaults: ["hidl2aidl_test_gen_defaults"],
     out: [
         "hidl2aidl/test/translate-ndk.cpp",
@@ -63,7 +63,7 @@ genrule {
 }
 
 genrule {
-    name: "hidl2aidl_translate_test_gen_headers",
+    name: "hidl2aidl_translate_ndk_test_gen_headers",
     defaults: ["hidl2aidl_test_gen_defaults"],
     out: [
         "hidl2aidl/test/translate-ndk.h",
@@ -98,7 +98,7 @@ cc_test_library {
 }
 
 cc_test {
-    name: "hidl2aidl_translate_test",
+    name: "hidl2aidl_translate_ndk_test",
     test_suites: ["general-tests"],
 
     cflags: [
@@ -108,11 +108,11 @@ cc_test {
         "-g",
     ],
     srcs: [
-        ":hidl2aidl_translate_test_gen_src",
-        "translation_test.cpp",
+        ":hidl2aidl_translate_ndk_test_gen_src",
+        "translate_ndk_test.cpp",
     ],
     generated_headers: [
-        "hidl2aidl_translate_test_gen_headers",
+        "hidl2aidl_translate_ndk_test_gen_headers",
     ],
     shared_libs: [
         "libbinder_ndk",
@@ -134,7 +134,7 @@ phony {
     required: [
         "hidl2aidl_test_comp_cc",
         "hidl2aidl_test_gen-java",
-        "hidl2aidl_translate_test",
+        "hidl2aidl_translate_ndk_test",
     ],
 }
 

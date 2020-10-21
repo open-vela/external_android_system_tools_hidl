@@ -38,8 +38,6 @@
 namespace android {
 
 Formatter* AidlHelper::notesFormatter = nullptr;
-Formatter* AidlHelper::translateHeaderFormatter = nullptr;
-Formatter* AidlHelper::translateSourceFormatter = nullptr;
 std::string AidlHelper::fileHeader = "";
 
 Formatter& AidlHelper::notes() {
