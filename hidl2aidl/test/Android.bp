@@ -50,6 +50,9 @@ genrule {
         "hidl2aidl/test/Outer.aidl",
         "hidl2aidl/test/OuterInner.aidl",
         "hidl2aidl/test/OverrideMe.aidl",
+        "hidl2aidl/test/SafeUnionBar.aidl",
+        "hidl2aidl/test/SafeUnionBarInnerStructBar.aidl",
+        "hidl2aidl/test/UnionFoo.aidl",
         "hidl2aidl/test/Value.aidl",
         "hidl2aidl/test2/IFoo.aidl",
     ],
@@ -134,6 +137,7 @@ cc_test {
     shared_libs: [
         "libbinder_ndk",
         "libhidlbase",
+        "liblog",
     ],
     static_libs: [
         "hidl2aidl_test_gen-ndk_platform",
@@ -167,6 +171,7 @@ cc_test {
         "libbinder",
         "libhidlbase",
         "libutils",
+        "liblog",
     ],
     static_libs: [
         "hidl2aidl_test_gen-cpp",

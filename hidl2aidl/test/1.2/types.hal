@@ -16,10 +16,32 @@
 
 package hidl2aidl.test@1.2;
 
+import @1.1::OnlyIn11;
 import @1.1::NameCollision;
+import android.hidl.safe_union@1.0::Monostate;
 
 struct NameCollision {
     @1.1::NameCollision reference;
 
     string c;
+};
+
+union UnionFoo {
+    int64_t a;
+    int8_t b;
+    @1.1::OnlyIn11 c;
+};
+
+safe_union SafeUnionBar {
+    Monostate noInit;
+    int8_t a;
+    uint64_t b;
+    struct InnerStructBar {
+      int8_t x;
+      int8_t z;
+    } innerStructBar;
+    @1.1::OnlyIn11 c;
+    string d;
+    float e;
+    double f;
 };

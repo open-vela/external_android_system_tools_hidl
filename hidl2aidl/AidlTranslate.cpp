@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "AidlHelper.h"
+#include "CompoundType.h"
 #include "Coordinator.h"
 #include "NamedType.h"
 #include "ScalarType.h"
@@ -56,20 +57,48 @@ std::string AidlHelper::translateSourceFile(const FQName& fqName, AidlBackend ba
     }
 }
 
-static const std::string namedTypeTranslation(const std::set<const NamedType*>& namedTypes,
-                                              const NamedType* type,
-                                              const FieldWithVersion& field) {
+static const std::string cppAidlTypePackage(const NamedType* type, AidlBackend backend) {
+    const std::string prefix = (backend == AidlBackend::NDK) ? "aidl::" : std::string();
+    return prefix + base::Join(base::Split(AidlHelper::getAidlPackage(type->fqName()), "."), "::") +
+           "::" + AidlHelper::getAidlType(*type, type->fqName());
+}
+
+static void namedTypeTranslation(Formatter& out, const std::set<const NamedType*>& namedTypes,
+                                 const FieldWithVersion& field, const CompoundType* parent,
+                                 AidlBackend backend) {
+    const NamedType* type = static_cast<const NamedType*>(field.field->get());
     if (namedTypes.find(type) == namedTypes.end()) {
-        AidlHelper::notes() << "An unknown named type was found in translation: "
-                            << type->fqName().string() + "\n";
-        return "#error FIXME Unknown type: " + type->fqName().string() + "\n";
+        std::optional<const ReplacedTypeInfo> replacedType =
+                AidlHelper::getAidlReplacedType(type->fqName());
+        if (replacedType) {
+            std::optional<std::function<void(Formatter&)>> translateField =
+                    replacedType.value().translateField;
+            if (translateField) {
+                translateField.value()(out);
+            }
+        } else {
+            AidlHelper::notes() << "An unknown named type was found in translation: "
+                                << type->fqName().string() + "\n";
+            out << "#error FIXME Unknown type: " << type->fqName().string() << "\n";
+        }
     } else {
-        return "if (!translate(in." + field.fullName + ", &out->" + field.field->name() +
-               ")) return false;\n";
+        if (parent->style() == CompoundType::STYLE_STRUCT) {
+            out << "if (!translate(in." << field.fullName << ", &out->" << field.field->name()
+                << ")) return false;\n";
+        } else {
+            out << "{\n";
+            out << cppAidlTypePackage(type, backend) << " " << field.field->name() << ";\n";
+            out << "if (!translate(in." + field.fullName + "(), &" << field.field->name()
+                << ")) return false;\n";
+            out << "out->set<" << cppAidlTypePackage(parent, backend) << "::" << field.fullName
+                << ">(" << field.field->name() << ");\n";
+            out << "}\n";
+        }
     }
 }
 
-static void h2aScalarChecks(Formatter& out, const FieldWithVersion& field) {
+static void h2aScalarChecks(Formatter& out, const FieldWithVersion& field,
+                            const CompoundType* parent) {
     static const std::map<ScalarType::Kind, size_t> kSignedMaxSize{
             {ScalarType::KIND_UINT8, std::numeric_limits<int8_t>::max()},
             {ScalarType::KIND_INT16, std::numeric_limits<int32_t>::max()},
@@ -82,45 +111,77 @@ static void h2aScalarChecks(Formatter& out, const FieldWithVersion& field) {
         if (it != kSignedMaxSize.end()) {
             out << "// FIXME This requires conversion between signed and unsigned. Change this if "
                    "it doesn't suit your needs.\n";
+            std::string functionCall = (parent->style() == CompoundType::STYLE_STRUCT) ? "" : "()";
             if (scalarType->getKind() == ScalarType::KIND_INT16) {
                 // AIDL uses an unsigned 16-bit integer(char16_t), so this is signed to unsigned.
-                out << "if (in." << field.fullName << " < 0) return false;\n";
+                out << "if (in." << field.fullName << functionCall << " < 0) return false;\n";
             } else {
-                out << "if (in." << field.fullName << " > " << it->second << ") return false;\n";
+                out << "if (in." << field.fullName << functionCall << " > " << it->second
+                    << ") return false;\n";
             }
+        }
+    } else {
+        LOG(FATAL) << "Unexpected non-scalar type: " << field.field->type().typeName();
+    }
+}
+
+static void scalarTranslation(Formatter& out, const FieldWithVersion& field,
+                              const CompoundType* parent) {
+    h2aScalarChecks(out, field, parent);
+    if (parent->style() == CompoundType::STYLE_STRUCT) {
+        out << "out->" << field.field->name() << " = in." << field.fullName << ";\n";
+    } else {
+        static const std::map<std::string, std::string> kAidlBackendScalarTypes{
+                {"boolean", "bool"}, {"byte", "int8_t"}, {"char", "char16_t"}, {"int", "int32_t"},
+                {"long", "int64_t"}, {"float", "float"}, {"double", "double"},
+        };
+        const auto& it = kAidlBackendScalarTypes.find(
+                AidlHelper::getAidlType(*field.field->get(), parent->fqName()));
+        if (it != kAidlBackendScalarTypes.end()) {
+            out << "*out = static_cast<" << it->second << ">(in." << field.field->name()
+                << "());\n";
+        } else {
+            LOG(FATAL) << "Unexpected scalar type: "
+                       << AidlHelper::getAidlType(*field.field->get(), parent->fqName());
+        }
+    }
+}
+
+static void stringTranslation(Formatter& out, const FieldWithVersion& field,
+                              const CompoundType* parent, AidlBackend backend) {
+    if (backend == AidlBackend::CPP) {
+        out << "// FIXME Need to make sure the hidl_string is valid utf-8, otherwise an empty "
+               "String16 will be returned.\n";
+        if (parent->style() == CompoundType::STYLE_STRUCT) {
+            out << "out->" << field.field->name() << " = String16(in." << field.fullName
+                << ".c_str());\n";
+        } else {
+            out << "*out = String16(in." << field.fullName << "().c_str());\n";
+        }
+    } else {
+        if (parent->style() == CompoundType::STYLE_STRUCT) {
+            out << "out->" << field.field->name() << " = in." << field.fullName << ";\n";
+        } else {
+            out << "*out = in." << field.fullName << "();\n";
         }
     }
 }
 
 static void cppH2aFieldTranslation(Formatter& out, const std::set<const NamedType*>& namedTypes,
-                                   const FieldWithVersion& field, AidlBackend backend) {
+                                   const CompoundType* parent, const FieldWithVersion& field,
+                                   AidlBackend backend) {
     // TODO(b/158489355) Need to support and validate more types like arrays/vectors.
     if (field.field->type().isNamedType()) {
-        out << namedTypeTranslation(namedTypes, static_cast<const NamedType*>(field.field->get()),
-                                    field);
+        namedTypeTranslation(out, namedTypes, field, parent, backend);
     } else if (field.field->type().isEnum() || field.field->type().isScalar()) {
-        h2aScalarChecks(out, field);
-        out << "out->" << field.field->name() << " = in." << field.fullName << ";\n";
+        scalarTranslation(out, field, parent);
     } else if (field.field->type().isString()) {
-        if (backend == AidlBackend::CPP) {
-            out << "// FIXME Need to make sure the hidl_string is valid utf-8, otherwise an empty "
-                   "String16 will be returned.\n";
-            out << "out->" << field.field->name() << " = String16(in." << field.fullName
-                << ".c_str());\n";
-        } else {
-            out << "out->" << field.field->name() << " = in." << field.fullName << ";\n";
-        }
+        stringTranslation(out, field, parent, backend);
     } else {
         AidlHelper::notes() << "An unhandled type was found in translation: "
                             << field.field->type().typeName() << "\n";
         out << "#error FIXME Unhandled type: " << field.field->type().typeName() << "\n";
     }
-}
-
-static const std::string cppAidlTypePackage(const NamedType* type, AidlBackend backend) {
-    const std::string prefix = (backend == AidlBackend::NDK) ? "aidl::" : std::string();
-    return prefix + base::Join(base::Split(AidlHelper::getAidlPackage(type->fqName()), "."), "::") +
-           "::" + AidlHelper::getAidlType(*type, type->fqName());
 }
 
 static const std::string cppDeclareAidlFunctionSignature(const NamedType* type,
@@ -211,14 +272,45 @@ static void emitCppTranslateSource(
         if (it == processedTypes.end()) {
             continue;
         }
+        CHECK(type->isCompoundType()) << "Unexpected type: " << type->fqName().string();
+        const CompoundType* compound = static_cast<const CompoundType*>(type);
+
+        if (compound->style() == CompoundType::STYLE_UNION) {
+            out << "// FIXME not enough information to safely convert. Remove this function or "
+                   "fill it out using the custom discriminators.\n";
+            out << "// " << cppDeclareAidlFunctionSignature(type, backend) << "\n\n";
+            continue;
+        }
+
         out << cppDeclareAidlFunctionSignature(type, backend) << " {\n";
-        out.indent([&] {
-            const ProcessedCompoundType& processedType = it->second;
-            for (const auto& field : processedType.fields) {
-                cppH2aFieldTranslation(out, namedTypes, field, backend);
-            }
-            out << "return true;\n";
-        });
+        if (compound->style() == CompoundType::STYLE_SAFE_UNION) {
+            out.indent([&] {
+                out << "switch (in.getDiscriminator()) {\n";
+                out.indent([&] {
+                    const ProcessedCompoundType& processedType = it->second;
+                    for (const auto& field : processedType.fields) {
+                        out << "case " << compound->fullName()
+                            << "::hidl_discriminator::" << field.field->name() << ":\n";
+                        out.indent([&] {
+                            cppH2aFieldTranslation(out, namedTypes, compound, field, backend);
+                            out << "break;\n";
+                        });
+                    }
+                    out << "default:\n";
+                    out.indent([&] { out << "return false;\n"; });
+                });
+                out << "}\n";
+                out << "return true;\n";
+            });
+        } else {
+            out.indent([&] {
+                const ProcessedCompoundType& processedType = it->second;
+                for (const auto& field : processedType.fields) {
+                    cppH2aFieldTranslation(out, namedTypes, compound, field, backend);
+                }
+                out << "return true;\n";
+            });
+        }
         out << "}\n\n";
     }
     out << "}  // namespace android::h2a";

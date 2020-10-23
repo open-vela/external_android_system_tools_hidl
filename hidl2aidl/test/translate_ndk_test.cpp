@@ -121,4 +121,82 @@ TEST_F(Hidl2aidlTranslateTest, UnsignedToSignedTooLarge) {
     EXPECT_NE((int32_t)source.a, dest.a);
 }
 
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarByte) {
+    bool ret;
+    aidl::hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    source.a(8);
+    ret = h2a::translate(source, &dest);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(source.a(), dest.get<aidl::hidl2aidl::test::SafeUnionBar::a>());
+}
+
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarInt64) {
+    bool ret;
+    aidl::hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    source.b(25000);
+    ret = h2a::translate(source, &dest);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(source.b(), (uint64_t)dest.get<aidl::hidl2aidl::test::SafeUnionBar::b>());
+}
+
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarInnerStructBar) {
+    bool ret;
+    aidl::hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    hidl2aidl::test::V1_2::SafeUnionBar::InnerStructBar inner;
+    inner.x = 8;
+    inner.z = 12;
+    source.innerStructBar(inner);
+    ret = h2a::translate(source, &dest);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(source.innerStructBar().x,
+              dest.get<aidl::hidl2aidl::test::SafeUnionBar::innerStructBar>().x);
+    EXPECT_EQ(source.innerStructBar().z,
+              dest.get<aidl::hidl2aidl::test::SafeUnionBar::innerStructBar>().z);
+}
+
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarOnlyIn11) {
+    bool ret;
+    aidl::hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    hidl2aidl::test::V1_1::OnlyIn11 onlyIn11;
+    onlyIn11.str = 12;
+    source.c(onlyIn11);
+    ret = h2a::translate(source, &dest);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(source.c().str, dest.get<aidl::hidl2aidl::test::SafeUnionBar::c>().str);
+}
+
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarString) {
+    bool ret;
+    aidl::hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    source.d("Hello world!");
+    ret = h2a::translate(source, &dest);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(source.d(), dest.get<aidl::hidl2aidl::test::SafeUnionBar::d>());
+}
+
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarFloat) {
+    bool ret;
+    aidl::hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    source.e(3.5f);
+    ret = h2a::translate(source, &dest);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(source.e(), dest.get<aidl::hidl2aidl::test::SafeUnionBar::e>());
+}
+
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarDouble) {
+    bool ret;
+    aidl::hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    source.f(3e10);
+    ret = h2a::translate(source, &dest);
+    EXPECT_TRUE(ret);
+    EXPECT_EQ(source.f(), dest.get<aidl::hidl2aidl::test::SafeUnionBar::f>());
+}
+
 }  // namespace android

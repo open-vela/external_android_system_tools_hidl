@@ -69,22 +69,24 @@ static void emitCompoundTypeAidlDefinition(
 
     compoundType.emitDocComment(out);
     out << "@VintfStability\n";
-    out << "parcelable " << AidlHelper::getAidlName(compoundType.fqName()) << " ";
     if (compoundType.style() == CompoundType::STYLE_STRUCT) {
-        out.block([&] {
-            // Emit all of the fields from the processed type
-            for (auto const& fieldWithVersion : processedType.fields) {
-                fieldWithVersion.field->emitDocComment(out);
-                out << AidlHelper::getAidlType(*fieldWithVersion.field->get(),
-                                               compoundType.fqName())
-                    << " " << fieldWithVersion.field->name() << ";\n";
-            }
-        });
+        out << "parcelable " << AidlHelper::getAidlName(compoundType.fqName()) << " ";
     } else {
-        out << "{}\n";
-        out << "// Cannot convert unions/safe_unions since AIDL does not support them.\n";
-        emitConversionNotes(out, compoundType);
+        if (compoundType.style() == CompoundType::STYLE_UNION) {
+            out << "// FIXME Any discriminators should be removed since they are automatically "
+                   "added.\n";
+        }
+        out << "union " << AidlHelper::getAidlName(compoundType.fqName()) << " ";
     }
+    out.block([&] {
+        // Emit all of the fields from the processed type
+        for (auto const& fieldWithVersion : processedType.fields) {
+            fieldWithVersion.field->emitDocComment(out);
+            std::string aidlType =
+                    AidlHelper::getAidlType(*fieldWithVersion.field->get(), compoundType.fqName());
+            out << aidlType << " " << fieldWithVersion.field->name() << ";\n";
+        }
+    });
     out << "\n\n";
 }
 
