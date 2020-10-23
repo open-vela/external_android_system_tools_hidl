@@ -71,7 +71,11 @@ std::string AidlHelper::getAidlPackagePath(const FQName& fqName) {
     return base::Join(base::Split(AidlHelper::getAidlPackage(fqName), "."), "/");
 }
 
-std::string AidlHelper::getAidlFQName(const FQName& fqName) {
+std::optional<std::string> AidlHelper::getAidlFQName(const FQName& fqName) {
+    std::optional<const ReplacedTypeInfo> type = getAidlReplacedType(fqName);
+    if (type) {
+        return type.value().aidlReplacedFQName;
+    }
     return getAidlPackage(fqName) + "." + getAidlName(fqName);
 }
 
@@ -88,8 +92,10 @@ void AidlHelper::importLocallyReferencedType(const Type& type, std::set<std::str
     if (!type.isNamedType()) return;
     const NamedType& namedType = *static_cast<const NamedType*>(&type);
 
-    std::string import = AidlHelper::getAidlFQName(namedType.fqName());
-    imports->insert(import);
+    std::optional<std::string> import = AidlHelper::getAidlFQName(namedType.fqName());
+    if (import) {
+        imports->insert(import.value());
+    }
 }
 
 // This tries iterating over the HIDL AST which is a bit messy because
