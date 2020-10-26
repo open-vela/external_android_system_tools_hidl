@@ -23,7 +23,8 @@ genrule_defaults {
         "$(location hidl2aidl) -o $(genDir)/ " +
         "-rhidl2aidl.test:system/tools/hidl/hidl2aidl/test " +
         "hidl2aidl.test@2.0 && " +
-        "mv $(genDir)/include/hidl2aidl/test/translate-ndk.h $(genDir)/hidl2aidl/test/translate-ndk.h",
+        "mv $(genDir)/include/hidl2aidl/test/translate-ndk.h $(genDir)/hidl2aidl/test/ && " +
+        "mv $(genDir)/include/hidl2aidl/test/translate-cpp.h $(genDir)/hidl2aidl/test/ ",
     srcs: [
         "1.0/IBar.hal",
         "1.0/IFoo.hal",
@@ -67,6 +68,22 @@ genrule {
     defaults: ["hidl2aidl_test_gen_defaults"],
     out: [
         "hidl2aidl/test/translate-ndk.h",
+    ],
+}
+
+genrule {
+    name: "hidl2aidl_translate_cpp_test_gen_src",
+    defaults: ["hidl2aidl_test_gen_defaults"],
+    out: [
+        "hidl2aidl/test/translate-cpp.cpp",
+    ],
+}
+
+genrule {
+    name: "hidl2aidl_translate_cpp_test_gen_headers",
+    defaults: ["hidl2aidl_test_gen_defaults"],
+    out: [
+        "hidl2aidl/test/translate-cpp.h",
     ],
 }
 
@@ -129,12 +146,46 @@ cc_test {
     ],
 }
 
+cc_test {
+    name: "hidl2aidl_translate_cpp_test",
+    test_suites: ["general-tests"],
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-g",
+    ],
+    srcs: [
+        ":hidl2aidl_translate_cpp_test_gen_src",
+        "translate_cpp_test.cpp",
+    ],
+    generated_headers: [
+        "hidl2aidl_translate_cpp_test_gen_headers",
+    ],
+    shared_libs: [
+        "libbinder",
+        "libhidlbase",
+        "libutils",
+    ],
+    static_libs: [
+        "hidl2aidl_test_gen-cpp",
+        "hidl2aidl.test@1.0",
+        "hidl2aidl.test@1.1",
+        "hidl2aidl.test@1.2",
+    ],
+    host_required: [
+        "hidl2aidl",
+    ],
+}
+
 phony {
     name: "hidl2aidl_test",
     required: [
         "hidl2aidl_test_comp_cc",
         "hidl2aidl_test_gen-java",
         "hidl2aidl_translate_ndk_test",
+        "hidl2aidl_translate_cpp_test",
     ],
 }
 
