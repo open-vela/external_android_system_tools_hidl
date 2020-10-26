@@ -168,7 +168,43 @@ static void getSubTypes(const NamedType& namedType, std::set<const NamedType*>* 
     }
 }
 
-static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQName>& targets) {
+static void emitAidlSharedLibs(Formatter& out, FQName fqName, AidlBackend backend) {
+    if (backend == AidlBackend::NDK) {
+        out << "        \"libbinder_ndk\",\n";
+        out << "        \"libhidlbase\",\n";
+        out << "        \"" << AidlHelper::getAidlPackage(fqName) << "-ndk_platform\",\n";
+    } else if (backend == AidlBackend::CPP) {
+        out << "        \"libbinder\",\n";
+        out << "        \"libhidlbase\",\n";
+        out << "        \"" << AidlHelper::getAidlPackage(fqName) << "-cpp\",\n";
+        out << "        \"libutils\",\n";
+    }
+}
+
+static void emitHidlSharedLibs(Formatter& out, std::vector<FQName>& targets) {
+    std::set<std::string> uniquePackages;
+    for (const auto& target : targets) {
+        uniquePackages.insert(target.getPackageAndVersion().string());
+    }
+    for (const auto& package : uniquePackages) {
+        out << "        \"" << package << "\",\n";
+    }
+}
+
+static std::string aidlTranslateLibraryName(FQName fqName, AidlBackend backend) {
+    std::string postfix;
+    if (backend == AidlBackend::NDK) {
+        postfix = "-ndk";
+    } else if (backend == AidlBackend::CPP) {
+        postfix = "-cpp";
+    } else {
+        postfix = "";
+    }
+    return AidlHelper::getAidlPackage(fqName) + "-translate" + postfix;
+}
+
+static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQName>& targets,
+                          bool needsTranslation) {
     out << "// This is the expected build file, but it may not be right in all cases\n";
     out << "\n";
     out << "aidl_interface {\n";
@@ -178,9 +214,9 @@ static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQNa
     out << "    stability: \"vintf\",\n";
     out << "    backend: {\n";
     out << "        cpp: {\n";
-    out << "            // disabled for portability\n";
+    out << "            // FIXME should this be disabled?\n";
     out << "            // prefer NDK backend which can be used anywhere\n";
-    out << "            enabled: false,\n";
+    out << "            enabled: true,\n";
     out << "        },\n";
     out << "        java: {\n";
     out << "            sdk_version: \"module_current\",\n";
@@ -193,25 +229,22 @@ static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQNa
     out << "    },\n";
     out << "}\n\n";
 
-    // TODO(b/158489355) Handle different languages.
-    out << "cc_library {\n";
-    out << "    name: \"" << AidlHelper::getAidlPackage(fqName) << "-translate-ndk\",\n";
-    out << "    vendor_available: true,\n";
-    out << "    srcs: [\"" << AidlHelper::translateSourceFile(AidlBackend::NDK, fqName) + "\"],\n";
-    out << "    shared_libs: [\n";
-    out << "        \"libbinder_ndk\",\n";
-    out << "        \"libhidlbase\",\n";
-    out << "        \"" << AidlHelper::getAidlPackage(fqName) << "-ndk_platform\",\n";
-    std::set<std::string> uniquePackages;
-    for (const auto& target : targets) {
-        uniquePackages.insert(target.getPackageAndVersion().string());
+    if (!needsTranslation) return;
+
+    for (auto backend : {AidlBackend::CPP, AidlBackend::NDK}) {
+        out << "cc_library {\n";
+        out << "    name: \"" << aidlTranslateLibraryName(fqName, backend) << +"\",\n";
+        if (backend == AidlBackend::NDK) {
+            out << "    vendor_available: true,\n";
+        }
+        out << "    srcs: [\"" << AidlHelper::translateSourceFile(fqName, backend) + "\"],\n";
+        out << "    shared_libs: [\n";
+        emitAidlSharedLibs(out, fqName, backend);
+        emitHidlSharedLibs(out, targets);
+        out << "    ],\n";
+        out << "    export_include_dirs: [\"include\"],\n";
+        out << "}\n\n";
     }
-    for (const auto& package : uniquePackages) {
-        out << "        \"" << package << "\",\n";
-    }
-    out << "    ],\n";
-    out << "    export_include_dirs: [\"include\"],\n";
-    out << "}\n";
 }
 
 // hidl is intentionally leaky. Turn off LeakSanitizer by default.
@@ -343,10 +376,6 @@ int main(int argc, char** argv) {
         << AidlHelper::getAidlPackage(fqName) << " (if any) follow:\n";
     AidlHelper::setNotes(&err);
 
-    Formatter buildFile =
-            coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "Android.bp");
-    emitBuildFile(buildFile, fqName, targets);
-
     // Gather all the types and interfaces
     std::set<const NamedType*> namedTypesInPackage;
     for (const FQName& target : targets) {
@@ -392,6 +421,9 @@ int main(int argc, char** argv) {
         }
     }
 
+    Formatter buildFile =
+            coordinator.getFormatter(fqName, Coordinator::Location::DIRECT, "Android.bp");
+    emitBuildFile(buildFile, fqName, targets, !processedTypesInPackage.empty());
     AidlHelper::emitTranslation(coordinator, fqName, namedTypesInPackage, processedTypesInPackage);
 
     // Emit all types and interfaces
