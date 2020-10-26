@@ -96,8 +96,8 @@ struct AidlHelper {
     static void setNotes(Formatter* formatter);
 
     // return the full file names for the header/source files based on the backend
-    static std::string translateHeaderFile(AidlBackend backend, const FQName& fqName);
-    static std::string translateSourceFile(AidlBackend backend, const FQName& fqName);
+    static std::string translateHeaderFile(const FQName& fqName, AidlBackend backend);
+    static std::string translateSourceFile(const FQName& fqName, AidlBackend backend);
 
     static void emitTranslation(
             const Coordinator& coordinator, const FQName& fqName,
