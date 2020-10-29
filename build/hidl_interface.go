@@ -506,7 +506,6 @@ type hidlInterfaceProperties struct {
 	Full_root_option string `blueprint:"mutated"`
 
 	// Whether this interface library should be installed on product partition.
-	// TODO(b/150902910): remove, since this should be an inherited property.
 	Product_specific *bool
 
 	// List of APEX modules this interface can be used in.
@@ -634,6 +633,11 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 	// TODO(b/150902910): re-enable VTS builds for product things
 	shouldGenerateVts = shouldGenerateVts && !proptools.Bool(i.properties.Product_specific)
 
+	var productAvailable *bool
+	if !proptools.Bool(i.properties.Product_specific) {
+		productAvailable = proptools.BoolPtr(true)
+	}
+
 	var libraryIfExists []string
 	if shouldGenerateLibrary {
 		libraryIfExists = []string{name.string()}
@@ -678,6 +682,7 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			Host_supported:     proptools.BoolPtr(true),
 			Recovery_available: proptools.BoolPtr(true),
 			Vendor_available:   proptools.BoolPtr(true),
+			Product_available:  productAvailable,
 			Double_loadable:    proptools.BoolPtr(isDoubleLoadable(name.string())),
 			Defaults:           []string{"hidl-module-defaults"},
 			Generated_sources:  []string{name.sourcesName()},
@@ -778,6 +783,7 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 	mctx.CreateModule(cc.LibraryFactory, &ccProperties{
 		Name:              proptools.StringPtr(name.adapterHelperName()),
 		Vendor_available:  proptools.BoolPtr(true),
+		Product_available: productAvailable,
 		Defaults:          []string{"hidl-module-defaults"},
 		Generated_sources: []string{name.adapterHelperSourcesName()},
 		Generated_headers: []string{name.adapterHelperHeadersName()},
