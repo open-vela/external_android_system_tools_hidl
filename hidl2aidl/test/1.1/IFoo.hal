@@ -35,12 +35,6 @@ interface IFoo extends @1.0::IFoo {
     useImportedStruct(Outer outer);
 
     /**
-     * @param mem memory
-     */
-    useMemory(memory mem);
-    shouldImportCorrectTypes() generates (vec<OnlyIn11> lst);
-
-    /**
      * @return output output
      */
     oneOutput() generates (string output);

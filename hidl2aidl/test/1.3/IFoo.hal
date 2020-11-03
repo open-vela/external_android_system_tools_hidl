@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,25 @@
  * limitations under the License.
  */
 
-package hidl2aidl.test@1.0;
+package hidl2aidl.test@1.1;
 
-interface IFoo {
-    struct BigStruct {
-        uint8_t type;
-    };
-    oneway someFoo(int8_t a);
-    someBar(string a, int8_t b) generates (string foo);
+import @1.2::IFoo;
 
-    // This case fails since string cannot be an out param in aidl.
-    // someBar(string a, int8_t b) generates (string foo, int8_t[2] bar);
+/**
+ * The types in this package are not supported in the Java backend of HIDL
+ */
+interface IFoo extends @1.2::IFoo {
+    ImportedStruct(Outer outer);
+
+    /**
+     * @param mem memory
+     */
+    useMemory(memory mem);
+    shouldImportCorrectTypes() generates (vec<OnlyIn11> lst);
+
+    removedOutput() generates (string status);
+
+    fmqMethod(fmq_sync<bool> sync, fmq_unsync<int32_t> unsync) generates (pointer t);
+
+    retVec(int8_t a) generates (vec<string> b);
 };
