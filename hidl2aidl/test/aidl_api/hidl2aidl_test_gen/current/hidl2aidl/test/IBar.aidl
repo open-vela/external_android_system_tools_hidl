@@ -19,6 +19,8 @@ package hidl2aidl.test;
 @VintfStability
 interface IBar {
   void extraMethod(in hidl2aidl.test.IBarInner inner);
+  IBinder fmqMethod(in IBinder sync, in IBinder unsync);
+  String[] retVec(in byte a);
   String someBar(in String a, in byte b);
   oneway void someFoo(in byte a);
 }
