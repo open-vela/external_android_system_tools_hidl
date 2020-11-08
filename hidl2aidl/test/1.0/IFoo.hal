@@ -21,6 +21,7 @@ interface IFoo {
         uint8_t type;
     };
     oneway someFoo(int8_t a);
+    retVec(int8_t a) generates (vec<string> b);
     someBar(string a, int8_t b) generates (string foo);
 
     // This case fails since string cannot be an out param in aidl.
