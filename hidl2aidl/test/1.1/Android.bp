@@ -9,5 +9,5 @@ hidl_interface {
         "hidl2aidl.test@1.0",
         "android.hidl.base@1.0",
     ],
-    gen_java: false,
+    gen_java: true,
 }
