@@ -17,7 +17,7 @@
 genrule_defaults {
     name: "hidl2aidl_test_gen_defaults",
     tools: ["hidl2aidl"],
-    cmd: "$(location hidl2aidl) -o $(genDir)/ " +
+    cmd: "$(location hidl2aidl) -f -o $(genDir)/ " +
         "-rhidl2aidl.test:system/tools/hidl/hidl2aidl/test " +
         "hidl2aidl.test@1.2 && " +
         "$(location hidl2aidl) -o $(genDir)/ " +
@@ -87,6 +87,14 @@ genrule {
     defaults: ["hidl2aidl_test_gen_defaults"],
     out: [
         "hidl2aidl/test/translate-cpp.h",
+    ],
+}
+
+genrule {
+    name: "hidl2aidl_translate_java_test_gen_src",
+    defaults: ["hidl2aidl_test_gen_defaults"],
+    out: [
+        "hidl2aidl/test/Translate.java",
     ],
 }
 
@@ -182,6 +190,34 @@ cc_test {
     host_required: [
         "hidl2aidl",
     ],
+}
+
+android_test {
+    name: "hidl2aidl_translate_java_test",
+    platform_apis: true,
+    // Turn off Java optimization tools to speed up our test iterations.
+    optimize: {
+        enabled: false,
+    },
+    dex_preopt: {
+        enabled: false,
+    },
+    srcs: [
+        ":hidl2aidl_translate_java_test_gen_src",
+        "TranslateJavaTest.java",
+    ],
+    static_libs: [
+        "androidx.test.core",
+        "androidx.test.runner",
+        "hidl2aidl_test_gen-java",
+        "hidl2aidl.test-V1.0-java",
+        "hidl2aidl.test-V1.1-java",
+        "hidl2aidl.test-V1.2-java",
+    ],
+    host_required: [
+        "hidl2aidl",
+    ],
+    test_suites: ["general-tests"],
 }
 
 phony {

@@ -23,12 +23,9 @@ interface IFoo {
   void multipleOutputs(out hidl2aidl.test.IFooBigStruct out1, out hidl2aidl.test.IFooBigStruct out2);
   String oneOutput();
   String removedOutput();
-  String[] retVec(in byte a);
-  hidl2aidl.test.OnlyIn11[] shouldImportCorrectTypes();
   void someBar(in String a, in String b);
   oneway void someFoo(in byte a);
   void useImportedStruct(in hidl2aidl.test.Outer outer);
-  void useMemory(in IBinder mem);
   hidl2aidl.test.IFooBigStruct useStruct();
   void versionTest_(in String a);
   boolean versionTest_two_(in String a);
