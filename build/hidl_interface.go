@@ -505,6 +505,9 @@ type hidlInterfaceProperties struct {
 	// example: -randroid.hardware:hardware/interfaces
 	Full_root_option string `blueprint:"mutated"`
 
+	// Whether this interface library should be installed on product partition.
+	Product_specific *bool
+
 	// List of APEX modules this interface can be used in.
 	//
 	// WARNING: HIDL is not fully supported in APEX since VINTF currently doesn't
@@ -627,8 +630,11 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 	shouldGenerateJavaConstants := i.properties.Gen_java_constants
 	shouldGenerateVts := shouldGenerateLibrary && proptools.BoolDefault(i.properties.Gen_vts, true)
 
+	// TODO(b/150902910): re-enable VTS builds for product things
+	shouldGenerateVts = shouldGenerateVts && !proptools.Bool(i.properties.Product_specific)
+
 	var productAvailable *bool
-	if !mctx.ProductSpecific() {
+	if !proptools.Bool(i.properties.Product_specific) {
 		productAvailable = proptools.BoolPtr(true)
 	}
 
@@ -861,7 +867,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		})
 		mctx.CreateModule(cc.LibraryFactory, &ccProperties{
 			Name:                      proptools.StringPtr(name.vtsDriverName()),
-			Product_available:         productAvailable,
 			Defaults:                  []string{"VtsHalDriverDefaults"},
 			Generated_sources:         []string{name.vtsDriverSourcesName()},
 			Generated_headers:         []string{name.vtsDriverHeadersName()},
@@ -894,7 +899,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		})
 		mctx.CreateModule(cc.LibraryFactory, &ccProperties{
 			Name:                      proptools.StringPtr(name.vtsProfilerName()),
-			Product_available:         productAvailable,
 			Defaults:                  []string{"VtsHalProfilerDefaults"},
 			Generated_sources:         []string{name.vtsProfilerSourcesName()},
 			Generated_headers:         []string{name.vtsProfilerHeadersName()},
