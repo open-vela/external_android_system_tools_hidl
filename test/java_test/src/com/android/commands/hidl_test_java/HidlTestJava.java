@@ -20,34 +20,35 @@ import static android.system.OsConstants.MAP_SHARED;
 import static android.system.OsConstants.PROT_READ;
 import static android.system.OsConstants.PROT_WRITE;
 
+import android.hidl.manager.V1_0.IServiceManager;
 import android.hardware.tests.baz.V1_0.IBase;
 import android.hardware.tests.baz.V1_0.IBaz;
+import android.hardware.tests.baz.V1_0.IQuux;
 import android.hardware.tests.baz.V1_0.IBaz.MyHandle;
 import android.hardware.tests.baz.V1_0.IBaz.NestedStruct;
 import android.hardware.tests.baz.V1_0.IBazCallback;
-import android.hardware.tests.baz.V1_0.IQuux;
 import android.hardware.tests.memory.V2_0.IMemoryInterface;
 import android.hardware.tests.memory.V2_0.TwoMemory;
+import android.hardware.tests.safeunion.V1_0.IOtherInterface;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.HandleTypeSafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.InterfaceTypeSafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.LargeSafeUnion;
 import android.hardware.tests.safeunion.V1_0.ISafeUnion.SmallSafeUnion;
-import android.hidl.manager.V1_0.IServiceManager;
-import android.os.DeadObjectException;
 import android.os.HidlMemory;
 import android.os.HidlMemoryUtil;
-import android.os.HidlSupport;
 import android.os.HwBinder;
 import android.os.HwParcel;
 import android.os.IBinder;
 import android.os.IHwBinder;
 import android.os.NativeHandle;
 import android.os.RemoteException;
+import android.os.HidlSupport;
 import android.os.SharedMemory;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.Log;
+
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -75,8 +76,6 @@ public final class HidlTestJava {
     }
 
     public int run(String[] args) throws RemoteException, IOException, ErrnoException {
-        HwBinder.setTrebleTestingOverride(true);
-
         if (args[0].equals("-c")) {
             client();
         } else if (args[0].equals("-s")) {
@@ -368,6 +367,8 @@ public final class HidlTestJava {
             String testStringA = "Hello";
             String testStringB = "World";
 
+            IOtherInterface otherInterface = IOtherInterface.getService();
+
             ArrayList<NativeHandle> testHandlesVector = new ArrayList<>();
             for (int i = 0; i < 128; i++) {
                 testHandlesVector.add(new NativeHandle());
@@ -378,10 +379,11 @@ public final class HidlTestJava {
             ExpectTrue(safeUnion.getDiscriminator() == InterfaceTypeSafeUnion.hidl_discriminator.b);
             ExpectDeepEq(testArray, safeUnion.b());
 
-            IServiceManager anInterface = IServiceManager.getService();
-            safeUnion.c(anInterface);
+            safeUnion.c(otherInterface);
             ExpectTrue(safeUnion.getDiscriminator() == InterfaceTypeSafeUnion.hidl_discriminator.c);
-            ExpectTrue(HidlSupport.interfacesEqual(anInterface, safeUnion.c()));
+            ExpectTrue(HidlSupport.interfacesEqual(otherInterface, safeUnion.c()));
+            String result = safeUnion.c().concatTwoStrings(testStringA, testStringB);
+            Expect(result, testStringA + testStringB);
 
             safeUnion = safeunionInterface.setInterfaceD(safeUnion, testStringA);
             ExpectTrue(safeUnion.getDiscriminator() == InterfaceTypeSafeUnion.hidl_discriminator.d);
@@ -599,18 +601,6 @@ public final class HidlTestJava {
         }
 
         {
-            // Test proper exceptions are thrown
-            try {
-                // not in manifest, so won't wait
-                IBase proxy = IBase.getService("this-doesn't-exist", true /*retry*/);
-                // this should never run
-                ExpectTrue(false);
-            } catch (Exception e) {
-                ExpectTrue(e instanceof NoSuchElementException);
-            }
-        }
-
-        {
             // Test access through base interface binder.
             IBase baseProxy = IBase.getService();
             baseProxy.someBaseMethod();
@@ -651,7 +641,7 @@ public final class HidlTestJava {
             request.writeInterfaceToken(IBaz.kInterfaceName);
             request.writeInt64(1234);
             // IBaz::doThatAndReturnSomething is not oneway but we call it using FLAG_ONEWAY.
-            binder.transact(19 /*doThatAndReturnSomething*/, request, reply, IBinder.FLAG_ONEWAY);
+            binder.transact(18 /*doThatAndReturnSomething*/, request, reply, IBinder.FLAG_ONEWAY);
 
             try {
                 reply.verifySuccess();
@@ -673,16 +663,11 @@ public final class HidlTestJava {
             request.writeInterfaceToken(IBaz.kInterfaceName);
             request.writeFloat(1.0f);
             // IBaz::doThis is oneway but we call it without using FLAG_ONEWAY.
-            // This does not raise an exception in C++ because
+            // This does not raise an exception because
             // IPCThreadState::executeCommand for BR_TRANSACTION sends an empty
             // reply for two-way transactions if the transaction itself did not
             // send a reply.
-            try {
-                binder.transact(18 /*doThis*/, request, reply, 0 /* Not FLAG_ONEWAY */);
-                ExpectTrue(!proxy.isJava());
-            } catch (RemoteException e) {
-                ExpectTrue(proxy.isJava());
-            }
+            binder.transact(17 /*doThis*/, request, reply, 0 /* Not FLAG_ONEWAY */);
 
             proxy.ping();
         }
@@ -941,7 +926,7 @@ public final class HidlTestJava {
         proxy.callMe(cb);
         ExpectTrue(cb.wasCalled());
 
-        ExpectTrue(proxy.useAnEnum(IBaz.SomeEnum.goober) == IBaz.SomeEnum.quux);
+        ExpectTrue(proxy.useAnEnum(IBaz.SomeEnum.goober) == -64);
 
         {
             String[] stringArray = new String[3];
@@ -1005,12 +990,9 @@ public final class HidlTestJava {
             ExpectTrue(!t1.equals(t2));
         }
 
-        // server currently only implements this in C++
-        if (!proxy.isJava()) {
-            ArrayList<NestedStruct> structs = proxy.getNestedStructs();
-            ExpectTrue(structs.size() == 5);
-            ExpectTrue(structs.get(1).matrices.size() == 6);
-        }
+        ArrayList<NestedStruct> structs = proxy.getNestedStructs();
+        ExpectTrue(structs.size() == 5);
+        ExpectTrue(structs.get(1).matrices.size() == 6);
 
         {
             IBaz.Everything e = new IBaz.Everything();
@@ -1214,21 +1196,17 @@ public final class HidlTestJava {
             IBaz baz = IBaz.getService();
             ExpectTrue(baz != null);
             IBaz.StructWithInterface swi = new IBaz.StructWithInterface();
-            swi.iface = IServiceManager.getService();
+            swi.dummy = baz;
             swi.number = 12345678;
             IBaz.StructWithInterface swi_back = baz.haveSomeStructWithInterface(swi);
             ExpectTrue(swi_back != null);
-            ExpectTrue(swi_back.iface != null);
-            ExpectTrue(HidlSupport.interfacesEqual(swi.iface, swi_back.iface));
+            ExpectTrue(swi_back.dummy != null);
+            ExpectTrue(HidlSupport.interfacesEqual(baz, swi_back.dummy));
             ExpectTrue(swi_back.number == 12345678);
         }
 
         runClientSafeUnionTests();
-
-        // currently no Java implementation of this
-        if (!proxy.isJava()) {
-            runClientMemoryTests();
-        }
+        runClientMemoryTests();
 
         // --- DEATH RECIPIENT TESTING ---
         // This must always be done last, since it will kill the native server process
@@ -1247,7 +1225,7 @@ public final class HidlTestJava {
         ExpectTrue(proxy.unlinkToDeath(recipient2));
         try {
             proxy.dieNow();
-        } catch (DeadObjectException e) {
+        } catch (RemoteException e) {
             // Expected
         }
         ExpectTrue(recipient1.waitUntilServiceDied(2000 /*timeoutMillis*/));
@@ -1258,11 +1236,6 @@ public final class HidlTestJava {
 
     class Baz extends IBaz.Stub {
         // from IBase
-        public boolean isJava() {
-            Log.d(TAG, "Baz isJava");
-            return true;
-        }
-
         public void someBaseMethod() {
             Log.d(TAG, "Baz someBaseMethod");
         }
@@ -1481,7 +1454,9 @@ public final class HidlTestJava {
             }
         }
 
-        public void dieNow() { System.exit(0); }
+        public void dieNow() {
+            // Not tested in Java
+        }
 
         public byte useAnEnum(byte zzz) {
             Log.d(TAG, "useAnEnum " + zzz);
@@ -1669,7 +1644,7 @@ public final class HidlTestJava {
 
         @Override
         public InterfaceTypeSafeUnion setInterfaceC(
-                InterfaceTypeSafeUnion safeUnion, android.hidl.base.V1_0.IBase c) {
+            InterfaceTypeSafeUnion safeUnion, IOtherInterface c) {
             Log.d(TAG, "SERVER: setInterfaceC(" + c + ")");
             safeUnion.c(c);
 
@@ -1743,6 +1718,13 @@ public final class HidlTestJava {
         }
     }
 
+    class OtherInterface extends IOtherInterface.Stub {
+        @Override
+        public String concatTwoStrings(String a, String b) {
+            return a.concat(b);
+        }
+    }
+
     private void server() throws RemoteException {
         HwBinder.configureRpcThreadpool(1, true);
 
@@ -1758,6 +1740,9 @@ public final class HidlTestJava {
 
         SafeUnion safeunionInterface = new SafeUnion();
         safeunionInterface.registerAsService("default");
+
+        OtherInterface otherInterface = new OtherInterface();
+        otherInterface.registerAsService("default");
 
         HwBinder.joinRpcThreadpool();
     }
