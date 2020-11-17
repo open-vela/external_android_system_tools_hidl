@@ -20,46 +20,8 @@
 
 #include <functional>
 #include <string>
-#include <vector>
 
 namespace android {
-
-struct Formatter;
-
-struct WrappedOutput {
-    WrappedOutput(size_t lineLength);
-
-    void group(const std::function<void(void)>& block);
-    WrappedOutput& operator<<(const std::string& str);
-    WrappedOutput& printUnlessWrapped(const std::string& str);
-
-  private:
-    struct Block {
-        Block(const std::string& content, Block* const parent);
-
-        // populated helps indicate if we are done filling up the Block.
-        // this allows WrappedOutput to keep adding content to this block
-        // till it is determined that it is full.
-        bool populated = false;
-        bool printUnlessWrapped = false;
-
-        // Only one of content or blocks can have content.
-        std::string content;
-        std::vector<Block> blocks;
-
-        Block* const parent;
-
-        size_t computeSize(bool wrapped) const;
-        void print(Formatter& out, bool wrapped) const;
-    };
-
-    size_t mLineLength;
-
-    Block mRootBlock;
-    Block* mCurrentBlock;
-
-    friend struct Formatter;
-};
 
 // Two styles to use a Formatter.
 // One is with .indent() calls and operator<<.
@@ -165,32 +127,32 @@ struct Formatter {
     Formatter &operator<<(float c);
     Formatter &operator<<(double c);
     Formatter &operator<<(long double c);
-    Formatter& operator<<(const WrappedOutput& wrappedOutput);
+
+    // Any substrings matching "space" will be stripped out of the output.
+    void setNamespace(const std::string &space);
 
     // Puts a prefix before each line. This is useful if
     // you want to start a // comment block, for example.
     // The prefix will be put before the indentation.
     // Will be effective the next time cursor is at the start of line.
-    // Adding two prefixes will output them in the order they were added
-    void pushLinePrefix(const std::string& prefix);
-    // Remove the last line prefix.
-    void popLinePrefix();
+    void setLinePrefix(const std::string& prefix);
+    // Remove the line prefix.
+    void unsetLinePrefix();
 
     bool isValid() const;
-    size_t getIndentation() const;
 
-  private:
+   private:
     // Creates an invalid formatter object.
     Formatter();
 
     FILE* mFile;  // invalid if nullptr
     size_t mIndentDepth;
     size_t mSpacesPerIndent;
-    size_t mCurrentPosition;
+    bool mAtStartOfLine;
 
-    std::vector<std::string> mLinePrefix;
+    std::string mSpace;
+    std::string mLinePrefix;
 
-    void printBlock(const WrappedOutput::Block& block, size_t lineLength);
     void output(const std::string &text) const;
 
     Formatter(const Formatter&) = delete;
