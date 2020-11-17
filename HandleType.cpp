@@ -23,7 +23,7 @@
 
 namespace android {
 
-HandleType::HandleType(Scope* parent) : Type(parent, "handle") {}
+HandleType::HandleType(Scope* parent) : Type(parent) {}
 
 bool HandleType::isHandle() const {
     return true;

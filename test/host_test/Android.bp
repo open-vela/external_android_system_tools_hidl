@@ -15,16 +15,12 @@
 cc_test_host {
     name: "hidl-gen-host_test",
     defaults: ["hidl-gen-defaults"],
-    static_libs: [
-        "libbase",
-        "libcrypto",
+
+    shared_libs: [
         "libhidl-gen",
         "libhidl-gen-ast",
-        "libhidl-gen-hash",
-        "libhidl-gen-host-utils",
         "libhidl-gen-utils",
-        "liblog",
     ],
+
     srcs: ["main.cpp"],
-    test_suites: ["device-tests"],
 }

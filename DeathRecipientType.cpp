@@ -21,7 +21,7 @@
 
 namespace android {
 
-DeathRecipientType::DeathRecipientType(Scope* parent) : Type(parent, "death_recipient") {}
+DeathRecipientType::DeathRecipientType(Scope* parent) : Type(parent) {}
 
 std::string DeathRecipientType::typeName() const {
     return "death recipient";

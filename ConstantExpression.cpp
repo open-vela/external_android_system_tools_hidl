@@ -164,19 +164,17 @@ std::unique_ptr<ConstantExpression> ConstantExpression::ValueOf(ScalarType::Kind
     return std::make_unique<LiteralConstantExpression>(kind, value);
 }
 
-ConstantExpression::ConstantExpression(const std::string& expr) : mExpr(expr) {}
-
 bool ConstantExpression::isEvaluated() const {
     return mIsEvaluated;
 }
 
-LiteralConstantExpression::LiteralConstantExpression(ScalarType::Kind kind, uint64_t value,
-                                                     const std::string& expr)
-    : ConstantExpression(expr) {
+LiteralConstantExpression::LiteralConstantExpression(
+    ScalarType::Kind kind, uint64_t value, const std::string& expr) {
+
     CHECK(!expr.empty());
     CHECK(isSupported(kind));
-
     mTrivialDescription = std::to_string(value) == expr;
+    mExpr = expr;
     mValueKind = kind;
     mValue = value;
     mIsEvaluated = true;
@@ -256,6 +254,7 @@ void UnaryConstantExpression::evaluate() {
     CHECK(mUnary->isEvaluated());
     mIsEvaluated = true;
 
+    mExpr = std::string("(") + mOp + mUnary->mExpr + ")";
     mValueKind = mUnary->mValueKind;
 
 #define CASE_UNARY(__type__)                                          \
@@ -270,6 +269,8 @@ void BinaryConstantExpression::evaluate() {
     CHECK(mLval->isEvaluated());
     CHECK(mRval->isEvaluated());
     mIsEvaluated = true;
+
+    mExpr = std::string("(") + mLval->mExpr + " " + mOp + " " + mRval->mExpr + ")";
 
     bool isArithmeticOrBitflip = OP_IS_BIN_ARITHMETIC || OP_IS_BIN_BITFLIP;
 
@@ -328,6 +329,8 @@ void TernaryConstantExpression::evaluate() {
     CHECK(mTrueVal->isEvaluated());
     CHECK(mFalseVal->isEvaluated());
     mIsEvaluated = true;
+
+    mExpr = std::string("(") + mCond->mExpr + "?" + mTrueVal->mExpr + ":" + mFalseVal->mExpr + ")";
 
     // note: for ?:, unlike arithmetic ops, integral promotion is not processed.
     mValueKind = usualArithmeticConversion(mTrueVal->mValueKind, mFalseVal->mValueKind);
@@ -463,6 +466,7 @@ std::string ConstantExpression::javaValue(ScalarType::Kind castKind) const {
 }
 
 const std::string& ConstantExpression::expression() const {
+    CHECK(isEvaluated());
     return mExpr;
 }
 
@@ -674,16 +678,12 @@ void ConstantExpression::setPostParseCompleted() {
     mIsPostParseCompleted = true;
 }
 
-void ConstantExpression::surroundWithParens() {
-    mExpr = "(" + mExpr + ")";
-}
-
 std::vector<const ConstantExpression*> LiteralConstantExpression::getConstantExpressions() const {
     return {};
 }
 
 UnaryConstantExpression::UnaryConstantExpression(const std::string& op, ConstantExpression* value)
-    : ConstantExpression(op + value->mExpr), mUnary(value), mOp(op) {}
+    : mUnary(value), mOp(op) {}
 
 std::vector<const ConstantExpression*> UnaryConstantExpression::getConstantExpressions() const {
     return {mUnary};
@@ -691,10 +691,7 @@ std::vector<const ConstantExpression*> UnaryConstantExpression::getConstantExpre
 
 BinaryConstantExpression::BinaryConstantExpression(ConstantExpression* lval, const std::string& op,
                                                    ConstantExpression* rval)
-    : ConstantExpression(lval->mExpr + " " + op + " " + rval->mExpr),
-      mLval(lval),
-      mRval(rval),
-      mOp(op) {}
+    : mLval(lval), mRval(rval), mOp(op) {}
 
 std::vector<const ConstantExpression*> BinaryConstantExpression::getConstantExpressions() const {
     return {mLval, mRval};
@@ -703,10 +700,7 @@ std::vector<const ConstantExpression*> BinaryConstantExpression::getConstantExpr
 TernaryConstantExpression::TernaryConstantExpression(ConstantExpression* cond,
                                                      ConstantExpression* trueVal,
                                                      ConstantExpression* falseVal)
-    : ConstantExpression(cond->mExpr + "?" + trueVal->mExpr + ":" + falseVal->mExpr),
-      mCond(cond),
-      mTrueVal(trueVal),
-      mFalseVal(falseVal) {}
+    : mCond(cond), mTrueVal(trueVal), mFalseVal(falseVal) {}
 
 std::vector<const ConstantExpression*> TernaryConstantExpression::getConstantExpressions() const {
     return {mCond, mTrueVal, mFalseVal};
@@ -714,7 +708,8 @@ std::vector<const ConstantExpression*> TernaryConstantExpression::getConstantExp
 
 ReferenceConstantExpression::ReferenceConstantExpression(const Reference<LocalIdentifier>& value,
                                                          const std::string& expr)
-    : ConstantExpression(expr), mReference(value) {
+    : mReference(value) {
+    mExpr = expr;
     mTrivialDescription = mExpr.empty();
 }
 
@@ -734,7 +729,9 @@ std::vector<const Reference<LocalIdentifier>*> ReferenceConstantExpression::getR
 AttributeConstantExpression::AttributeConstantExpression(const Reference<Type>& value,
                                                          const std::string& fqname,
                                                          const std::string& tag)
-    : ConstantExpression(fqname + "#" + tag), mReference(value), mTag(tag) {}
+    : mReference(value), mTag(tag) {
+    mExpr = fqname + "#" + tag;
+}
 
 std::vector<const ConstantExpression*> AttributeConstantExpression::getConstantExpressions() const {
     // Returns reference instead
