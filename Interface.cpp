@@ -41,11 +41,7 @@
 namespace android {
 
 const std::unique_ptr<ConstantExpression> Interface::FLAG_ONE_WAY =
-        std::make_unique<LiteralConstantExpression>(ScalarType::KIND_UINT32,
-                                                    hardware::IBinder::FLAG_ONEWAY, "oneway");
-const std::unique_ptr<ConstantExpression> Interface::FLAG_CLEAR_BUF =
-        std::make_unique<LiteralConstantExpression>(ScalarType::KIND_UINT32,
-                                                    hardware::IBinder::FLAG_CLEAR_BUF, "clear buf");
+    std::make_unique<LiteralConstantExpression>(ScalarType::KIND_UINT32, hardware::IBinder::FLAG_ONEWAY, "oneway");
 
 Interface::Interface(const std::string& localName, const FQName& fullName, const Location& location,
                      Scope* parent, const Reference<Type>& superType, const Hash* fileHash)
@@ -587,16 +583,6 @@ bool Interface::addAllReservedMethods(const std::map<std::string, Method*>& allR
     return true;
 }
 
-bool Interface::hasSensitiveDataAnnotation() const {
-    for (const auto& annotation : annotations()) {
-        if (annotation->name() == "SensitiveData") {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 const Interface* Interface::superType() const {
     if (isIBase()) return nullptr;
     if (!mSuperType->isInterface()) {
@@ -950,10 +936,6 @@ void Interface::emitVtsAttributeType(Formatter& out) const {
 }
 
 bool Interface::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const {
-    if (hasSensitiveDataAnnotation()) {
-        return false;
-    }
-
     if (superType() != nullptr && !superType()->isJavaCompatible(visited)) {
         return false;
     }
