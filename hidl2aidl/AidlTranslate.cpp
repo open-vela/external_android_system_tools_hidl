@@ -145,65 +145,60 @@ static void h2aScalarChecks(Formatter& out, const FieldWithVersion& field,
             }
             out << "}\n";
         }
-    } else {
-        LOG(FATAL) << "Unexpected non-scalar type: " << field.field->type().typeName();
     }
 }
 
-static void scalarTranslation(Formatter& out, const FieldWithVersion& field,
+static std::string wrapToString16(const std::string& payload, AidlBackend backend) {
+    if (backend == AidlBackend::CPP) {
+        return "String16(" + payload + ".c_str())";
+    } else {
+        return payload;
+    }
+}
+
+static std::string wrapStaticCast(const std::string& payload, const Type& type,
+                                  const FQName& fqName) {
+    static const std::map<std::string, std::string> kAidlBackendScalarTypes{
+            {"boolean", "bool"}, {"byte", "int8_t"}, {"char", "char16_t"}, {"int", "int32_t"},
+            {"long", "int64_t"}, {"float", "float"}, {"double", "double"}};
+    const auto& it = kAidlBackendScalarTypes.find(AidlHelper::getAidlType(type, fqName));
+    if (it != kAidlBackendScalarTypes.end()) {
+        return "static_cast<" + it->second + ">(" + payload + ")";
+    } else {
+        return payload;
+    }
+}
+
+static std::string wrapCppSource(const std::string& payload, const Type& type, const FQName& fqName,
+                                 AidlBackend backend) {
+    if (type.isString()) {
+        return wrapToString16(payload, backend);
+    } else {
+        return wrapStaticCast(payload, type, fqName);
+    }
+}
+
+static void simpleTranslation(Formatter& out, const FieldWithVersion& field,
                               const CompoundType* parent, AidlBackend backend) {
     h2aScalarChecks(out, field, parent, backend);
-    if (parent->style() == CompoundType::STYLE_STRUCT) {
-        if (backend == AidlBackend::JAVA) {
+    if (backend == AidlBackend::JAVA) {
+        if (parent->style() == CompoundType::STYLE_STRUCT) {
             out << "out." << field.field->name() << " = in." << field.fullName << ";\n";
         } else {
-            out << "out->" << field.field->name() << " = in." << field.fullName << ";\n";
-        }
-    } else /* STYLE_UNION || STYLE_SAFE_UNION */ {
-        static const std::map<std::string, std::string> kAidlBackendScalarTypes{
-                {"boolean", "bool"}, {"byte", "int8_t"}, {"char", "char16_t"}, {"int", "int32_t"},
-                {"long", "int64_t"}, {"float", "float"}, {"double", "double"},
-        };
-        const auto& it = kAidlBackendScalarTypes.find(
-                AidlHelper::getAidlType(*field.field->get(), parent->fqName()));
-        if (it != kAidlBackendScalarTypes.end()) {
-            if (backend == AidlBackend::JAVA) {
-                out << "out.set" << StringHelper::Capitalize(field.field->name()) << "(in."
-                    << field.field->name() << "());\n";
-            } else {
-                out << "*out = static_cast<" << it->second << ">(in." << field.field->name()
-                    << "());\n";
-            }
-        } else {
-            LOG(FATAL) << "Unexpected scalar type: "
-                       << AidlHelper::getAidlType(*field.field->get(), parent->fqName());
-        }
-    }
-}
-
-static void stringTranslation(Formatter& out, const FieldWithVersion& field,
-                              const CompoundType* parent, AidlBackend backend) {
-    if (backend == AidlBackend::CPP) {
-        out << "// FIXME Need to make sure the hidl_string is valid utf-8, otherwise an empty "
-               "String16 will be returned.\n";
-        if (parent->style() == CompoundType::STYLE_STRUCT) {
-            out << "out->" << field.field->name() << " = String16(in." << field.fullName
-                << ".c_str());\n";
-        } else {
-            out << "*out = String16(in." << field.fullName << "().c_str());\n";
-        }
-    } else if (backend == AidlBackend::NDK) {
-        if (parent->style() == CompoundType::STYLE_STRUCT) {
-            out << "out->" << field.field->name() << " = in." << field.fullName << ";\n";
-        } else {
-            out << "*out = in." << field.fullName << "();\n";
+            out << "out.set" << StringHelper::Capitalize(field.fullName) << "(in."
+                << field.field->name() << "());\n";
         }
     } else {
         if (parent->style() == CompoundType::STYLE_STRUCT) {
-            out << "out." << field.field->name() << " = in." << field.fullName << ";\n";
+            out << "out->" << field.field->name() << " = "
+                << wrapCppSource("in." + field.fullName, *field.field->get(), parent->fqName(),
+                                 backend)
+                << ";\n";
         } else {
-            out << "out.set" << StringHelper::Capitalize(field.field->name()) << "(in."
-                << field.fullName << "());\n";
+            out << "*out = "
+                << wrapCppSource("in." + field.fullName + "()", *field.field->get(),
+                                 parent->fqName(), backend)
+                << ";\n";
         }
     }
 }
@@ -214,10 +209,9 @@ static void h2aFieldTranslation(Formatter& out, const std::set<const NamedType*>
     // TODO(b/158489355) Need to support and validate more types like arrays/vectors.
     if (field.field->type().isNamedType()) {
         namedTypeTranslation(out, namedTypes, field, parent, backend);
-    } else if (field.field->type().isEnum() || field.field->type().isScalar()) {
-        scalarTranslation(out, field, parent, backend);
-    } else if (field.field->type().isString()) {
-        stringTranslation(out, field, parent, backend);
+    } else if (field.field->type().isEnum() || field.field->type().isScalar() ||
+               field.field->type().isString()) {
+        simpleTranslation(out, field, parent, backend);
     } else {
         AidlHelper::notes() << "An unhandled type was found in translation: "
                             << field.field->type().typeName() << "\n";
