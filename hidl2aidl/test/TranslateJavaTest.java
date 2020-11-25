@@ -115,7 +115,7 @@ public class TranslateJavaTest {
             fail("Expected an exception to be thrown for out of bounds unsigned to signed translation");
         } catch (RuntimeException e) {
             String message = e.getMessage();
-            assertThat("Unsafe conversion between signed and unsigned scalars for field: a",
+            assertThat("Unsafe conversion between signed and unsigned scalars for field: in.a",
                     is(message));
         }
     }
@@ -190,5 +190,103 @@ public class TranslateJavaTest {
         source.f(3e10);
         dest = Translate.h2aTranslate(source);
         assertThat(source.f(), is(dest.getF()));
+    }
+
+    @Test
+    public void ArrayFoo() {
+        hidl2aidl.test.ArrayFoo dest;
+        hidl2aidl.test.V1_2.ArrayFoo source = new hidl2aidl.test.V1_2.ArrayFoo();
+        source.a[0] = 42;
+        source.a[0] = 42;
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.a[0], is(dest.a[0]));
+    }
+
+    @Test
+    public void ArrayFooEmpty() {
+        hidl2aidl.test.ArrayFoo dest;
+        hidl2aidl.test.V1_2.ArrayFoo source = new hidl2aidl.test.V1_2.ArrayFoo();
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.a.length, is(dest.a.length));
+    }
+
+    @Test
+    public void ArrayFooEnum() {
+        hidl2aidl.test.ArrayFoo dest;
+        hidl2aidl.test.V1_2.ArrayFoo source = new hidl2aidl.test.V1_2.ArrayFoo();
+        source.c[0] = hidl2aidl.test.Value.A;
+        source.c[1] = hidl2aidl.test.Value.B;
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.c[0], is(dest.c[0]));
+        assertThat(source.c[1], is(dest.c[1]));
+    }
+
+    @Test
+    public void ArrayFooString() {
+        hidl2aidl.test.ArrayFoo dest;
+        hidl2aidl.test.V1_2.ArrayFoo source = new hidl2aidl.test.V1_2.ArrayFoo();
+        source.d[0] = "hello";
+        source.d[1] = "world";
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.d[0], is(dest.d[0]));
+        assertThat(source.d[1], is(dest.d[1]));
+    }
+
+    @Test
+    public void VectorFoo() {
+        hidl2aidl.test.VectorFoo dest;
+        hidl2aidl.test.V1_2.VectorFoo source = new hidl2aidl.test.V1_2.VectorFoo();
+        source.a.add((byte) 42);
+        source.a.add((byte) 8);
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.a.get(0), is(dest.a[0]));
+        assertThat(source.a.get(1), is(dest.a[1]));
+    }
+
+    @Test
+    public void VectorFooEmpty() {
+        hidl2aidl.test.VectorFoo dest;
+        hidl2aidl.test.V1_2.VectorFoo source = new hidl2aidl.test.V1_2.VectorFoo();
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.a.size(), is(dest.a.length));
+    }
+
+    @Test
+    public void VectorFooUnsigned() {
+        hidl2aidl.test.VectorFoo dest;
+        hidl2aidl.test.V1_2.VectorFoo source = new hidl2aidl.test.V1_2.VectorFoo();
+        source.b.add(12);
+        source.b.add(0xf0000000);
+        try {
+            dest = Translate.h2aTranslate(source);
+            fail("Expected an exception to be thrown for out of bounds unsigned to signed translation");
+        } catch (RuntimeException e) {
+            String message = e.getMessage();
+            assertThat(
+                    "Unsafe conversion between signed and unsigned scalars for field: in.b.get(i)",
+                    is(message));
+        }
+    }
+
+    @Test
+    public void VectorFooEnum() {
+        hidl2aidl.test.VectorFoo dest;
+        hidl2aidl.test.V1_2.VectorFoo source = new hidl2aidl.test.V1_2.VectorFoo();
+        source.c.add(hidl2aidl.test.Value.A);
+        source.c.add(hidl2aidl.test.Value.B);
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.c.get(0), is(dest.c[0]));
+        assertThat(source.c.get(1), is(dest.c[1]));
+    }
+
+    @Test
+    public void VectorFooString() {
+        hidl2aidl.test.VectorFoo dest;
+        hidl2aidl.test.V1_2.VectorFoo source = new hidl2aidl.test.V1_2.VectorFoo();
+        source.d.add("hello");
+        source.d.add("world");
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.d.get(0), is(dest.d[0]));
+        assertThat(source.d.get(1), is(dest.d[1]));
     }
 }
