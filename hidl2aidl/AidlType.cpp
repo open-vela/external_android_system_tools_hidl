@@ -18,6 +18,7 @@
 #include <string>
 
 #include "AidlHelper.h"
+#include "ArrayType.h"
 #include "FmqType.h"
 #include "NamedType.h"
 #include "Type.h"
@@ -47,10 +48,10 @@ std::optional<const ReplacedTypeInfo> AidlHelper::getAidlReplacedType(const FQNa
 std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo) {
     if (type.isVector()) {
         const VectorType& vec = static_cast<const VectorType&>(type);
-        const Type* elementType = vec.getElementType();
-
-        // Aidl doesn't support List<*> for C++ and NDK backends
-        return getAidlType(*elementType, relativeTo) + "[]";
+        return getAidlType(*vec.getElementType(), relativeTo) + "[]";
+    } else if (type.isArray()) {
+        const ArrayType& arr = static_cast<const ArrayType&>(type);
+        return getAidlType(*arr.getElementType(), relativeTo) + "[]";
     } else if (type.isNamedType()) {
         const NamedType& namedType = static_cast<const NamedType&>(type);
         if (getAidlPackage(relativeTo) == getAidlPackage(namedType.fqName())) {
