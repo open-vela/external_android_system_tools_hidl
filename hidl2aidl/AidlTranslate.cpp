@@ -25,11 +25,15 @@
 #include <vector>
 
 #include "AidlHelper.h"
+#include "ArrayType.h"
 #include "CompoundType.h"
+#include "ConstantExpression.h"
 #include "Coordinator.h"
+#include "EnumType.h"
 #include "NamedType.h"
 #include "ScalarType.h"
 #include "Scope.h"
+#include "VectorType.h"
 
 namespace android {
 
@@ -59,12 +63,12 @@ std::string AidlHelper::translateSourceFile(const FQName& fqName, AidlBackend ba
     }
 }
 
-static const std::string aidlTypePackage(const NamedType* type, AidlBackend backend) {
+static const std::string aidlTypePackage(const NamedType& type, AidlBackend backend) {
     const std::string prefix = (backend == AidlBackend::NDK) ? "aidl::" : std::string();
     const std::string separator = (backend == AidlBackend::JAVA) ? "." : "::";
     return prefix +
-           base::Join(base::Split(AidlHelper::getAidlPackage(type->fqName()), "."), separator) +
-           separator + AidlHelper::getAidlType(*type, type->fqName());
+           base::Join(base::Split(AidlHelper::getAidlPackage(type.fqName()), "."), separator) +
+           separator + AidlHelper::getAidlType(type, type.fqName());
 }
 
 static void namedTypeTranslation(Formatter& out, const std::set<const NamedType*>& namedTypes,
@@ -100,10 +104,10 @@ static void namedTypeTranslation(Formatter& out, const std::set<const NamedType*
                     << "(h2aTranslate(in." << field.fullName << "()));\n";
             } else {
                 out << "{\n";
-                out << aidlTypePackage(type, backend) << " " << field.field->name() << ";\n";
+                out << aidlTypePackage(*type, backend) << " " << field.field->name() << ";\n";
                 out << "if (!translate(in." << field.fullName + "(), &" << field.field->name()
                     << ")) return false;\n";
-                out << "out->set<" << aidlTypePackage(parent, backend) << "::" << field.fullName
+                out << "out->set<" << aidlTypePackage(*parent, backend) << "::" << field.fullName
                     << ">(" << field.field->name() << ");\n";
                 out << "}\n";
             }
@@ -111,34 +115,32 @@ static void namedTypeTranslation(Formatter& out, const std::set<const NamedType*
     }
 }
 
-static void h2aScalarChecks(Formatter& out, const FieldWithVersion& field,
-                            const CompoundType* parent, AidlBackend backend) {
+static void h2aScalarChecks(Formatter& out, const Type& type, const std::string& inputAccess,
+                            AidlBackend backend) {
     static const std::map<ScalarType::Kind, size_t> kSignedMaxSize{
             {ScalarType::KIND_UINT8, std::numeric_limits<int8_t>::max()},
             {ScalarType::KIND_INT16, std::numeric_limits<int32_t>::max()},
             {ScalarType::KIND_UINT32, std::numeric_limits<int32_t>::max()},
             {ScalarType::KIND_UINT64, std::numeric_limits<int64_t>::max()}};
-
-    const ScalarType* scalarType = field.field->type().resolveToScalarType();
-    if (scalarType != nullptr) {
+    const ScalarType* scalarType = type.resolveToScalarType();
+    if (scalarType != nullptr && !type.isEnum()) {
         const auto& it = kSignedMaxSize.find(scalarType->getKind());
         if (it != kSignedMaxSize.end()) {
             out << "// FIXME This requires conversion between signed and unsigned. Change this if "
                    "it doesn't suit your needs.\n";
-            std::string functionCall = (parent->style() == CompoundType::STYLE_STRUCT) ? "" : "()";
             if (scalarType->getKind() == ScalarType::KIND_INT16) {
                 // AIDL uses an unsigned 16-bit integer(char16_t), so this is signed to unsigned.
-                out << "if (in." << field.fullName << functionCall << " < 0) {\n";
+                out << "if (" << inputAccess << " < 0) {\n";
             } else {
                 std::string affix = (scalarType->getKind() == ScalarType::KIND_UINT64) ? "L" : "";
-                out << "if (in." << field.fullName << functionCall << " > " << it->second << affix
-                    << " || in." << field.fullName << functionCall << " < 0) {\n";
+                out << "if (" << inputAccess << " > " << it->second << affix << " || "
+                    << inputAccess << " < 0) {\n";
             }
             if (backend == AidlBackend::JAVA) {
                 out.indent([&] {
                     out << "throw new RuntimeException(\"Unsafe conversion between signed and "
                            "unsigned scalars for field: "
-                        << field.fullName << "\");\n";
+                        << inputAccess << "\");\n";
                 });
             } else {
                 out.indent([&] { out << "return false;\n"; });
@@ -157,10 +159,15 @@ static std::string wrapToString16(const std::string& payload, AidlBackend backen
 }
 
 static std::string wrapStaticCast(const std::string& payload, const Type& type,
-                                  const FQName& fqName) {
+                                  const FQName& fqName, AidlBackend backend) {
     static const std::map<std::string, std::string> kAidlBackendScalarTypes{
             {"boolean", "bool"}, {"byte", "int8_t"}, {"char", "char16_t"}, {"int", "int32_t"},
             {"long", "int64_t"}, {"float", "float"}, {"double", "double"}};
+    if (type.isEnum()) {
+        return "static_cast<" +
+               aidlTypePackage(static_cast<const android::NamedType&>(type), backend) + ">(" +
+               payload + ")";
+    }
     const auto& it = kAidlBackendScalarTypes.find(AidlHelper::getAidlType(type, fqName));
     if (it != kAidlBackendScalarTypes.end()) {
         return "static_cast<" + it->second + ">(" + payload + ")";
@@ -174,30 +181,100 @@ static std::string wrapCppSource(const std::string& payload, const Type& type, c
     if (type.isString()) {
         return wrapToString16(payload, backend);
     } else {
-        return wrapStaticCast(payload, type, fqName);
+        return wrapStaticCast(payload, type, fqName, backend);
+    }
+}
+
+static void containerTranslation(Formatter& out, const FieldWithVersion& field,
+                                 const CompoundType* parent, AidlBackend backend) {
+    const Type* elementType;
+    std::string javaSizeAccess;
+    std::string javaElementAccess;
+    std::string cppSize;
+    if (field.field->type().isArray()) {
+        elementType = static_cast<const ArrayType*>(field.field->get())->getElementType();
+        javaSizeAccess = ".length";
+        javaElementAccess = "[i]";
+        cppSize = "sizeof(in." + field.fullName + ")/sizeof(in." + field.fullName + "[0])";
+    } else if (field.field->type().isVector()) {
+        elementType = static_cast<const VectorType*>(field.field->get())->getElementType();
+        javaSizeAccess = ".size()";
+        javaElementAccess = ".get(i)";
+        cppSize = "in." + field.fullName + ".size()";
+    } else {
+        LOG(FATAL) << "Unexpected container type for field: " << field.field->name();
+        return;
+    }
+    if (elementType->isArray() || elementType->isVector()) {
+        out << "#error Nested arrays and vectors are currently not supported. Needs implementation "
+               "for field: "
+            << field.field->name() << "\n";
+        return;
+    }
+    if (elementType->isNamedType() && !elementType->isEnum()) {
+        out << "#error Arrays of NamedTypes are not currently not supported. Needs implementation "
+               "for field: "
+            << field.field->name() << "\n";
+        return;
+    }
+    if (backend == AidlBackend::JAVA) {
+        const std::string inputAccess = "in." + field.fullName;
+        out << "if (" << inputAccess << " != null) {\n";
+        out.indent([&] {
+            out << "out." << field.field->name() << " = new " << elementType->getJavaType(true)
+                << "[" << inputAccess << javaSizeAccess << "];\n";
+            out << "for (int i = 0; i < " << inputAccess << javaSizeAccess << "; i++) {\n";
+            out.indent([&] {
+                h2aScalarChecks(out, *elementType, inputAccess + javaElementAccess, backend);
+                out << "out." << field.field->name() << "[i] = " << inputAccess << javaElementAccess
+                    << ";\n";
+            });
+            out << "}\n";
+        });
+        out << "}\n";
+    } else {
+        const std::string inputAccessElement = "in." + field.fullName + "[i]";
+        out << "{\n";
+        out.indent([&] {
+            out << "size_t size = " << cppSize << ";\n";
+            out << "for (size_t i = 0; i < size; i++) {\n";
+            out.indent([&] {
+                h2aScalarChecks(out, *elementType, inputAccessElement, backend);
+                out << "out->" << field.field->name() << ".push_back("
+                    << wrapCppSource(inputAccessElement, *elementType, parent->fqName(), backend)
+                    << ");\n";
+            });
+            out << "}\n";
+        });
+        out << "}\n";
     }
 }
 
 static void simpleTranslation(Formatter& out, const FieldWithVersion& field,
                               const CompoundType* parent, AidlBackend backend) {
-    h2aScalarChecks(out, field, parent, backend);
+    std::string inputAccess = "in." + field.fullName;
     if (backend == AidlBackend::JAVA) {
         if (parent->style() == CompoundType::STYLE_STRUCT) {
-            out << "out." << field.field->name() << " = in." << field.fullName << ";\n";
+            h2aScalarChecks(out, field.field->type(), inputAccess, backend);
+            out << "out." << field.field->name() << " = " << inputAccess << ";\n";
         } else {
-            out << "out.set" << StringHelper::Capitalize(field.fullName) << "(in."
-                << field.field->name() << "());\n";
+            inputAccess += "()";
+            h2aScalarChecks(out, field.field->type(), inputAccess, backend);
+            out << "out.set" << StringHelper::Capitalize(field.fullName) << "(" << inputAccess
+                << ");\n";
         }
     } else {
         if (parent->style() == CompoundType::STYLE_STRUCT) {
+            h2aScalarChecks(out, field.field->type(), inputAccess, backend);
             out << "out->" << field.field->name() << " = "
-                << wrapCppSource("in." + field.fullName, *field.field->get(), parent->fqName(),
+                << wrapCppSource("in." + field.fullName, field.field->type(), parent->fqName(),
                                  backend)
                 << ";\n";
         } else {
+            inputAccess += "()";
+            h2aScalarChecks(out, field.field->type(), inputAccess, backend);
             out << "*out = "
-                << wrapCppSource("in." + field.fullName + "()", *field.field->get(),
-                                 parent->fqName(), backend)
+                << wrapCppSource(inputAccess, field.field->type(), parent->fqName(), backend)
                 << ";\n";
         }
     }
@@ -209,6 +286,8 @@ static void h2aFieldTranslation(Formatter& out, const std::set<const NamedType*>
     // TODO(b/158489355) Need to support and validate more types like arrays/vectors.
     if (field.field->type().isNamedType()) {
         namedTypeTranslation(out, namedTypes, field, parent, backend);
+    } else if (field.field->type().isArray() || field.field->type().isVector()) {
+        containerTranslation(out, field, parent, backend);
     } else if (field.field->type().isEnum() || field.field->type().isScalar() ||
                field.field->type().isString()) {
         simpleTranslation(out, field, parent, backend);
@@ -221,11 +300,11 @@ static void h2aFieldTranslation(Formatter& out, const std::set<const NamedType*>
 
 static const std::string declareAidlFunctionSignature(const NamedType* type, AidlBackend backend) {
     if (backend == AidlBackend::JAVA) {
-        return "static public " + aidlTypePackage(type, backend) + " h2aTranslate(" +
+        return "static public " + aidlTypePackage(*type, backend) + " h2aTranslate(" +
                type->fullJavaName() + " in)";
     } else {
         return "__attribute__((warn_unused_result)) bool translate(const " + type->fullName() +
-               "& in, " + aidlTypePackage(type, backend) + "* out)";
+               "& in, " + aidlTypePackage(*type, backend) + "* out)";
     }
 }
 
@@ -332,8 +411,8 @@ static void emitTranslateSource(
         if (compound->style() == CompoundType::STYLE_SAFE_UNION) {
             out.indent([&] {
                 if (backend == AidlBackend::JAVA) {
-                    out << aidlTypePackage(type, backend) << " out = new "
-                        << aidlTypePackage(type, backend) << "();\n";
+                    out << aidlTypePackage(*type, backend) << " out = new "
+                        << aidlTypePackage(*type, backend) << "();\n";
                 }
                 out << "switch (in.getDiscriminator()) {\n";
                 out.indent([&] {
@@ -366,8 +445,8 @@ static void emitTranslateSource(
         } else {
             out.indent([&] {
                 if (backend == AidlBackend::JAVA) {
-                    out << aidlTypePackage(type, backend) << " out = new "
-                        << aidlTypePackage(type, backend) << "();\n";
+                    out << aidlTypePackage(*type, backend) << " out = new "
+                        << aidlTypePackage(*type, backend) << "();\n";
                 }
                 const ProcessedCompoundType& processedType = it->second;
                 for (const auto& field : processedType.fields) {

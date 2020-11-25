@@ -40,6 +40,8 @@ genrule {
     name: "hidl2aidl_test_gen_aidl",
     defaults: ["hidl2aidl_test_gen_defaults"],
     out: [
+        "hidl2aidl/test/ArrayFoo.aidl",
+        "hidl2aidl/test/VectorFoo.aidl",
         "hidl2aidl/test/IBar.aidl",
         "hidl2aidl/test/IBarInner.aidl",
         "hidl2aidl/test/IFoo.aidl",
