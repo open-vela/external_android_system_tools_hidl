@@ -71,6 +71,27 @@ static const std::string aidlTypePackage(const NamedType& type, AidlBackend back
            separator + AidlHelper::getAidlType(type, type.fqName());
 }
 
+static void emitEnumStaticAssert(Formatter& out, const NamedType& namedType, AidlBackend backend) {
+    CHECK(namedType.isEnum());
+    const auto& enumType = static_cast<const EnumType&>(namedType);
+    enumType.forEachValueFromRoot([&](const EnumValue* value) {
+        out << "static_assert(" << aidlTypePackage(namedType, backend) << "::" << value->name()
+            << " == static_cast<" << aidlTypePackage(namedType, backend) << ">("
+            << namedType.fullName() << "::" << value->name() << "));\n";
+    });
+    out << "\n";
+}
+
+static void emitStaticAsserts(Formatter& out, const std::set<const NamedType*>& namedTypes,
+                              AidlBackend backend) {
+    CHECK(backend != AidlBackend::JAVA);
+    for (const auto& namedType : namedTypes) {
+        if (namedType->isEnum()) {
+            emitEnumStaticAssert(out, *namedType, backend);
+        }
+    }
+}
+
 static void namedTypeTranslation(Formatter& out, const std::set<const NamedType*>& namedTypes,
                                  const FieldWithVersion& field, const CompoundType* parent,
                                  AidlBackend backend) {
@@ -354,7 +375,7 @@ static void emitCppTranslateHeader(
     out << "#pragma once\n\n";
     for (const auto& type : namedTypes) {
         const auto& it = processedTypes.find(type);
-        if (it == processedTypes.end()) {
+        if (it == processedTypes.end() && !type->isEnum()) {
             continue;
         }
         includes.insert(aidlIncludeFile(type, backend));
@@ -388,6 +409,7 @@ static void emitTranslateSource(
         out << "#include \""
             << AidlHelper::translateHeaderFile((*namedTypes.begin())->fqName(), backend) + "\"\n\n";
         out << "namespace android::h2a {\n\n";
+        emitStaticAsserts(out, namedTypes, backend);
     }
     for (const auto& type : namedTypes) {
         const auto& it = processedTypes.find(type);
