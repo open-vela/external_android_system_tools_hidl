@@ -627,6 +627,10 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 	shouldGenerateJavaConstants := i.properties.Gen_java_constants
 	shouldGenerateVts := shouldGenerateLibrary && proptools.BoolDefault(i.properties.Gen_vts, true)
 
+	// To generate VTS, hidl_interface must have a core variant.
+	// A module with 'product_specific: true' does not create a core variant.
+	shouldGenerateVts = shouldGenerateVts && !mctx.ProductSpecific()
+
 	var productAvailable *bool
 	if !mctx.ProductSpecific() {
 		productAvailable = proptools.BoolPtr(true)
@@ -861,7 +865,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		})
 		mctx.CreateModule(cc.LibraryFactory, &ccProperties{
 			Name:                      proptools.StringPtr(name.vtsDriverName()),
-			Product_available:         productAvailable,
 			Defaults:                  []string{"VtsHalDriverDefaults"},
 			Generated_sources:         []string{name.vtsDriverSourcesName()},
 			Generated_headers:         []string{name.vtsDriverHeadersName()},
@@ -894,7 +897,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		})
 		mctx.CreateModule(cc.LibraryFactory, &ccProperties{
 			Name:                      proptools.StringPtr(name.vtsProfilerName()),
-			Product_available:         productAvailable,
 			Defaults:                  []string{"VtsHalProfilerDefaults"},
 			Generated_sources:         []string{name.vtsProfilerSourcesName()},
 			Generated_headers:         []string{name.vtsProfilerHeadersName()},
