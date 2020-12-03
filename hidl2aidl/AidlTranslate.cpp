@@ -30,6 +30,7 @@
 #include "ConstantExpression.h"
 #include "Coordinator.h"
 #include "EnumType.h"
+#include "Interface.h"
 #include "NamedType.h"
 #include "ScalarType.h"
 #include "Scope.h"
@@ -312,21 +313,22 @@ static const std::string getPackageFilePath(const NamedType* type) {
     return base::Join(base::Split(type->fqName().package(), "."), "/");
 }
 
-static bool typeComesFromInterface(const NamedType* type) {
+static std::optional<const Interface*> getParentInterface(const NamedType* type) {
     const Scope* parent = type->parent();
     while (parent != nullptr) {
-        if (parent->isInterface()) {
-            return true;
+        if (parent->definesInterfaces()) {
+            return parent->getInterface();
         }
         parent = parent->parent();
     }
-    return false;
+    return std::nullopt;
 }
 
 static const std::string hidlIncludeFile(const NamedType* type) {
-    if (typeComesFromInterface(type)) {
+    std::optional<const Interface*> parent = getParentInterface(type);
+    if (parent) {
         return "#include \"" + getPackageFilePath(type) + "/" + type->fqName().version() + "/" +
-               type->parent()->fqName().getInterfaceName() + ".h\"\n";
+               parent.value()->fqName().getInterfaceName() + ".h\"\n";
     } else {
         return "#include \"" + getPackageFilePath(type) + "/" + type->fqName().version() +
                "/types.h\"\n";
