@@ -39,6 +39,13 @@ void Scope::addType(NamedType* type) {
     mTypeIndexByName[type->localName()] = index;
 }
 
+status_t Scope::validate() const {
+    status_t status = validateAnnotations();
+    if (status != OK) return status;
+
+    return NamedType::validate();
+}
+
 status_t Scope::validateUniqueNames() const {
     for (const auto* type : mTypes) {
         if (mTypes[mTypeIndexByName.at(type->localName())] != type) {
@@ -46,6 +53,15 @@ status_t Scope::validateUniqueNames() const {
                       << "' is already declared in the scope at " << type->location() << std::endl;
             return UNKNOWN_ERROR;
         }
+    }
+    return OK;
+}
+
+status_t Scope::validateAnnotations() const {
+    for (const Annotation* annotation : annotations()) {
+        std::cerr << "WARNING: Unrecognized annotation '" << annotation->name() << "' at "
+                  << location() << ". No annotations are supported here." << std::endl;
+        // This is a warning to avoid breaking downstream unnecessarily.
     }
     return OK;
 }
