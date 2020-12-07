@@ -21,9 +21,13 @@
 #include <android-base/logging.h>
 
 #include <android/hardware/tests/baz/1.0/IBaz.h>
-#include <android/hardware/tests/safeunion/1.0/IOtherInterface.h>
+#include <android/hardware/tests/memory/2.0/IMemoryInterface.h>
+#include <android/hardware/tests/memory/2.0/types.h>
 #include <android/hardware/tests/safeunion/1.0/ISafeUnion.h>
+#include <android/hidl/allocator/1.0/IAllocator.h>
+#include <android/hidl/manager/1.0/IServiceManager.h>
 
+#include <hidlmemory/mapping.h>
 #include <hidl/LegacySupport.h>
 #include <hidl/ServiceManagement.h>
 #include <gtest/gtest.h>
@@ -38,16 +42,22 @@ using ::android::sp;
 using ::android::hardware::tests::baz::V1_0::IBase;
 using ::android::hardware::tests::baz::V1_0::IBaz;
 using ::android::hardware::tests::baz::V1_0::IBazCallback;
-using ::android::hardware::tests::safeunion::V1_0::IOtherInterface;
+using ::android::hardware::tests::memory::V2_0::IMemoryInterface;
+using ::android::hardware::tests::memory::V2_0::TwoMemory;
 using ::android::hardware::tests::safeunion::V1_0::ISafeUnion;
 
 using ::android::hardware::hidl_array;
 using ::android::hardware::hidl_vec;
+using ::android::hardware::hidl_memory;
 using ::android::hardware::hidl_handle;
 using ::android::hardware::hidl_string;
 using ::android::hardware::defaultPassthroughServiceImplementation;
 using ::android::hardware::Return;
+using ::android::hardware::Status;
 using ::android::hardware::Void;
+
+using ::android::hidl::allocator::V1_0::IAllocator;
+using ::android::hidl::memory::V1_0::IMemory;
 
 using HandleTypeSafeUnion = ISafeUnion::HandleTypeSafeUnion;
 using InterfaceTypeSafeUnion = ISafeUnion::InterfaceTypeSafeUnion;
@@ -72,14 +82,116 @@ Return<void> BazCallback::hey() {
     return Void();
 }
 
-struct OtherInterface : public IOtherInterface {
-    Return<void> concatTwoStrings(const hidl_string& a, const hidl_string& b,
-                                  concatTwoStrings_cb _hidl_cb) override {
-        hidl_string result = std::string(a) + std::string(b);
-        _hidl_cb(result);
+struct MemoryInterface : public IMemoryInterface {
+    MemoryInterface() {
+        sp<IAllocator> ashmem = IAllocator::getService("ashmem");
+        LOG_FATAL_IF(ashmem == nullptr);
+        ashmem->allocate(8, [&](bool success, const hidl_memory& m) {
+            LOG_FATAL_IF(!success);
+            (void) success;
+            mMemory = m;
+        });
+        sp<IMemory> memory = mapMemory(mMemory);
+
+        LOG_FATAL_IF(memory == nullptr);
+        uint8_t* data =
+            static_cast<uint8_t*>(static_cast<void*>(memory->getPointer()));
+        for (size_t i = 0; i < 8; ++i) {
+            data[i] = i;
+        }
+        memory->commit();
+    }
+
+    Return<void> bitwiseNot(const hidl_memory& mem) override {
+        sp<IMemory> memory = mapMemory(mem);
+        if (memory == nullptr) {
+            return Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT,
+                                             "Could not map hidl_memory");
+        }
+        uint8_t* data =
+            static_cast<uint8_t*>(static_cast<void*>(memory->getPointer()));
+
+        memory->update();
+        for (size_t i = 0; i < memory->getSize(); i++) {
+            data[i] = ~data[i];
+        }
+        memory->commit();
 
         return Void();
     }
+
+    Return<void> getTestMem(getTestMem_cb _hidl_cb) override {
+        _hidl_cb(mMemory);
+        return Status::ok();
+    }
+
+    Return<void> getSumDiff(const TwoMemory& in, getSumDiff_cb _hidl_cb) override {
+        if (in.mem1.size() != in.mem2.size()) {
+            return Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT,
+                                             "Buffers must be the same size.");
+        }
+        const size_t size = in.mem1.size();
+
+        // Map first input.
+        sp<IMemory> memory_in1 = mapMemory(in.mem1);
+        if (memory_in1 == nullptr) {
+            return Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT,
+                                             "Could not map hidl_memory");
+        }
+        uint8_t* data_in1 =
+            static_cast<uint8_t*>(static_cast<void*>(memory_in1->getPointer()));
+        memory_in1->update();
+
+        // Map second input.
+        sp<IMemory> memory_in2 = mapMemory(in.mem2);
+        if (memory_in2 == nullptr) {
+            return Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT,
+                                             "Could not map hidl_memory");
+        }
+        uint8_t* data_in2 =
+            static_cast<uint8_t*>(static_cast<void*>(memory_in2->getPointer()));
+        memory_in2->update();
+
+        TwoMemory out;
+        sp<IAllocator> ashmem = IAllocator::getService("ashmem");
+        LOG_FATAL_IF(ashmem == nullptr);
+
+        // Map first output.
+        ashmem->allocate(size, [&](bool success, const hidl_memory& m) {
+            LOG_FATAL_IF(!success);
+            (void) success;
+            out.mem1 = m;
+        });
+        sp<IMemory> memory_out1 = mapMemory(out.mem1);
+        LOG_FATAL_IF(memory_out1 == nullptr);
+        uint8_t* data_out1 =
+            static_cast<uint8_t*>(static_cast<void*>(memory_out1->getPointer()));
+
+        // Map second output.
+        ashmem->allocate(size, [&](bool success, const hidl_memory& m) {
+            LOG_FATAL_IF(!success);
+            (void) success;
+            out.mem2 = m;
+        });
+        sp<IMemory> memory_out2 = mapMemory(out.mem2);
+        LOG_FATAL_IF(memory_out2 == nullptr);
+        uint8_t* data_out2 =
+            static_cast<uint8_t*>(static_cast<void*>(memory_out2->getPointer()));
+
+        for (size_t i = 0; i < size; ++i) {
+            data_out1[i] = data_in1[i] + data_in2[i];
+            data_out2[i] = data_in1[i] - data_in2[i];
+        }
+
+        memory_out1->commit();
+        memory_out2->commit();
+
+        _hidl_cb(out);
+        return Status::ok();
+    }
+
+ private:
+    hidl_memory mMemory;
 };
 
 using std::to_string;
@@ -99,7 +211,6 @@ struct HidlEnvironment : public ::testing::Environment {
 struct HidlTest : public ::testing::Test {
     sp<IBaz> baz;
     sp<ISafeUnion> safeunionInterface;
-    sp<IOtherInterface> otherInterface;
 
     void SetUp() override {
         using namespace ::android::hardware;
@@ -113,11 +224,6 @@ struct HidlTest : public ::testing::Test {
         safeunionInterface = ISafeUnion::getService();
         CHECK(safeunionInterface != nullptr);
         CHECK(safeunionInterface->isRemote());
-
-        ::android::hardware::details::waitForHwService(IOtherInterface::descriptor, "default");
-        otherInterface = IOtherInterface::getService();
-        CHECK(otherInterface != nullptr);
-        CHECK(otherInterface->isRemote());
     }
 
     void TearDown() override {
@@ -172,17 +278,25 @@ TEST_F(HidlTest, BazSomeOtherBaseMethodTest) {
 }
 
 TEST_F(HidlTest, SomeOtherBaseMethodInvalidString) {
+    Return<bool> isJava = baz->isJava();
+    ASSERT_TRUE(isJava.isOk());
+    if (!isJava) {
+        GTEST_SKIP() << "Test only applies to Java";
+    }
+
     IBase::Foo foo {
         .y = {
             .s = "\xff",
         }
     };
 
-    auto ret = baz->someOtherBaseMethod(foo, [](const IBase::Foo& ret) {
-        EXPECT_EQ(ret.y.s, "?");  // :)
+    auto ret = baz->someOtherBaseMethod(foo, [&](const auto&) {
+        ADD_FAILURE() << "Should not accept invalid UTF-8 String";
     });
 
-    EXPECT_TRUE(ret.isOk());
+    EXPECT_FALSE(ret.isOk());
+
+    EXPECT_OK(baz->ping());
 }
 
 TEST_F(HidlTest, BazSomeMethodWithFooArraysTest) {
@@ -536,6 +650,12 @@ TEST_F(HidlTest, BazHaveAStringVecMethodTest) {
                 }));
 }
 
+TEST_F(HidlTest, BazRepeatBitfieldVecTest) {
+    hidl_vec<uint8_t> vec{0 | IBaz::BitField::V1, 0 | IBaz::BitField::V2};
+
+    EXPECT_OK(baz->repeatBitfieldVec(vec, [&](const auto& result) { EXPECT_EQ(vec, result); }));
+}
+
 TEST_F(HidlTest, BazReturnABunchOfStringsMethodTest) {
     std::string expectedA = "Eins";
     std::string expectedB = "Zwei";
@@ -628,6 +748,51 @@ TEST_F(HidlTest, BazTestDoubleVecs) {
 
     EXPECT_OK(baz->testDoubleVecs(
                 in, [&](const auto &out) { EXPECT_EQ(in, out); }));
+}
+
+TEST_F(HidlTest, TwowayMethodOnewayEnabledTest) {
+    using ::android::hardware::IBinder;
+    using ::android::hardware::Parcel;
+
+    sp<IBinder> binder = ::android::hardware::toBinder(baz);
+
+    Parcel request, reply;
+    EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBaz::descriptor));
+    EXPECT_EQ(::android::OK, request.writeInt64(1234));
+    // IBaz::doThatAndReturnSomething is two-way but we call it using FLAG_ONEWAY.
+    EXPECT_EQ(::android::OK, binder->transact(19 /*doThatAndReturnSomething*/, request, &reply,
+                                              IBinder::FLAG_ONEWAY));
+
+    ::android::hardware::Status status;
+    EXPECT_EQ(::android::NOT_ENOUGH_DATA, ::android::hardware::readFromParcel(&status, reply));
+    EXPECT_EQ(::android::hardware::Status::EX_TRANSACTION_FAILED, status.exceptionCode());
+
+    EXPECT_OK(baz->ping());  // still works
+}
+
+TEST_F(HidlTest, OnewayMethodOnewayDisabledTest) {
+    Return<bool> isJava = baz->isJava();
+    ASSERT_TRUE(isJava.isOk());
+
+    using ::android::hardware::IBinder;
+    using ::android::hardware::Parcel;
+
+    sp<IBinder> binder = ::android::hardware::toBinder(baz);
+
+    Parcel request, reply;
+    EXPECT_EQ(::android::OK, request.writeInterfaceToken(IBaz::descriptor));
+    EXPECT_EQ(::android::OK, request.writeFloat(1.0f));
+    // IBaz::doThis is oneway but we call it without using FLAG_ONEWAY.
+    EXPECT_EQ(
+            // Expect UNKNOWN_ERROR because the JNI class JHwBinder always sets
+            // the reply to UNKNOWN_ERROR for two-way transactions if the
+            // transaction itself did not send a reply.
+            //
+            // C++ does not specifically check this error case.
+            (isJava ? ::android::UNKNOWN_ERROR : 0),
+            binder->transact(18 /*doThis*/, request, &reply, 0 /* Not FLAG_ONEWAY */));
+
+    EXPECT_OK(baz->ping());  // still works
 }
 
 TEST_F(HidlTest, SafeUnionNoInitTest) {
@@ -797,17 +962,14 @@ TEST_F(HidlTest, SafeUnionInterfaceTest) {
                 }));
         }));
 
-    // Same-process interface calls are not supported in Java, so we use
-    // a safe_union instance bound to this (client) process instead of
-    // safeunionInterface to exercise this test-case. Ref: b/110957763.
+    using android::hardware::defaultServiceManager;
+    using android::hardware::interfacesEqual;
+
     InterfaceTypeSafeUnion safeUnion;
-    safeUnion.c(otherInterface);
+    safeUnion.c(defaultServiceManager());
 
     EXPECT_EQ(InterfaceTypeSafeUnion::hidl_discriminator::c, safeUnion.getDiscriminator());
-    EXPECT_OK(safeUnion.c()->concatTwoStrings(
-        hidl_string(testStringA), hidl_string(testStringB), [&](const hidl_string& result) {
-            EXPECT_EQ(testStringA + testStringB, std::string(result));
-        }));
+    EXPECT_TRUE(interfacesEqual(safeUnion.c(), defaultServiceManager()));
 
     native_handle_delete(h);
 }
@@ -1021,10 +1183,50 @@ TEST_F(HidlTest, SafeUnionEqualityTest) {
     }));
 }
 
-int main(int argc, char **argv) {
-    setenv("TREBLE_TESTING_OVERRIDE", "true", true);
+template <typename T, size_t start, size_t end>
+void expectRangeEqual(const T* t, uint8_t byte) {
+    static_assert(start < sizeof(T));
+    static_assert(end <= sizeof(T));
 
+    const uint8_t* buf = reinterpret_cast<const uint8_t*>(t);
+
+    for (size_t i = start; i < end; i++) {
+        EXPECT_EQ(byte, buf[i]) << i;
+    }
+}
+
+TEST_F(HidlTest, UninitTest) {
+    Return<bool> isJava = baz->isJava();
+    ASSERT_TRUE(isJava.isOk());
+    if (!isJava) {
+        GTEST_SKIP() << "Test only applies to Java";
+    }
+
+    IBase::Foo foo;
+    foo.x = 1;
+    foo.y = {0, ""};
+
+    static_assert(offsetof(IBase::Foo, x) == 0);
+    static_assert(sizeof(foo.x) == 4);
+    static_assert(offsetof(IBase::Foo, aaa) == 8);
+
+    uint8_t* buf = reinterpret_cast<uint8_t*>(&foo);
+    memset(buf + 4, 0xFF, 4);
+
+    // this should not affect the result for remote Java (but would for remote C++)
+    expectRangeEqual<IBase::Foo, 4, 8>(&foo, 0xFF);
+
+    // run many times, if this error case is hit, it will only be hit
+    // sometimes.
+    for (size_t i = 0; i < 100; i++) {
+        EXPECT_OK(baz->someOtherBaseMethod(
+                foo, [](const IBase::Foo& foo) { expectRangeEqual<IBase::Foo, 4, 8>(&foo, 0); }));
+    }
+}
+
+int main(int argc, char **argv) {
     using namespace android::hardware;
+    details::setTrebleTestingOverride(true);
 
     const char *me = argv[0];
 
@@ -1078,9 +1280,9 @@ int main(int argc, char **argv) {
     status = registerPassthroughServiceImplementation<ISafeUnion>();
     CHECK(status == ::android::OK) << "ISafeUnion didn't register";
 
-    sp<IOtherInterface> otherInterface = new OtherInterface();
-    status = otherInterface->registerAsService();
-    CHECK(status == ::android::OK) << "IOtherInterface didn't register";
+    sp<IMemoryInterface> memoryInterface = new MemoryInterface();
+    status = memoryInterface->registerAsService();
+    CHECK(status == ::android::OK) << "IMemoryInterface didn't register";
 
     joinRpcThreadpool();
     return 0;

@@ -1,5 +1,17 @@
+python_test_host {
+    name: "hidl_test",
+    main: "hidl_test.py",
+    srcs: ["hidl_test.py"],
+    test_config: "hidl_test.xml",
+    target_required: [
+        "hidl_test_client",
+        "hidl_test_servers",
+    ],
+    test_suites: ["general-tests"],
+}
+
 cc_defaults {
-    name: "hidl_test_client-defaults",
+    name: "hidl_test-defaults",
     defaults: ["hidl-gen-defaults"],
 
     shared_libs: [
@@ -10,8 +22,6 @@ cc_defaults {
         "libcutils",
         "libhidlbase",
         "libhidlmemory",
-        "libhidltransport",
-        "libhwbinder",
         "liblog",
         "libutils",
     ],
@@ -24,14 +34,12 @@ cc_defaults {
     static_libs: [
         "libfootest",
         "libhidl-gen-utils",
-        "libpointertest",
         "android.hardware.tests.expression@1.0",
         "android.hardware.tests.foo@1.0",
         "android.hardware.tests.bar@1.0",
         "android.hardware.tests.baz@1.0",
         "android.hardware.tests.hash@1.0",
         "android.hardware.tests.inheritance@1.0",
-        "android.hardware.tests.pointer@1.0",
         "android.hardware.tests.memory@1.0",
         "android.hardware.tests.multithread@1.0",
         "android.hardware.tests.trie@1.0",
@@ -48,7 +56,6 @@ cc_defaults {
         "android.hardware.tests.baz@1.0-impl",
         "android.hardware.tests.hash@1.0-impl",
         "android.hardware.tests.inheritance@1.0-impl",
-        "android.hardware.tests.pointer@1.0-impl",
         "android.hardware.tests.memory@1.0-impl",
         "android.hardware.tests.multithread@1.0-impl",
         "android.hardware.tests.trie@1.0-impl",
@@ -57,16 +64,27 @@ cc_defaults {
     ],
 
     group_static_libs: true,
+
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
+    test_suites: ["general-tests"],
 }
 
 cc_test {
     name: "hidl_test_client",
-    defaults: ["hidl_test_client-defaults"],
+    defaults: ["hidl_test-defaults"],
 
     srcs: [
         "hidl_test_client.cpp",
         "FooCallback.cpp",
-        "static_test.cpp"
+        "static_test.cpp",
     ],
 
     shared_libs: [
@@ -76,7 +94,7 @@ cc_test {
 
 cc_test {
     name: "hidl_test_servers",
-    defaults: ["hidl_test_client-defaults"],
+    defaults: ["hidl_test-defaults"],
     srcs: ["hidl_test_servers.cpp"],
     gtest: false,
 }
