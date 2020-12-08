@@ -7,4 +7,3 @@ options="-O some-owner-name
 
 hidl-gen -Landroidbp $options hidl.tests.vendor@1.0;
 hidl-gen -Landroidbp $options hidl.tests.vendor@1.1;
-hidl-gen -Landroidbp $options hidl.tests.vendor.android@1.0;

@@ -20,17 +20,13 @@
 
 #include "Type.h"
 
-#include <string>
-
 namespace android {
 
 struct FmqType : public TemplatedType {
-    FmqType(const std::string& nsp, const std::string& name, Scope* parent,
-            const std::string& definedName);
-
-    bool isFmq() const override;
+    FmqType(const char* nsp, const char* name, Scope* parent);
 
     std::string fullName() const;
+
     std::string templatedTypeName() const override;
 
     std::string getCppType(

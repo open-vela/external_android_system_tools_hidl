@@ -21,7 +21,6 @@
 #include "Reference.h"
 #include "Scope.h"
 
-#include <string>
 #include <vector>
 
 namespace android {
@@ -33,13 +32,12 @@ struct CompoundType : public Scope {
         STYLE_SAFE_UNION,
     };
 
-    CompoundType(Style style, const std::string& localName, const FQName& fullName,
+    CompoundType(Style style, const char* localName, const FQName& fullName,
                  const Location& location, Scope* parent);
 
     Style style() const;
 
-    std::vector<const NamedReference<Type>*> getFields() const;
-    void addField(NamedReference<Type>* field);
+    void setFields(std::vector<NamedReference<Type>*>* fields);
 
     bool isCompoundType() const override;
 
@@ -81,6 +79,28 @@ struct CompoundType : public Scope {
             const std::string &parentName,
             const std::string &offsetText) const override;
 
+    void emitResolveReferences(
+            Formatter &out,
+            const std::string &name,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode) const override;
+
+    void emitResolveReferencesEmbedded(
+            Formatter &out,
+            size_t depth,
+            const std::string &name,
+            const std::string &sanitizedName,
+            bool nameIsPointer,
+            const std::string &parcelObj,
+            bool parcelObjIsPointer,
+            bool isReader,
+            ErrorMode mode,
+            const std::string &parentName,
+            const std::string &offsetText) const override;
+
     void emitJavaReaderWriter(
             Formatter &out,
             const std::string &parcelObj,
@@ -102,7 +122,6 @@ struct CompoundType : public Scope {
             const std::string &offset,
             bool isReader) const override;
 
-    void emitHidlDefinition(Formatter& out) const override;
     void emitTypeDeclarations(Formatter& out) const override;
     void emitTypeForwardDeclaration(Formatter& out) const override;
     void emitPackageTypeDeclarations(Formatter& out) const override;
@@ -114,6 +133,7 @@ struct CompoundType : public Scope {
     void emitJavaTypeDeclarations(Formatter& out, bool atTopLevel) const override;
 
     bool needsEmbeddedReadWrite() const override;
+    bool deepNeedsResolveReferences(std::unordered_set<const Type*>* visited) const override;
     bool resultNeedsDeref() const override;
 
     void emitVtsTypeDeclarations(Formatter& out) const override;
@@ -147,12 +167,7 @@ private:
     };
 
     Style mStyle;
-    std::vector<NamedReference<Type>*> mFields;
-
-    // only emits the struct body. doesn't emit the last ";\n" from the definition
-    void emitInlineHidlDefinition(Formatter& out) const;
-    // emits the hidl definition line for a field inside the struct. used by emitHidlDefinition
-    void emitFieldHidlDefinition(Formatter& out, const NamedReference<Type>& ref) const;
+    std::vector<NamedReference<Type>*>* mFields;
 
     void emitLayoutAsserts(Formatter& out, const Layout& localLayout,
                            const std::string& localLayoutName) const;
@@ -173,6 +188,13 @@ private:
                                               bool isCopyConstructor,
                                               bool usesMoveSemantics) const;
 
+    struct SafeUnionEnumElement {
+        std::string fieldName;
+        std::string fieldTypeName;
+    };
+
+    std::vector<SafeUnionEnumElement> getSafeUnionEnumElements(bool useCppTypeName) const;
+
     CompoundLayout getCompoundAlignmentAndSize() const;
     void emitPaddingZero(Formatter& out, size_t offset, size_t size) const;
 
@@ -186,6 +208,7 @@ private:
 
     void emitStructReaderWriter(
             Formatter &out, const std::string &prefix, bool isReader) const;
+    void emitResolveReferenceDef(Formatter& out, const std::string& prefix, bool isReader) const;
 
     DISALLOW_COPY_AND_ASSIGN(CompoundType);
 };

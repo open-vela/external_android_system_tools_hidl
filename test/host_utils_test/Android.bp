@@ -15,11 +15,10 @@
 cc_test_host {
     name: "libhidl-gen-host-utils_test",
     defaults: ["hidl-gen-defaults"],
-    static_libs: [
-        "libbase",
+
+    shared_libs: [
         "libhidl-gen-host-utils",
-        "liblog",
     ],
+
     srcs: ["main.cpp"],
-    test_suites: ["general-tests"],
 }

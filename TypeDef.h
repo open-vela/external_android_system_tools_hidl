@@ -20,13 +20,11 @@
 
 #include "NamedType.h"
 
-#include <string>
-
 namespace android {
 
 struct TypeDef : public NamedType {
-    TypeDef(const std::string& localName, const FQName& fullName, const Location& location,
-            Scope* parent, const Reference<Type>& type);
+    TypeDef(const char* localName, const FQName& fullName, const Location& location, Scope* parent,
+            const Reference<Type>& type);
 
     const ScalarType *resolveToScalarType() const override;
 
@@ -46,9 +44,8 @@ struct TypeDef : public NamedType {
     std::vector<const Reference<Type>*> getReferences() const override;
 
     void emitTypeDeclarations(Formatter& out) const override;
-    void emitHidlDefinition(Formatter& out) const override;
 
-  private:
+   private:
     Reference<Type> mReferencedType;
 
     DISALLOW_COPY_AND_ASSIGN(TypeDef);
