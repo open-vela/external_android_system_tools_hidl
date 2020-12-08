@@ -18,7 +18,6 @@
 #include "CompoundType.h"
 #include "Coordinator.h"
 #include "EnumType.h"
-#include "Interface.h"
 #include "NamedType.h"
 #include "TypeDef.h"
 
@@ -43,9 +42,8 @@ static void emitEnumAidlDefinition(Formatter& out, const EnumType& enumType) {
     CHECK(scalar != nullptr) << enumType.typeName();
 
     enumType.emitDocComment(out);
-    out << "@VintfStability\n";
     out << "@Backing(type=\"" << AidlHelper::getAidlType(*scalar, enumType.fqName()) << "\")\n";
-    out << "enum " << AidlHelper::getAidlType(enumType, enumType.fqName()) << " ";
+    out << "enum " << enumType.fqName().name() << " ";
     out.block([&] {
         enumType.forEachValueFromRoot([&](const EnumValue* value) {
             value->emitDocComment(out);
@@ -58,55 +56,42 @@ static void emitEnumAidlDefinition(Formatter& out, const EnumType& enumType) {
     });
 }
 
-static void emitCompoundTypeAidlDefinition(
-        Formatter& out, const CompoundType& compoundType,
-        const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
-    // Get all of the subtypes and fields from this type and any older versions
-    // that it references.
-    const auto& it = processedTypes.find(&compoundType);
-    CHECK(it != processedTypes.end()) << "Failed to find " << compoundType.fullName();
-    const ProcessedCompoundType& processedType = it->second;
+static void emitCompoundTypeAidlDefinition(Formatter& out, const CompoundType& compoundType,
+                                           const Coordinator& coordinator) {
+    for (const NamedType* namedType : compoundType.getSubTypes()) {
+        AidlHelper::emitAidl(*namedType, coordinator);
+    }
 
     compoundType.emitDocComment(out);
-    out << "@VintfStability\n";
+    out << "parcelable " << AidlHelper::getAidlName(compoundType.fqName()) << " ";
     if (compoundType.style() == CompoundType::STYLE_STRUCT) {
-        out << "parcelable " << AidlHelper::getAidlName(compoundType.fqName()) << " ";
+        out.block([&] {
+            for (const NamedReference<Type>* field : compoundType.getFields()) {
+                field->emitDocComment(out);
+                out << AidlHelper::getAidlType(*field->get(), compoundType.fqName()) << " "
+                    << field->name() << ";\n";
+            }
+        });
     } else {
-        if (compoundType.style() == CompoundType::STYLE_UNION) {
-            out << "// FIXME Any discriminators should be removed since they are automatically "
-                   "added.\n";
-        }
-        out << "union " << AidlHelper::getAidlName(compoundType.fqName()) << " ";
+        out << "{}\n";
+        out << "// Cannot convert unions/safe_unions since AIDL does not support them.\n";
+        emitConversionNotes(out, compoundType);
     }
-    out.block([&] {
-        // Emit all of the fields from the processed type
-        for (auto const& fieldWithVersion : processedType.fields) {
-            fieldWithVersion.field->emitDocComment(out);
-            std::string aidlType =
-                    AidlHelper::getAidlType(*fieldWithVersion.field->get(), compoundType.fqName());
-            out << aidlType << " " << fieldWithVersion.field->name() << ";\n";
-        }
-    });
     out << "\n\n";
 }
 
 // TODO: Enum/Typedef should just emit to hidl-error.log or similar
-void AidlHelper::emitAidl(
-        const NamedType& namedType, const Coordinator& coordinator,
-        const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
-    Formatter out = getFileWithHeader(namedType, coordinator, processedTypes);
+void AidlHelper::emitAidl(const NamedType& namedType, const Coordinator& coordinator) {
+    Formatter out = getFileWithHeader(namedType, coordinator);
     if (namedType.isTypeDef()) {
         const TypeDef& typeDef = static_cast<const TypeDef&>(namedType);
         emitTypeDefAidlDefinition(out, typeDef);
     } else if (namedType.isCompoundType()) {
         const CompoundType& compoundType = static_cast<const CompoundType&>(namedType);
-        emitCompoundTypeAidlDefinition(out, compoundType, processedTypes);
+        emitCompoundTypeAidlDefinition(out, compoundType, coordinator);
     } else if (namedType.isEnum()) {
         const EnumType& enumType = static_cast<const EnumType&>(namedType);
         emitEnumAidlDefinition(out, enumType);
-    } else if (namedType.isInterface()) {
-        const Interface& iface = static_cast<const Interface&>(namedType);
-        emitAidl(iface, coordinator, processedTypes);
     } else {
         out << "// TODO: Fix this " << namedType.definedName() << "\n";
     }

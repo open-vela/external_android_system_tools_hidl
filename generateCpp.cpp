@@ -1071,9 +1071,6 @@ void AST::generateStaticProxyMethodSource(Formatter& out, const std::string& kla
         declareCppReaderLocals(
                 out, method->results(), true /* forResults */);
     }
-    if (superInterface->hasSensitiveDataAnnotation()) {
-        out << "_hidl_data.markSensitive();\n";
-    }
 
     out << "_hidl_err = _hidl_data.writeInterfaceToken(";
     out << klassName;
@@ -1101,14 +1098,15 @@ void AST::generateStaticProxyMethodSource(Formatter& out, const std::string& kla
         out << "::android::hardware::ProcessState::self()->startThreadPool();\n";
     }
     out << "_hidl_transact_err = ::android::hardware::IInterface::asBinder(_hidl_this)->transact("
-        << method->getSerialId() << " /* " << method->name()
-        << " */, _hidl_data, &_hidl_reply, 0 /* flags */";
+        << method->getSerialId()
+        << " /* "
+        << method->name()
+        << " */, _hidl_data, &_hidl_reply";
 
     if (method->isOneway()) {
-        out << " | " << Interface::FLAG_ONE_WAY->cppValue();
-    }
-    if (superInterface->hasSensitiveDataAnnotation()) {
-        out << " | " << Interface::FLAG_CLEAR_BUF->cppValue();
+        out << ", " << Interface::FLAG_ONE_WAY->cppValue();
+    } else {
+        out << ", 0";
     }
 
     if (hasCallback) {
