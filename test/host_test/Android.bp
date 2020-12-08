@@ -26,5 +26,5 @@ cc_test_host {
         "liblog",
     ],
     srcs: ["main.cpp"],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
 }

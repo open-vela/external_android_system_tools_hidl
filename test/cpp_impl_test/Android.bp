@@ -3,9 +3,9 @@ genrule {
     tools: [
         "hidl-gen",
     ],
-    required: [
-        "android.hardware.tests.foo@1.0",
-        "hidl.tests.vendor.android@1.0",
+    srcs: [
+        ":android.hardware.tests.foo@1.0_hal",
+        ":hidl.tests.vendor.android@1.0_hal",
     ],
     cmd: "$(location hidl-gen) -o $(genDir) -Lc++-impl-headers android.hardware.tests.foo@1.0 && " +
         "$(location hidl-gen) -o $(genDir) -r hidl.tests:system/tools/hidl/test/ " +
@@ -25,9 +25,9 @@ genrule {
     tools: [
         "hidl-gen",
     ],
-    required: [
-        "android.hardware.tests.foo@1.0",
-        "hidl.tests.vendor.android@1.0",
+    srcs: [
+        ":android.hardware.tests.foo@1.0_hal",
+        ":hidl.tests.vendor.android@1.0_hal",
     ],
     cmd: "$(location hidl-gen) -o $(genDir) -Lc++-impl-sources android.hardware.tests.foo@1.0 && " +
         "$(location hidl-gen) -o $(genDir) -r hidl.tests:system/tools/hidl/test/ " +

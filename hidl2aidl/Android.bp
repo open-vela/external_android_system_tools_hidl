@@ -21,8 +21,8 @@ cc_binary_host {
         "AidlHelper.cpp",
         "AidlInterface.cpp",
         "AidlNamedType.cpp",
-        "AidlScope.cpp",
         "AidlType.cpp",
+        "AidlTranslate.cpp",
         "main.cpp",
     ],
     static_libs: [
