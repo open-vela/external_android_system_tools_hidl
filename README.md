@@ -41,6 +41,11 @@ hidl-gen -L c++-impl -r vendor.foo:vendor/foo/interfaces vendor.foo.nfc@1.0
 See update-makefiles-helper.sh and update-all-google-makefiles.sh for examples
 of how to generate HIDL makefiles (using the -Landroidbp option).
 
+> **_NOTE:_**  When using the -Landroidbp option, you can force generated
+> modules to be installed in `/system_ext` rather than other parition by putting a
+> marker file `.hidl_for_system_ext` alongside `*.hal` files.
+
+
 # c2hal
 
 This is a helper tool to convert C headers to valid .hal files.

@@ -18,6 +18,7 @@
 #include <string>
 
 #include "AidlHelper.h"
+#include "ArrayType.h"
 #include "FmqType.h"
 #include "NamedType.h"
 #include "Type.h"
@@ -29,19 +30,46 @@ static std::string getPlaceholderType(const std::string& type) {
     return "IBinder /* FIXME: " + type + " */";
 }
 
+static const std::map<std::string, ReplacedTypeInfo> kReplacedTypes{
+        {"android.hidl.safe_union@1.0::Monostate",
+         ReplacedTypeInfo{
+                 "boolean", std::nullopt,
+                 [](Formatter& out) { out << "// Nothing to translate for Monostate.\n"; }}},
+};
+
+std::optional<const ReplacedTypeInfo> AidlHelper::getAidlReplacedType(const FQName& fqName) {
+    const auto& it = kReplacedTypes.find(fqName.string());
+    if (it != kReplacedTypes.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
 std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo) {
     if (type.isVector()) {
         const VectorType& vec = static_cast<const VectorType&>(type);
-        const Type* elementType = vec.getElementType();
-
-        // Aidl doesn't support List<*> for C++ and NDK backends
-        return getAidlType(*elementType, relativeTo) + "[]";
+        return getAidlType(*vec.getElementType(), relativeTo) + "[]";
+    } else if (type.isArray()) {
+        const ArrayType& arr = static_cast<const ArrayType&>(type);
+        return getAidlType(*arr.getElementType(), relativeTo) + "[]";
     } else if (type.isNamedType()) {
         const NamedType& namedType = static_cast<const NamedType&>(type);
         if (getAidlPackage(relativeTo) == getAidlPackage(namedType.fqName())) {
             return getAidlName(namedType.fqName());
         } else {
-            return getAidlFQName(namedType.fqName());
+            std::optional<const ReplacedTypeInfo> type = getAidlReplacedType(namedType.fqName());
+            if (type) {
+                notes() << "Replacing type " << namedType.fqName().string() << " with "
+                        << type.value().aidlReplacedType << ".\n";
+                return type.value().aidlReplacedType;
+            }
+            std::optional<std::string> name = getAidlFQName(namedType.fqName()).value();
+            if (name) {
+                return name.value();
+            } else {
+                LOG(FATAL) << "Failed to resolve Aidl FQName: " << namedType.fqName().string();
+                return "";
+            }
         }
     } else if (type.isMemory()) {
         return getPlaceholderType("memory");
