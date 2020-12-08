@@ -44,20 +44,20 @@ var (
 	hidlRule = pctx.StaticRule("hidlRule", blueprint.RuleParams{
 		Depfile:     "${depfile}",
 		Deps:        blueprint.DepsGCC,
-		Command:     "rm -rf ${genDir} && ${hidl} -R -p . -d ${depfile} -o ${genDir} -L ${language} ${roots} ${fqName}",
+		Command:     "rm -rf ${genDir} && ${hidl} -R -p . -d ${depfile} -o ${genDir} -L ${language} ${options} ${fqName}",
 		CommandDeps: []string{"${hidl}"},
 		Description: "HIDL ${language}: ${in} => ${out}",
-	}, "depfile", "fqName", "genDir", "language", "roots")
+	}, "depfile", "fqName", "genDir", "language", "options")
 
 	hidlSrcJarRule = pctx.StaticRule("hidlSrcJarRule", blueprint.RuleParams{
 		Depfile: "${depfile}",
 		Deps:    blueprint.DepsGCC,
 		Command: "rm -rf ${genDir} && " +
-			"${hidl} -R -p . -d ${depfile} -o ${genDir}/srcs -L ${language} ${roots} ${fqName} && " +
+			"${hidl} -R -p . -d ${depfile} -o ${genDir}/srcs -L ${language} ${options} ${fqName} && " +
 			"${soong_zip} -o ${genDir}/srcs.srcjar -C ${genDir}/srcs -D ${genDir}/srcs",
 		CommandDeps: []string{"${hidl}", "${soong_zip}"},
 		Description: "HIDL ${language}: ${in} => srcs.srcjar",
-	}, "depfile", "fqName", "genDir", "language", "roots")
+	}, "depfile", "fqName", "genDir", "language", "options")
 
 	vtsRule = pctx.StaticRule("vtsRule", blueprint.RuleParams{
 		Command:     "rm -rf ${genDir} && ${vtsc} -m${mode} -t${type} ${inputDir}/${packagePath} ${genDir}/${packagePath}",
@@ -66,10 +66,10 @@ var (
 	}, "mode", "type", "inputDir", "genDir", "packagePath")
 
 	lintRule = pctx.StaticRule("lintRule", blueprint.RuleParams{
-		Command:     "rm -f ${output} && touch ${output} && ${lint} -j -e -R -p . ${roots} ${fqName} > ${output}",
+		Command:     "rm -f ${output} && touch ${output} && ${lint} -j -e -R -p . ${options} ${fqName} > ${output}",
 		CommandDeps: []string{"${lint}"},
 		Description: "hidl-lint ${fqName}: ${out}",
-	}, "output", "roots", "fqName")
+	}, "output", "options", "fqName")
 
 	zipLintRule = pctx.StaticRule("zipLintRule", blueprint.RuleParams{
 		Command:     "rm -f ${output} && ${soong_zip} -o ${output} -C ${intermediatesDir} ${files}",
@@ -78,10 +78,10 @@ var (
 	}, "output", "files")
 
 	inheritanceHierarchyRule = pctx.StaticRule("inheritanceHierarchyRule", blueprint.RuleParams{
-		Command:     "rm -f ${out} && ${hidl} -L inheritance-hierarchy ${roots} ${fqInterface} > ${out}",
+		Command:     "rm -f ${out} && ${hidl} -L inheritance-hierarchy ${options} ${fqInterface} > ${out}",
 		CommandDeps: []string{"${hidl}"},
 		Description: "HIDL inheritance hierarchy: ${fqInterface} => ${out}",
-	}, "roots", "fqInterface")
+	}, "options", "fqInterface")
 
 	joinJsonObjectsToArrayRule = pctx.StaticRule("joinJsonObjectsToArrayRule", blueprint.RuleParams{
 		Rspfile:        "$out.rsp",
@@ -89,6 +89,8 @@ var (
 		Command: "rm -rf ${out} && " +
 			// Start the output array with an opening bracket.
 			"echo '[' >> ${out} && " +
+			// Add prebuilt declarations
+			"echo \"${extras}\" >> ${out} && " +
 			// Append each input file and a comma to the output.
 			"for file in $$(cat ${out}.rsp); do " +
 			"cat $$file >> ${out}; echo ',' >> ${out}; " +
@@ -96,10 +98,11 @@ var (
 			// Remove the last comma, replacing it with the closing bracket.
 			"sed -i '$$d' ${out} && echo ']' >> ${out}",
 		Description: "Joining JSON objects into array ${out}",
-	}, "files")
+	}, "extras", "files")
 )
 
 func init() {
+	android.RegisterModuleType("prebuilt_hidl_interfaces", prebuiltHidlInterfaceFactory)
 	android.RegisterModuleType("hidl_interface", hidlInterfaceFactory)
 	android.RegisterSingletonType("all_hidl_lints", allHidlLintsFactory)
 	android.RegisterMakeVarsProvider(pctx, makeVarsProvider)
@@ -128,6 +131,7 @@ func (m *hidlInterfacesMetadataSingleton) GenerateAndroidBuildActions(ctx androi
 	}
 
 	var inheritanceHierarchyOutputs android.Paths
+	additionalInterfaces := []string{}
 	ctx.VisitDirectDeps(func(m android.Module) {
 		if !m.ExportedToMake() {
 			return
@@ -136,6 +140,8 @@ func (m *hidlInterfacesMetadataSingleton) GenerateAndroidBuildActions(ctx androi
 			if t.properties.Language == "inheritance-hierarchy" {
 				inheritanceHierarchyOutputs = append(inheritanceHierarchyOutputs, t.genOutputs.Paths()...)
 			}
+		} else if t, ok := m.(*prebuiltHidlInterface); ok {
+			additionalInterfaces = append(additionalInterfaces, t.properties.Interfaces...)
 		}
 	})
 
@@ -146,7 +152,8 @@ func (m *hidlInterfacesMetadataSingleton) GenerateAndroidBuildActions(ctx androi
 		Inputs: inheritanceHierarchyOutputs,
 		Output: m.inheritanceHierarchyPath,
 		Args: map[string]string{
-			"files": strings.Join(inheritanceHierarchyOutputs.Strings(), " "),
+			"extras": strings.Join(wrap("{\\\"interface\\\":\\\"", additionalInterfaces, "\\\"},"), " "),
+			"files":  strings.Join(inheritanceHierarchyOutputs.Strings(), " "),
 		},
 	})
 }
@@ -256,24 +263,26 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 		vtsListMutex.Unlock()
 	}
 
-	var fullRootOptions []string
+	var extraOptions []string // including roots
 	var currentPath android.OptionalPath
 	ctx.VisitDirectDeps(func(dep android.Module) {
 		switch t := dep.(type) {
 		case *hidlInterface:
-			fullRootOptions = append(fullRootOptions, t.properties.Full_root_option)
+			extraOptions = append(extraOptions, t.properties.Full_root_option)
 		case *hidlPackageRoot:
 			if currentPath.Valid() {
 				panic(fmt.Sprintf("Expecting only one path, but found %v %v", currentPath, t.getCurrentPath()))
 			}
 
 			currentPath = t.getCurrentPath()
-		default:
-			panic(fmt.Sprintf("Unrecognized hidlGenProperties dependency: %T", t))
+
+			if t.requireFrozen() {
+				extraOptions = append(extraOptions, "-F")
+			}
 		}
 	})
 
-	fullRootOptions = android.FirstUniqueStrings(fullRootOptions)
+	extraOptions = android.FirstUniqueStrings(extraOptions)
 
 	inputs := g.genInputs
 	if currentPath.Valid() {
@@ -291,9 +300,9 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 			Inputs: inputs,
 			Output: g.genOutputs[0],
 			Args: map[string]string{
-				"output": g.genOutputs[0].String(),
-				"fqName": g.properties.FqName,
-				"roots":  strings.Join(fullRootOptions, " "),
+				"output":  g.genOutputs[0].String(),
+				"fqName":  g.properties.FqName,
+				"options": strings.Join(extraOptions, " "),
 			},
 		})
 
@@ -308,7 +317,7 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 				Output: g.genOutputs[i],
 				Args: map[string]string{
 					"fqInterface": g.properties.FqName + "::" + intf,
-					"roots":       strings.Join(fullRootOptions, " "),
+					"options":     strings.Join(extraOptions, " "),
 				},
 			})
 		}
@@ -326,7 +335,7 @@ func (g *hidlGenRule) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 			"genDir":   g.genOutputDir.String(),
 			"fqName":   g.properties.FqName,
 			"language": g.properties.Language,
-			"roots":    strings.Join(fullRootOptions, " "),
+			"options":  strings.Join(extraOptions, " "),
 		},
 	})
 }
@@ -439,6 +448,33 @@ func vtscFactory() android.Module {
 	return g
 }
 
+type prebuiltHidlInterfaceProperties struct {
+	// List of interfaces to consider valid, e.g. "vendor.foo.bar@1.0::IFoo" for typo checking
+	// between init.rc, VINTF, and elsewhere. Note that inheritance properties will not be
+	// checked for these (but would be checked in a branch where the actual hidl_interface
+	// exists).
+	Interfaces []string
+}
+
+type prebuiltHidlInterface struct {
+	android.ModuleBase
+
+	properties prebuiltHidlInterfaceProperties
+}
+
+func (p *prebuiltHidlInterface) GenerateAndroidBuildActions(ctx android.ModuleContext) {}
+
+func (p *prebuiltHidlInterface) DepsMutator(ctx android.BottomUpMutatorContext) {
+	ctx.AddReverseDependency(ctx.Module(), nil, hidlMetadataSingletonName)
+}
+
+func prebuiltHidlInterfaceFactory() android.Module {
+	i := &prebuiltHidlInterface{}
+	i.AddProperties(&i.properties)
+	android.InitAndroidModule(i)
+	return i
+}
+
 type hidlInterfaceProperties struct {
 	// Vndk properties for interface library only.
 	cc.VndkProperties
@@ -468,10 +504,6 @@ type hidlInterfaceProperties struct {
 
 	// example: -randroid.hardware:hardware/interfaces
 	Full_root_option string `blueprint:"mutated"`
-
-	// Whether this interface library should be installed on product partition.
-	// TODO(b/150902910): remove, since this should be an inherited property.
-	Product_specific *bool
 
 	// List of APEX modules this interface can be used in.
 	//
@@ -595,8 +627,14 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 	shouldGenerateJavaConstants := i.properties.Gen_java_constants
 	shouldGenerateVts := shouldGenerateLibrary && proptools.BoolDefault(i.properties.Gen_vts, true)
 
-	// TODO(b/150902910): re-enable VTS builds for product things
-	shouldGenerateVts = shouldGenerateVts && !proptools.Bool(i.properties.Product_specific)
+	// To generate VTS, hidl_interface must have a core variant.
+	// A module with 'product_specific: true' does not create a core variant.
+	shouldGenerateVts = shouldGenerateVts && !mctx.ProductSpecific()
+
+	var productAvailable *bool
+	if !mctx.ProductSpecific() {
+		productAvailable = proptools.BoolPtr(true)
+	}
 
 	var libraryIfExists []string
 	if shouldGenerateLibrary {
@@ -642,6 +680,7 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			Host_supported:     proptools.BoolPtr(true),
 			Recovery_available: proptools.BoolPtr(true),
 			Vendor_available:   proptools.BoolPtr(true),
+			Product_available:  productAvailable,
 			Double_loadable:    proptools.BoolPtr(isDoubleLoadable(name.string())),
 			Defaults:           []string{"hidl-module-defaults"},
 			Generated_sources:  []string{name.sourcesName()},
@@ -742,6 +781,7 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 	mctx.CreateModule(cc.LibraryFactory, &ccProperties{
 		Name:              proptools.StringPtr(name.adapterHelperName()),
 		Vendor_available:  proptools.BoolPtr(true),
+		Product_available: productAvailable,
 		Defaults:          []string{"hidl-module-defaults"},
 		Generated_sources: []string{name.adapterHelperSourcesName()},
 		Generated_headers: []string{name.adapterHelperHeadersName()},
@@ -913,11 +953,13 @@ func (h *hidlInterface) Name() string {
 func (h *hidlInterface) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 	visited := false
 	ctx.VisitDirectDeps(func(dep android.Module) {
-		if visited {
-			panic("internal error, multiple dependencies found but only one added")
+		if r, ok := dep.(*hidlPackageRoot); ok {
+			if visited {
+				panic("internal error, multiple dependencies found but only one added")
+			}
+			visited = true
+			h.properties.Full_root_option = r.getFullPackageRoot()
 		}
-		visited = true
-		h.properties.Full_root_option = dep.(*hidlPackageRoot).getFullPackageRoot()
 	})
 	if !visited {
 		panic("internal error, no dependencies found but dependency added")
@@ -938,6 +980,7 @@ func hidlInterfaceFactory() android.Module {
 }
 
 var minSdkVersion = map[string]string{
+	"android.frameworks.bufferhub@1.0":          "29",
 	"android.hardware.audio.common@5.0":         "30",
 	"android.hardware.bluetooth.a2dp@1.0":       "30",
 	"android.hardware.bluetooth.audio@2.0":      "30",
@@ -1025,15 +1068,18 @@ func isCorePackage(name string) bool {
 
 var fuzzerPackageNameBlacklist = []string{
 	"android.hardware.keymaster@", // to avoid deleteAllKeys()
+	// Same-process HALs are always opened in the same process as their client.
+	// So stability guarantees don't apply to them, e.g. it's OK to crash on
+	// NULL input from client. Disable corresponding fuzzers as they create too
+	// much noise.
+	"android.hardware.graphics.mapper@",
+	"android.hardware.renderscript@",
+	"android.hidl.memory@",
 }
 
 func isFuzzerEnabled(name string) bool {
-	for _, pkgname := range fuzzerPackageNameBlacklist {
-		if strings.HasPrefix(name, pkgname) {
-			return false
-		}
-	}
-	return true
+	// TODO(151338797): re-enable fuzzers
+	return false
 }
 
 // TODO(b/126383715): centralize this logic/support filtering in core VTS build

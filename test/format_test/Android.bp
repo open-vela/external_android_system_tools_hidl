@@ -28,7 +28,6 @@ genrule {
         "1.0/IFoo.hal",
         "1.0/types.hal",
     ],
-    required: ["android.hidl.base@1.0"],
     out: [
         "system/tools/hidl/test/format_test/1.0/Android.bp",
         "system/tools/hidl/test/format_test/1.0/IBar.hal",
