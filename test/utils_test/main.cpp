@@ -24,80 +24,9 @@
 using ::android::FqInstance;
 using ::android::FQName;
 
-static const std::vector<std::string> kValidFqNames = {
-        "android.hardware.foo@1.0::IFoo.Type",
-        "@1.0::IFoo.Type",
-        "android.hardware.foo@1.0",
-        "IFoo.Type",
-        "Type",
-        "f",
-        "_",
-        "_9",
-        "_a",
-        "android.hardware.foo@1.0::IFoo.Type:MY_ENUM_VALUE",
-        "@1.0::IFoo.Type:MY_ENUM_VALUE",
-        "IFoo.Type:MY_ENUM_VALUE",
-        "foo@1.0::IFoo",
-        "android.hardware.foo@1.0::IFoo"};
+class LibHidlGenUtilsTest : public ::testing::Test {};
 
-static const std::vector<std::string> kInvalidFqNames = {
-        "",
-        "@",
-        ":",
-        "@foo",
-        "@1.0:Foo",
-        "foo::IFoo",
-        "foo.bar::IFoo",
-        "*",
-        "&",
-        "aa;sdf",
-        "foo@1.0:FOO_BAR",
-        "9foo@1.0",
-        "foo.9foo@1.0",
-        "@01.0::IFoo.Type",
-        "@1.00::IFoo.Type",
-        "@1.01::IFoo.Type",
-        "88.foo@1.0",
-        "9Foo",
-        "08Foo",
-        "@:",
-        "foo:",
-        "foo@",
-        "8foo@",
-        "@foo8",
-        ":foo8",
-        "8:foo",
-        "8@foo",
-        "foo@bar",
-};
-
-TEST(LibHidlGenUtilsTest, FqName) {
-    FQName e;
-    for (const std::string& testString : kValidFqNames) {
-        ASSERT_TRUE(e.setTo(testString)) << testString;
-        EXPECT_EQ(testString, e.string());
-    };
-}
-
-TEST(LibHidlGenUtilsTest, FqNameIdentifier) {
-    FQName e;
-    ASSERT_TRUE(e.setTo("IFoo"));
-    EXPECT_TRUE(e.isIdentifier());
-
-    ASSERT_TRUE(e.setTo("foo.IFoo"));
-    EXPECT_FALSE(e.isIdentifier());
-    ASSERT_TRUE(e.setTo("@1.0::IFoo"));
-    EXPECT_FALSE(e.isIdentifier());
-}
-
-TEST(LibHidlGenUtilsTest, InvalidFqName) {
-    FQName e;
-    for (const std::string& testString : kInvalidFqNames) {
-        EXPECT_FALSE(e.setTo(testString)) << testString;
-    };
-}
-
-TEST(LibHidlGenUtilsTest, FqInstance1) {
+TEST_F(LibHidlGenUtilsTest, FqInstance1) {
     FqInstance e;
     ASSERT_TRUE(e.setTo("android.hardware.foo@1.0::IFoo/instance"));
     EXPECT_EQ("android.hardware.foo@1.0::IFoo/instance", e.string());
@@ -113,7 +42,7 @@ TEST(LibHidlGenUtilsTest, FqInstance1) {
     EXPECT_EQ("instance", e.getInstance());
 }
 
-TEST(LibHidlGenUtilsTest, FqInstance2) {
+TEST_F(LibHidlGenUtilsTest, FqInstance2) {
     FqInstance e;
     ASSERT_TRUE(e.setTo("@1.0::IFoo/instance"));
     EXPECT_EQ("@1.0::IFoo/instance", e.string());
@@ -126,7 +55,7 @@ TEST(LibHidlGenUtilsTest, FqInstance2) {
     EXPECT_EQ("instance", e.getInstance());
 }
 
-TEST(LibHidlGenUtilsTest, FqInstance3) {
+TEST_F(LibHidlGenUtilsTest, FqInstance3) {
     FqInstance e;
     ASSERT_TRUE(e.setTo("IFoo/instance"));
     EXPECT_EQ("IFoo/instance", e.string());
@@ -138,30 +67,26 @@ TEST(LibHidlGenUtilsTest, FqInstance3) {
     EXPECT_EQ("instance", e.getInstance());
 }
 
-TEST(LibHidlGenUtilsTest, FqInstanceFqNameOnly) {
+TEST_F(LibHidlGenUtilsTest, FqInstanceFqNameOnly) {
     FqInstance e;
-    for (const std::string& testString : kValidFqNames) {
-        ASSERT_TRUE(e.setTo(testString)) << testString;
+    for (auto testString :
+         {"android.hardware.foo@1.0::IFoo.Type", "@1.0::IFoo.Type", "android.hardware.foo@1.0",
+          "IFoo.Type", "Type", "android.hardware.foo@1.0::IFoo.Type:MY_ENUM_VALUE",
+          "@1.0::IFoo.Type:MY_ENUM_VALUE", "IFoo.Type:MY_ENUM_VALUE"}) {
+        ASSERT_TRUE(e.setTo(testString));
         EXPECT_EQ(testString, e.string());
         ASSERT_FALSE(e.hasInstance());
     };
 }
 
-TEST(LibHidlGenUtilsTest, FqInstanceInvalidFqNameOnly) {
-    FqInstance e;
-    for (const std::string& testString : kInvalidFqNames) {
-        EXPECT_FALSE(e.setTo(testString)) << testString;
-    };
-}
-
-TEST(LibHidlGenUtilsTest, FqInstanceIdentifier) {
+TEST_F(LibHidlGenUtilsTest, FqInstanceIdentifier) {
     FqInstance e;
     ASSERT_TRUE(e.setTo("Type"));
     EXPECT_EQ("Type", e.string());
     ASSERT_FALSE(e.hasInstance());
 }
 
-TEST(LibHidlGenUtilsTest, FqInstanceSetToByComponent) {
+TEST_F(LibHidlGenUtilsTest, FqInstanceSetToByComponent) {
     FqInstance e;
     ASSERT_TRUE(e.setTo("android.hardware.foo", 1, 0, "IFoo", "default"));
     EXPECT_EQ("android.hardware.foo@1.0::IFoo/default", e.string());
@@ -177,7 +102,7 @@ TEST(LibHidlGenUtilsTest, FqInstanceSetToByComponent) {
     EXPECT_EQ("IFoo/default", e.string());
 }
 
-TEST(LibHidlGenUtilsTest, FqDefaultVersion) {
+TEST_F(LibHidlGenUtilsTest, FqDefaultVersion) {
     FQName n;
     FqInstance i;
 

@@ -30,29 +30,53 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
-#include <string>
 #include <unordered_map>
 
 #include <android-base/logging.h>
 #include <hidl-util/Formatter.h>
 #include <hidl-util/StringHelper.h>
-#include <hwbinder/IBinder.h>
 
 namespace android {
 
-const std::unique_ptr<ConstantExpression> Interface::FLAG_ONE_WAY =
-        std::make_unique<LiteralConstantExpression>(ScalarType::KIND_UINT32,
-                                                    hardware::IBinder::FLAG_ONEWAY, "oneway");
-const std::unique_ptr<ConstantExpression> Interface::FLAG_CLEAR_BUF =
-        std::make_unique<LiteralConstantExpression>(ScalarType::KIND_UINT32,
-                                                    hardware::IBinder::FLAG_CLEAR_BUF, "clear buf");
+#define B_PACK_CHARS(c1, c2, c3, c4) \
+         ((((c1)<<24)) | (((c2)<<16)) | (((c3)<<8)) | (c4))
 
-Interface::Interface(const std::string& localName, const FQName& fullName, const Location& location,
+/* It is very important that these values NEVER change. These values
+ * must remain unchanged over the lifetime of android. This is
+ * because the framework on a device will be updated independently of
+ * the hals on a device. If the hals are compiled with one set of
+ * transaction values, and the framework with another, then the
+ * interface between them will be destroyed, and the device will not
+ * work.
+ */
+enum {
+    /////////////////// User defined transactions
+    FIRST_CALL_TRANSACTION  = 0x00000001,
+    LAST_CALL_TRANSACTION   = 0x0effffff,
+    /////////////////// HIDL reserved
+    FIRST_HIDL_TRANSACTION  = 0x0f000000,
+    HIDL_PING_TRANSACTION                     = B_PACK_CHARS(0x0f, 'P', 'N', 'G'),
+    HIDL_DESCRIPTOR_CHAIN_TRANSACTION         = B_PACK_CHARS(0x0f, 'C', 'H', 'N'),
+    HIDL_GET_DESCRIPTOR_TRANSACTION           = B_PACK_CHARS(0x0f, 'D', 'S', 'C'),
+    HIDL_SYSPROPS_CHANGED_TRANSACTION         = B_PACK_CHARS(0x0f, 'S', 'Y', 'S'),
+    HIDL_LINK_TO_DEATH_TRANSACTION            = B_PACK_CHARS(0x0f, 'L', 'T', 'D'),
+    HIDL_UNLINK_TO_DEATH_TRANSACTION          = B_PACK_CHARS(0x0f, 'U', 'T', 'D'),
+    HIDL_SET_HAL_INSTRUMENTATION_TRANSACTION  = B_PACK_CHARS(0x0f, 'I', 'N', 'T'),
+    HIDL_GET_REF_INFO_TRANSACTION             = B_PACK_CHARS(0x0f, 'R', 'E', 'F'),
+    HIDL_DEBUG_TRANSACTION                    = B_PACK_CHARS(0x0f, 'D', 'B', 'G'),
+    HIDL_HASH_CHAIN_TRANSACTION               = B_PACK_CHARS(0x0f, 'H', 'S', 'H'),
+    LAST_HIDL_TRANSACTION   = 0x0fffffff,
+};
+
+const std::unique_ptr<ConstantExpression> Interface::FLAG_ONE_WAY =
+    std::make_unique<LiteralConstantExpression>(ScalarType::KIND_UINT32, 0x01, "oneway");
+
+Interface::Interface(const char* localName, const FQName& fullName, const Location& location,
                      Scope* parent, const Reference<Type>& superType, const Hash* fileHash)
     : Scope(localName, fullName, location, parent), mSuperType(superType), mFileHash(fileHash) {}
 
 std::string Interface::typeName() const {
-    return "interface " + definedName();
+    return "interface " + localName();
 }
 
 const Hash* Interface::getFileHash() const {
@@ -65,7 +89,7 @@ bool Interface::fillPingMethod(Method *method) const {
     }
 
     method->fillImplementation(
-        hardware::IBinder::HIDL_PING_TRANSACTION,
+        HIDL_PING_TRANSACTION,
         {
             {IMPL_INTERFACE,
                 [](auto &out) {
@@ -96,7 +120,7 @@ bool Interface::fillLinkToDeathMethod(Method *method) const {
     }
 
     method->fillImplementation(
-            hardware::IBinder::HIDL_LINK_TO_DEATH_TRANSACTION,
+            HIDL_LINK_TO_DEATH_TRANSACTION,
             {
                 {IMPL_INTERFACE,
                     [](auto &out) {
@@ -140,7 +164,7 @@ bool Interface::fillUnlinkToDeathMethod(Method *method) const {
     }
 
     method->fillImplementation(
-            hardware::IBinder::HIDL_UNLINK_TO_DEATH_TRANSACTION,
+            HIDL_UNLINK_TO_DEATH_TRANSACTION,
             {
                 {IMPL_INTERFACE,
                     [](auto &out) {
@@ -188,7 +212,7 @@ bool Interface::fillSyspropsChangedMethod(Method *method) const {
     }
 
     method->fillImplementation(
-            hardware::IBinder::HIDL_SYSPROPS_CHANGED_TRANSACTION,
+            HIDL_SYSPROPS_CHANGED_TRANSACTION,
             { { IMPL_INTERFACE, [](auto &out) {
                 out << "::android::report_sysprop_change();\n";
                 out << "return ::android::hardware::Void();\n";
@@ -206,7 +230,7 @@ bool Interface::fillSetHALInstrumentationMethod(Method *method) const {
     }
 
     method->fillImplementation(
-            hardware::IBinder::HIDL_SET_HAL_INSTRUMENTATION_TRANSACTION,
+            HIDL_SET_HAL_INSTRUMENTATION_TRANSACTION,
             {
                 {IMPL_INTERFACE,
                     [](auto &out) {
@@ -239,7 +263,7 @@ bool Interface::fillDescriptorChainMethod(Method *method) const {
     }
 
     method->fillImplementation(
-        hardware::IBinder::HIDL_DESCRIPTOR_CHAIN_TRANSACTION,
+        HIDL_DESCRIPTOR_CHAIN_TRANSACTION,
         { { IMPL_INTERFACE, [this](auto &out) {
             std::vector<const Interface *> chain = typeChain();
             out << "_hidl_cb(";
@@ -249,7 +273,7 @@ bool Interface::fillDescriptorChainMethod(Method *method) const {
                 }
             });
             out << ");\n";
-            out << "return ::android::hardware::Void();\n";
+            out << "return ::android::hardware::Void();";
         } } }, /* cppImpl */
         { { IMPL_INTERFACE, [this](auto &out) {
             std::vector<const Interface *> chain = typeChain();
@@ -294,7 +318,7 @@ bool Interface::fillHashChainMethod(Method *method) const {
     const ArrayType *digestType = static_cast<const ArrayType *>(chainType->getElementType());
 
     method->fillImplementation(
-        hardware::IBinder::HIDL_HASH_CHAIN_TRANSACTION,
+        HIDL_HASH_CHAIN_TRANSACTION,
         { { IMPL_INTERFACE, [this, digestType](auto &out) {
             std::vector<const Interface *> chain = typeChain();
             out << "_hidl_cb(";
@@ -327,7 +351,7 @@ bool Interface::fillGetDescriptorMethod(Method *method) const {
     }
 
     method->fillImplementation(
-        hardware::IBinder::HIDL_GET_DESCRIPTOR_TRANSACTION,
+        HIDL_GET_DESCRIPTOR_TRANSACTION,
         { { IMPL_INTERFACE, [this](auto &out) {
             out << "_hidl_cb("
                 << fullName()
@@ -356,7 +380,7 @@ bool Interface::fillGetDebugInfoMethod(Method *method) const {
             "#endif\n";
 
     method->fillImplementation(
-        hardware::IBinder::HIDL_GET_REF_INFO_TRANSACTION,
+        HIDL_GET_REF_INFO_TRANSACTION,
         {
             {IMPL_INTERFACE,
                 [](auto &out) {
@@ -400,7 +424,7 @@ bool Interface::fillDebugMethod(Method *method) const {
         return false;
     }
 
-    method->fillImplementation(hardware::IBinder::HIDL_DEBUG_TRANSACTION,
+    method->fillImplementation(HIDL_DEBUG_TRANSACTION,
                                {
                                    {IMPL_INTERFACE,
                                     [](auto& out) {
@@ -417,9 +441,23 @@ bool Interface::fillDebugMethod(Method *method) const {
     return true;
 }
 
-void Interface::addUserDefinedMethod(Method* method) {
+static std::map<std::string, Method *> gAllReservedMethods;
+
+bool Interface::addMethod(Method *method) {
+    if (isIBase()) {
+        if (!gAllReservedMethods.emplace(method->name(), method).second) {
+            std::cerr << "ERROR: hidl-gen encountered duplicated reserved method " << method->name()
+                      << std::endl;
+            return false;
+        }
+        // will add it in addAllReservedMethods
+        return true;
+    }
+
     CHECK(!method->isHidlReserved());
     mUserMethods.push_back(method);
+
+    return true;
 }
 
 std::vector<const Reference<Type>*> Interface::getReferences() const {
@@ -434,6 +472,15 @@ std::vector<const Reference<Type>*> Interface::getReferences() const {
         ret.insert(ret.end(), references.begin(), references.end());
     }
 
+    return ret;
+}
+
+std::vector<const ConstantExpression*> Interface::getConstantExpressions() const {
+    std::vector<const ConstantExpression*> ret;
+    for (const auto* method : methods()) {
+        const auto& retMethod = method->getConstantExpressions();
+        ret.insert(ret.end(), retMethod.begin(), retMethod.end());
+    }
     return ret;
 }
 
@@ -456,14 +503,14 @@ std::vector<const Reference<Type>*> Interface::getStrongReferences() const {
 }
 
 status_t Interface::resolveInheritance() {
-    size_t serial = hardware::IBinder::FIRST_CALL_TRANSACTION;
+    size_t serial = FIRST_CALL_TRANSACTION;
     for (const auto* ancestor : superTypeChain()) {
         serial += ancestor->mUserMethods.size();
     }
 
     for (Method* method : mUserMethods) {
-        if (serial > hardware::IBinder::LAST_CALL_TRANSACTION) {
-            std::cerr << "ERROR: More than " << hardware::IBinder::LAST_CALL_TRANSACTION
+        if (serial > LAST_CALL_TRANSACTION) {
+            std::cerr << "ERROR: More than " << LAST_CALL_TRANSACTION
                       << " methods (including super and reserved) are not allowed at " << location()
                       << std::endl;
             return UNKNOWN_ERROR;
@@ -553,10 +600,10 @@ status_t Interface::validateAnnotations() const {
     return OK;
 }
 
-bool Interface::addAllReservedMethods(const std::map<std::string, Method*>& allReservedMethods) {
+bool Interface::addAllReservedMethods() {
     // use a sorted map to insert them in serial ID order.
     std::map<int32_t, Method *> reservedMethodsById;
-    for (const auto& pair : allReservedMethods) {
+    for (const auto &pair : gAllReservedMethods) {
         Method *method = pair.second->copySignature();
         bool fillSuccess = fillPingMethod(method)
             || fillDescriptorChainMethod(method)
@@ -585,16 +632,6 @@ bool Interface::addAllReservedMethods(const std::map<std::string, Method*>& allR
         this->mReservedMethods.push_back(pair.second);
     }
     return true;
-}
-
-bool Interface::hasSensitiveDataAnnotation() const {
-    for (const auto& annotation : annotations()) {
-        if (annotation->name() == "SensitiveData") {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 const Interface* Interface::superType() const {
@@ -723,7 +760,7 @@ std::string Interface::getJavaType(bool /* forInitializer */) const {
 }
 
 std::string Interface::getVtsType() const {
-    if (StringHelper::EndsWith(definedName(), "Callback")) {
+    if (StringHelper::EndsWith(localName(), "Callback")) {
         return "TYPE_HIDL_CALLBACK";
     } else {
         return "TYPE_HIDL_INTERFACE";
@@ -799,33 +836,6 @@ void Interface::emitReaderWriter(
     }
 }
 
-void Interface::emitHidlDefinition(Formatter& out) const {
-    if (getDocComment() != nullptr) getDocComment()->emit(out);
-    out << typeName() << " ";
-
-    const Interface* super = superType();
-    if (super != nullptr && !super->isIBase()) {
-        out << "extends " << super->fqName().getRelativeFQName(fqName()) << " ";
-    }
-
-    out << "{";
-
-    out.indent([&] {
-        const std::vector<const NamedType*>& definedTypes = getSortedDefinedTypes();
-        if (definedTypes.size() > 0 || userDefinedMethods().size() > 0) out << "\n";
-
-        out.join(definedTypes.begin(), definedTypes.end(), "\n",
-                 [&](auto t) { t->emitHidlDefinition(out); });
-
-        if (definedTypes.size() > 0 && userDefinedMethods().size() > 0) out << "\n";
-
-        out.join(userDefinedMethods().begin(), userDefinedMethods().end(), "\n",
-                 [&](auto method) { method->emitHidlDefinition(out); });
-    });
-
-    out << "};\n";
-}
-
 void Interface::emitPackageTypeDeclarations(Formatter& out) const {
     Scope::emitPackageTypeDeclarations(out);
 
@@ -849,7 +859,7 @@ void Interface::emitPackageTypeHeaderDefinitions(Formatter& out) const {
 void Interface::emitTypeDefinitions(Formatter& out, const std::string& prefix) const {
     std::string space = prefix.empty() ? "" : (prefix + "::");
 
-    Scope::emitTypeDefinitions(out, space + definedName());
+    Scope::emitTypeDefinitions(out, space + localName());
 }
 
 void Interface::emitJavaReaderWriter(
@@ -949,11 +959,23 @@ void Interface::emitVtsAttributeType(Formatter& out) const {
         << "\"\n";
 }
 
-bool Interface::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const {
-    if (hasSensitiveDataAnnotation()) {
-        return false;
+bool Interface::hasOnewayMethods() const {
+    for (auto const &method : methods()) {
+        if (method->isOneway()) {
+            return true;
+        }
     }
 
+    const Interface* superClass = superType();
+
+    if (superClass != nullptr) {
+        return superClass->hasOnewayMethods();
+    }
+
+    return false;
+}
+
+bool Interface::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) const {
     if (superType() != nullptr && !superType()->isJavaCompatible(visited)) {
         return false;
     }
@@ -970,9 +992,6 @@ bool Interface::deepIsJavaCompatible(std::unordered_set<const Type*>* visited) c
 bool Interface::isNeverStrongReference() const {
     return true;
 }
-
-const FQName gIBaseFqName = FQName("android.hidl.base", "1.0", "IBase");
-const FQName gIManagerFqName = FQName("android.hidl.manager", "1.0", "IServiceManager");
 
 }  // namespace android
 

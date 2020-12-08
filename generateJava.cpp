@@ -18,7 +18,6 @@
 
 #include "Coordinator.h"
 #include "Interface.h"
-#include "Location.h"
 #include "Method.h"
 #include "Reference.h"
 #include "Scope.h"
@@ -49,10 +48,14 @@ void AST::generateJavaTypes(Formatter& out, const std::string& limitToType) cons
     CHECK(!limitToType.empty()) << getFilename();
 
     for (const auto& type : mRootScope.getSubTypes()) {
-        std::string typeName = type->definedName();
+        std::string typeName = type->localName();
 
         if (type->isTypeDef()) continue;
         if (typeName != limitToType) continue;
+
+        std::vector<std::string> packageComponents;
+        getPackageAndVersionComponents(
+                &packageComponents, true /* cpp_compatible */);
 
         out << "package " << mPackage.javaPackage() << ";\n\n\n";
 
@@ -73,17 +76,13 @@ void emitGetService(
                 "This will invoke the equivalent of the C++ getService(std::string) if retry is\n"
                 "true or tryGetService(std::string) if retry is false. If the service is\n"
                 "available on the device and retry is true, this will wait for the service to\n"
-                "start.\n\n@throws NoSuchElementException if this service is not available",
-                HIDL_LOCATION_HERE)
+                "start. Otherwise, it will return immediately even if the service is null.")
                 .emit(out);
     } else {
         DocComment(
-                "@throws NoSuchElementException if this service is not available\n"
-                "@deprecated this will not wait for the interface to come up if it hasn't yet\n"
-                "    started. See getService(String,boolean) instead.\n",
-                HIDL_LOCATION_HERE)
+                "Warning: this will not wait for the interface to come up if it hasn't yet\n"
+                "started. See getService(String,boolean) instead.")
                 .emit(out);
-        out << "@Deprecated\n";
     }
     out << "public static "
         << ifaceName
@@ -105,15 +104,12 @@ void emitGetService(
     }).endl().endl();
 
     if (isRetry) {
-        DocComment("Calls getService(\"default\",retry).", HIDL_LOCATION_HERE).emit(out);
+        DocComment("Calls getService(\"default\",retry).").emit(out);
     } else {
         DocComment(
-                "@throws NoSuchElementException if this service is not available\n"
-                "@deprecated this will not wait for the interface to come up if it hasn't yet\n"
-                "    started. See getService(boolean) instead.\n",
-                HIDL_LOCATION_HERE)
+                "Warning: this will not wait for the interface to come up if it hasn't yet "
+                "started. See getService(String,boolean) instead.")
                 .emit(out);
-        out << "@Deprecated\n";
     }
     out << "public static "
         << ifaceName
@@ -140,10 +136,16 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
     }
 
     const Interface* iface = mRootScope.getInterface();
-    const std::string ifaceName = iface->definedName();
+    const std::string ifaceName = iface->localName();
     const std::string baseName = iface->getBaseName();
 
+    std::vector<std::string> packageComponents;
+    getPackageAndVersionComponents(
+            &packageComponents, true /* cpp_compatible */);
+
     out << "package " << mPackage.javaPackage() << ";\n\n";
+
+    out.setNamespace(mPackage.javaPackage() + ".");
 
     const Interface *superType = iface->superType();
 
@@ -160,15 +162,14 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
     out << " {\n";
     out.indent();
 
-    DocComment("Fully-qualified interface name for this interface.", HIDL_LOCATION_HERE).emit(out);
+    DocComment("Fully-qualified interface name for this interface.").emit(out);
     out << "public static final String kInterfaceName = \""
         << mPackage.string()
         << "::"
         << ifaceName
         << "\";\n\n";
 
-    DocComment("Does a checked conversion from a binder to this class.", HIDL_LOCATION_HERE)
-            .emit(out);
+    DocComment("Does a checked conversion from a binder to this class.").emit(out);
     out << "/* package private */ static "
         << ifaceName
         << " asInterface(android.os.IHwBinder binder) {\n";
@@ -220,8 +221,7 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
     out.unindent();
     out << "}\n\n";
 
-    DocComment("Does a checked conversion from any interface to this class.", HIDL_LOCATION_HERE)
-            .emit(out);
+    DocComment("Does a checked conversion from any interface to this class.").emit(out);
     out << "public static "
         << ifaceName
         << " castFrom(android.os.IHwInterface iface) {\n";
@@ -242,6 +242,7 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
     iface->emitJavaTypeDeclarations(out, false /* atTopLevel */);
 
     for (const auto &method : iface->methods()) {
+        const bool returnsValue = !method->results().empty();
         const bool needsCallback = method->results().size() > 1;
 
         if (needsCallback) {
@@ -260,9 +261,27 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
 
         method->emitDocComment(out);
 
-        method->emitJavaSignature(out);
+        if (returnsValue && !needsCallback) {
+            out << method->results()[0]->type().getJavaType();
+        } else {
+            out << "void";
+        }
 
-        out << "\n";
+        out << " "
+            << method->name()
+            << "(";
+        method->emitJavaArgSignature(out);
+
+        if (needsCallback) {
+            if (!method->args().empty()) {
+                out << ", ";
+            }
+
+            out << method->name()
+                << "Callback _hidl_cb";
+        }
+
+        out << ")\n";
         out.indent();
         out << "throws android.os.RemoteException;\n";
         out.unindent();
@@ -326,9 +345,27 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
         const bool needsCallback = method->results().size() > 1;
 
         out << "@Override\npublic ";
-        method->emitJavaSignature(out);
+        if (returnsValue && !needsCallback) {
+            out << method->results()[0]->type().getJavaType();
+        } else {
+            out << "void";
+        }
 
-        out << "\n";
+        out << " "
+            << method->name()
+            << "(";
+        method->emitJavaArgSignature(out);
+
+        if (needsCallback) {
+            if (!method->args().empty()) {
+                out << ", ";
+            }
+
+            out << method->name()
+                << "Callback _hidl_cb";
+        }
+
+        out << ")\n";
         out.indent();
         out.indent();
         out << "throws android.os.RemoteException {\n";
@@ -511,6 +548,15 @@ void AST::generateJava(Formatter& out, const std::string& limitToType) const {
             << " */:\n{\n";
 
         out.indent();
+
+        out << "boolean _hidl_is_oneway = (_hidl_flags & " << Interface::FLAG_ONE_WAY->javaValue()
+            << ") != 0;\n";
+        out << "if (_hidl_is_oneway != " << (method->isOneway() ? "true" : "false") << ") ";
+        out.block([&] {
+            out << "_hidl_reply.writeStatus(" << UNKNOWN_ERROR << ");\n";
+            out << "_hidl_reply.send();\n";
+            out << "break;\n";
+        });
 
         if (method->isHidlReserved() && method->overridesJavaImpl(IMPL_STUB)) {
             method->javaImpl(IMPL_STUB, out);
