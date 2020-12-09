@@ -193,6 +193,24 @@ public class TranslateJavaTest {
     }
 
     @Test
+    public void SafeUnionBarBitfield() {
+        hidl2aidl.test.SafeUnionBar dest;
+        hidl2aidl.test.V1_2.SafeUnionBar source = new hidl2aidl.test.V1_2.SafeUnionBar();
+        source.g(hidl2aidl.test.V1_2.FooFlag.THIRD);
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.g(), is(dest.getG()));
+    }
+
+    @Test
+    public void SafeUnionBarEnum() {
+        hidl2aidl.test.SafeUnionBar dest;
+        hidl2aidl.test.V1_2.SafeUnionBar source = new hidl2aidl.test.V1_2.SafeUnionBar();
+        source.h(hidl2aidl.test.V1_1.Value.B);
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.h(), is(dest.getH()));
+    }
+
+    @Test
     public void ArrayFoo() {
         hidl2aidl.test.ArrayFoo dest;
         hidl2aidl.test.V1_2.ArrayFoo source = new hidl2aidl.test.V1_2.ArrayFoo();
