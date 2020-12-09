@@ -139,11 +139,15 @@ static void namedTypeTranslation(Formatter& out, const std::set<const NamedType*
 
 static void h2aScalarChecks(Formatter& out, const Type& type, const std::string& inputAccess,
                             AidlBackend backend) {
-    static const std::map<ScalarType::Kind, size_t> kSignedMaxSize{
-            {ScalarType::KIND_UINT8, std::numeric_limits<int8_t>::max()},
-            {ScalarType::KIND_INT16, std::numeric_limits<int32_t>::max()},
-            {ScalarType::KIND_UINT32, std::numeric_limits<int32_t>::max()},
-            {ScalarType::KIND_UINT64, std::numeric_limits<int64_t>::max()}};
+    static const std::map<ScalarType::Kind, std::pair<std::string, size_t>> kSignedMaxSize{
+            {ScalarType::KIND_UINT8,
+             {"std::numeric_limits<int8_t>::max()", std::numeric_limits<int8_t>::max()}},
+            {ScalarType::KIND_INT16,
+             {"std::numeric_limits<int32_t>::max()", std::numeric_limits<int32_t>::max()}},
+            {ScalarType::KIND_UINT32,
+             {"std::numeric_limits<int32_t>::max()", std::numeric_limits<int32_t>::max()}},
+            {ScalarType::KIND_UINT64,
+             {"std::numeric_limits<int64_t>::max()", std::numeric_limits<int64_t>::max()}}};
     const ScalarType* scalarType = type.resolveToScalarType();
     if (scalarType != nullptr && !type.isEnum()) {
         const auto& it = kSignedMaxSize.find(scalarType->getKind());
@@ -155,8 +159,11 @@ static void h2aScalarChecks(Formatter& out, const Type& type, const std::string&
                 out << "if (" << inputAccess << " < 0) {\n";
             } else {
                 std::string affix = (scalarType->getKind() == ScalarType::KIND_UINT64) ? "L" : "";
-                out << "if (" << inputAccess << " > " << it->second << affix << " || "
-                    << inputAccess << " < 0) {\n";
+                std::string limit = (backend == AidlBackend::JAVA)
+                                            ? std::to_string(it->second.second) + affix
+                                            : it->second.first;
+                out << "if (" << inputAccess << " > " << limit << " || " << inputAccess
+                    << " < 0) {\n";
             }
             if (backend == AidlBackend::JAVA) {
                 out.indent([&] {
@@ -368,13 +375,14 @@ static void emitCppTranslateHeader(
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes,
         AidlBackend backend) {
     CHECK(backend == AidlBackend::CPP || backend == AidlBackend::NDK);
-    std::set<std::string> includes;
     Formatter out =
             coordinator.getFormatter(fqName, Coordinator::Location::DIRECT,
                                      "include/" + AidlHelper::translateHeaderFile(fqName, backend));
 
     AidlHelper::emitFileHeader(out);
     out << "#pragma once\n\n";
+
+    std::set<std::string> includes = {"#include <limits>"};
     for (const auto& type : namedTypes) {
         const auto& it = processedTypes.find(type);
         if (it == processedTypes.end() && !type->isEnum()) {
