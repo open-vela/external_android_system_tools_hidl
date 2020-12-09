@@ -16,16 +16,10 @@
 // later when a module using the interface is updated, e.g., Mainline modules.
 
 package hidl2aidl.test;
-@VintfStability
-union SafeUnionBar {
-  boolean noInit;
-  byte a;
-  long b;
-  hidl2aidl.test.SafeUnionBarInnerStructBar innerStructBar;
-  hidl2aidl.test.OnlyIn11 c;
-  String d;
-  float e;
-  double f;
-  hidl2aidl.test.FooFlag g;
-  hidl2aidl.test.Value h;
+@Backing(type="int") @VintfStability
+enum FooFlag {
+  NONE = 0,
+  FIRST = 1,
+  SECOND = 2,
+  THIRD = 4,
 }
