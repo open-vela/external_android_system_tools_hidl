@@ -33,6 +33,13 @@ union UnionFoo {
     @1.1::OnlyIn11 c;
 };
 
+enum FooFlag : uint32_t {
+    NONE = 0x0,
+    FIRST = 0x1 << 0,
+    SECOND = 0x1 << 1,
+    THIRD = 0x1 << 2,
+};
+
 safe_union SafeUnionBar {
     Monostate noInit;
     int8_t a;
@@ -45,6 +52,8 @@ safe_union SafeUnionBar {
     string d;
     float e;
     double f;
+    bitfield<FooFlag> g;
+    @1.1::Value h;
 };
 
 struct ArrayFoo {
