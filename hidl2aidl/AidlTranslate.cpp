@@ -209,9 +209,6 @@ static std::string wrapCppSource(const std::string& payload, const Type& type, c
                                  AidlBackend backend) {
     if (type.isString()) {
         return wrapToString16(payload, backend);
-    } else if (type.isBitField()) {
-        return wrapStaticCast(payload, *static_cast<const BitFieldType&>(type).getElementEnumType(),
-                              fqName, backend);
     } else {
         return wrapStaticCast(payload, type, fqName, backend);
     }
@@ -315,12 +312,13 @@ static void simpleTranslation(Formatter& out, const FieldWithVersion& field,
 static void h2aFieldTranslation(Formatter& out, const std::set<const NamedType*>& namedTypes,
                                 const CompoundType* parent, const FieldWithVersion& field,
                                 AidlBackend backend) {
-    if (field.field->type().isNamedType() && !field.field->type().isEnum()) {
+    // TODO(b/158489355) Need to support and validate more types like arrays/vectors.
+    if (field.field->type().isNamedType()) {
         namedTypeTranslation(out, namedTypes, field, parent, backend);
     } else if (field.field->type().isArray() || field.field->type().isVector()) {
         containerTranslation(out, field, parent, backend);
     } else if (field.field->type().isEnum() || field.field->type().isScalar() ||
-               field.field->type().isString() || field.field->type().isBitField()) {
+               field.field->type().isString()) {
         simpleTranslation(out, field, parent, backend);
     } else {
         AidlHelper::notes() << "An unhandled type was found in translation: "
@@ -382,7 +380,6 @@ static void emitCppTranslateHeader(
                                      "include/" + AidlHelper::translateHeaderFile(fqName, backend));
 
     AidlHelper::emitFileHeader(out);
-    out << "// FIXME Remove this file if you don't need to translate types in this backend.\n\n";
     out << "#pragma once\n\n";
 
     std::set<std::string> includes = {"#include <limits>"};
@@ -415,7 +412,6 @@ static void emitTranslateSource(
     Formatter out = coordinator.getFormatter(fqName, Coordinator::Location::DIRECT,
                                              AidlHelper::translateSourceFile(fqName, backend));
     AidlHelper::emitFileHeader(out);
-    out << "// FIXME Remove this file if you don't need to translate types in this backend.\n\n";
     if (backend == AidlBackend::JAVA) {
         out << "package " << AidlHelper::getAidlPackage(fqName) + ";\n\n";
         out << "public class Translate {\n";
