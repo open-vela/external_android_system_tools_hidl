@@ -106,7 +106,7 @@ struct Interface : public Scope {
     status_t resolveInheritance() override;
     status_t validate() const override;
     status_t validateUniqueNames() const;
-    status_t validateAnnotations() const;
+    status_t validateAnnotations() const override;
 
     void emitReaderWriter(
             Formatter &out,
