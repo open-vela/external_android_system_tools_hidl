@@ -26,6 +26,4 @@ union SafeUnionBar {
   String d;
   float e;
   double f;
-  hidl2aidl.test.FooFlag g;
-  hidl2aidl.test.Value h;
 }
