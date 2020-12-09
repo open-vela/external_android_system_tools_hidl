@@ -167,6 +167,26 @@ TEST_F(Hidl2aidlTranslateTest, SafeUnionBarDouble) {
     EXPECT_EQ(source.f(), dest.get<hidl2aidl::test::SafeUnionBar::f>());
 }
 
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarBitfield) {
+    hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    ::android::hardware::hidl_bitfield<::hidl2aidl::test::V1_2::FooFlag> bits(0);
+    bits |= hidl2aidl::test::V1_2::FooFlag::THIRD;
+    source.g(bits);
+    ASSERT_TRUE(h2a::translate(source, &dest));
+    EXPECT_EQ(static_cast<hidl2aidl::test::FooFlag>(source.g()),
+              dest.get<hidl2aidl::test::SafeUnionBar::g>());
+}
+
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarEnum) {
+    hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    source.h(hidl2aidl::test::V1_1::Value::B);
+    ASSERT_TRUE(h2a::translate(source, &dest));
+    EXPECT_EQ(static_cast<hidl2aidl::test::Value>(source.h()),
+              dest.get<hidl2aidl::test::SafeUnionBar::h>());
+}
+
 TEST_F(Hidl2aidlTranslateTest, ArrayFoo) {
     hidl2aidl::test::ArrayFoo dest;
     hidl2aidl::test::V1_2::ArrayFoo source;

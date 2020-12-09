@@ -19,6 +19,7 @@
 
 #include "AidlHelper.h"
 #include "ArrayType.h"
+#include "EnumType.h"
 #include "FmqType.h"
 #include "NamedType.h"
 #include "Type.h"
@@ -83,6 +84,9 @@ std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo) 
         // enum type goes to the primitive java type in HIDL, but AIDL should use
         // the enum type name itself
         return type.definedName();
+    } else if (type.isBitField()) {
+        const BitFieldType& bitfield = static_cast<const BitFieldType&>(type);
+        return getAidlType(*bitfield.getElementType(), relativeTo);
     } else {
         return type.getJavaType();
     }
