@@ -382,6 +382,7 @@ static void emitCppTranslateHeader(
                                      "include/" + AidlHelper::translateHeaderFile(fqName, backend));
 
     AidlHelper::emitFileHeader(out);
+    out << "// FIXME Remove this file if you don't need to translate types in this backend.\n\n";
     out << "#pragma once\n\n";
 
     std::set<std::string> includes = {"#include <limits>"};
@@ -414,6 +415,7 @@ static void emitTranslateSource(
     Formatter out = coordinator.getFormatter(fqName, Coordinator::Location::DIRECT,
                                              AidlHelper::translateSourceFile(fqName, backend));
     AidlHelper::emitFileHeader(out);
+    out << "// FIXME Remove this file if you don't need to translate types in this backend.\n\n";
     if (backend == AidlBackend::JAVA) {
         out << "package " << AidlHelper::getAidlPackage(fqName) + ";\n\n";
         out << "public class Translate {\n";
