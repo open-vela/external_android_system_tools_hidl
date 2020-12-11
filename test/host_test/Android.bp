@@ -25,6 +25,9 @@ cc_test_host {
         "libhidl-gen-utils",
         "liblog",
     ],
+    test_options: {
+        unit_test: true,
+    },
     srcs: ["main.cpp"],
     test_suites: ["general-tests"],
 }
