@@ -25,7 +25,39 @@ using android::hardware::joinRpcThreadpool;
 using android::hardware::LazyServiceRegistrar;
 using android::hardware::tests::lazy::V1_1::ILazy;
 
-class Lazy : public ILazy {};
+class Lazy : public ILazy {
+  public:
+    ::android::hardware::Return<void> setCustomActiveServicesCountCallback();
+};
+
+::android::hardware::Return<void> Lazy::setCustomActiveServicesCountCallback() {
+    auto lazyRegistrar = android::hardware::LazyServiceRegistrar::getInstance();
+    lazyRegistrar.setActiveServicesCountCallback([lazyRegistrar](int count) mutable -> bool {
+        if (count != 0) {
+            return false;
+        }
+
+        // Unregister all services
+        if (!lazyRegistrar.tryUnregister()) {
+            // Prevent shutdown (test will fail)
+            return true;
+        }
+
+        // Re-register all services
+        lazyRegistrar.reRegister();
+
+        // Unregister again before shutdown
+        if (!lazyRegistrar.tryUnregister()) {
+            // Prevent shutdown (test will fail)
+            return true;
+        }
+
+        exit(EXIT_SUCCESS);
+        // Unreachable
+    });
+
+    return ::android::hardware::Status::ok();
+}
 
 int main() {
     configureRpcThreadpool(1, true /*willJoin*/);

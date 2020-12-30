@@ -23,6 +23,7 @@
 
 #include <unistd.h>
 
+#include <android/hardware/tests/lazy/1.1/ILazy.h>
 #include <android/hidl/manager/1.2/IServiceManager.h>
 #include <gtest/gtest.h>
 #include <hidl-util/FqInstance.h>
@@ -36,6 +37,7 @@ using ::android::sp;
 using ::android::hardware::hidl_string;
 using ::android::hardware::hidl_vec;
 using ::android::hardware::IPCThreadState;
+using ::android::hardware::tests::lazy::V1_1::ILazy;
 using ::android::hidl::base::V1_0::IBase;
 using ::android::hidl::manager::V1_2::IServiceManager;
 
@@ -147,6 +149,20 @@ TEST_F(HidlLazyTest, GetWithWaitConcurrent) {
     for (auto& thread : threads) {
         thread.join();
     }
+}
+
+TEST_F(HidlLazyTest, ActiveServicesCountCallbackTest) {
+    sp<ILazy> lazy;
+
+    for (const auto& instance : gInstances) {
+        sp<IBase> hal = getHal(instance);
+        EXPECT_NE(hal, nullptr);
+        lazy = ILazy::castFrom(hal);
+        if (lazy) break;
+    }
+    if (!lazy) GTEST_SKIP() << "Services under test do not include ILazy";
+
+    ASSERT_TRUE(lazy->setCustomActiveServicesCountCallback().isOk());
 }
 
 int main(int argc, char** argv) {
