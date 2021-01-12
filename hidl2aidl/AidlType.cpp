@@ -87,6 +87,8 @@ std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo) 
     } else if (type.isBitField()) {
         const BitFieldType& bitfield = static_cast<const BitFieldType&>(type);
         return getAidlType(*bitfield.getElementType(), relativeTo);
+    } else if (type.getJavaType() == "short") {
+        return "char";
     } else {
         return type.getJavaType();
     }

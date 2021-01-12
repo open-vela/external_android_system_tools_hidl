@@ -25,6 +25,7 @@ struct NameCollision {
     @1.1::NameCollision reference;
 
     string c;
+    int16_t d;
 };
 
 union UnionFoo {
@@ -54,6 +55,7 @@ safe_union SafeUnionBar {
     double f;
     bitfield<FooFlag> g;
     @1.1::Value h;
+    uint16_t i;
 };
 
 struct ArrayFoo {
