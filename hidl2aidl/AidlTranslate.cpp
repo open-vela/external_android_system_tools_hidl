@@ -142,8 +142,8 @@ static void h2aScalarChecks(Formatter& out, const Type& type, const std::string&
     static const std::map<ScalarType::Kind, std::pair<std::string, size_t>> kSignedMaxSize{
             {ScalarType::KIND_UINT8,
              {"std::numeric_limits<int8_t>::max()", std::numeric_limits<int8_t>::max()}},
-            {ScalarType::KIND_INT16,
-             {"std::numeric_limits<int32_t>::max()", std::numeric_limits<int32_t>::max()}},
+            {ScalarType::KIND_UINT16, {"", 0}},
+            {ScalarType::KIND_INT16, {"", 0}},
             {ScalarType::KIND_UINT32,
              {"std::numeric_limits<int32_t>::max()", std::numeric_limits<int32_t>::max()}},
             {ScalarType::KIND_UINT64,
@@ -151,11 +151,18 @@ static void h2aScalarChecks(Formatter& out, const Type& type, const std::string&
     const ScalarType* scalarType = type.resolveToScalarType();
     if (scalarType != nullptr && !type.isEnum()) {
         const auto& it = kSignedMaxSize.find(scalarType->getKind());
+        // *int16_t is a special case for both HIDL and AIDL. For uint16_t, checks are only
+        // needed in the Java backend.
+        if (backend != AidlBackend::JAVA && scalarType->getKind() == ScalarType::KIND_UINT16) {
+            return;
+        }
         if (it != kSignedMaxSize.end()) {
             out << "// FIXME This requires conversion between signed and unsigned. Change this if "
                    "it doesn't suit your needs.\n";
-            if (scalarType->getKind() == ScalarType::KIND_INT16) {
-                // AIDL uses an unsigned 16-bit integer(char16_t), so this is signed to unsigned.
+            if (scalarType->getKind() == ScalarType::KIND_UINT16 ||
+                scalarType->getKind() == ScalarType::KIND_INT16) {
+                // HIDL uses a signed 16-bit char in Java for uint16_t and int16_t
+                // AIDL uses an unsigned 16-bit char/char16_t, so this is signed to unsigned.
                 out << "if (" << inputAccess << " < 0) {\n";
             } else {
                 std::string affix = (scalarType->getKind() == ScalarType::KIND_UINT64) ? "L" : "";
@@ -286,14 +293,20 @@ static void simpleTranslation(Formatter& out, const FieldWithVersion& field,
                               const CompoundType* parent, AidlBackend backend) {
     std::string inputAccess = "in." + field.fullName;
     if (backend == AidlBackend::JAVA) {
+        // HIDL uses short(signed) in the Java backend for uint16_t and int16_t
+        // AIDL uses char which is unsigned. This assignment needs a cast.
+        std::string cast;
+        if (AidlHelper::getAidlType(field.field->type(), parent->fqName()) == "char") {
+            cast = "(char) ";
+        }
         if (parent->style() == CompoundType::STYLE_STRUCT) {
             h2aScalarChecks(out, field.field->type(), inputAccess, backend);
-            out << "out." << field.field->name() << " = " << inputAccess << ";\n";
+            out << "out." << field.field->name() << " = " << cast << inputAccess << ";\n";
         } else {
             inputAccess += "()";
             h2aScalarChecks(out, field.field->type(), inputAccess, backend);
-            out << "out.set" << StringHelper::Capitalize(field.fullName) << "(" << inputAccess
-                << ");\n";
+            out << "out.set" << StringHelper::Capitalize(field.fullName) << "(" << cast
+                << inputAccess << ");\n";
         }
     } else {
         if (parent->style() == CompoundType::STYLE_STRUCT) {

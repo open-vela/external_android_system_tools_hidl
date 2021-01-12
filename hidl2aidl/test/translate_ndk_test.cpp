@@ -187,6 +187,14 @@ TEST_F(Hidl2aidlTranslateTest, SafeUnionBarEnum) {
               dest.get<aidl::hidl2aidl::test::SafeUnionBar::h>());
 }
 
+TEST_F(Hidl2aidlTranslateTest, SafeUnionBarChar16) {
+    aidl::hidl2aidl::test::SafeUnionBar dest;
+    hidl2aidl::test::V1_2::SafeUnionBar source;
+    source.i(12);
+    ASSERT_TRUE(h2a::translate(source, &dest));
+    EXPECT_EQ(source.i(), dest.get<aidl::hidl2aidl::test::SafeUnionBar::i>());
+}
+
 TEST_F(Hidl2aidlTranslateTest, ArrayFoo) {
     aidl::hidl2aidl::test::ArrayFoo dest;
     hidl2aidl::test::V1_2::ArrayFoo source;

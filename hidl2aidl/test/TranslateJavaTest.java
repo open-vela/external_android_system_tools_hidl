@@ -211,6 +211,30 @@ public class TranslateJavaTest {
     }
 
     @Test
+    public void SafeUnionBarChar() {
+        hidl2aidl.test.SafeUnionBar dest;
+        hidl2aidl.test.V1_2.SafeUnionBar source = new hidl2aidl.test.V1_2.SafeUnionBar();
+        source.i((short) 12);
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.i(), is((short) dest.getI()));
+    }
+
+    @Test
+    public void SafeUnionBarNegativeChar() {
+        hidl2aidl.test.SafeUnionBar dest;
+        hidl2aidl.test.V1_2.SafeUnionBar source = new hidl2aidl.test.V1_2.SafeUnionBar();
+        source.i((short) -1);
+        try {
+            dest = Translate.h2aTranslate(source);
+            fail("Expected an exception to be thrown for out of bounds signed to unsigned translation");
+        } catch (RuntimeException e) {
+            String message = e.getMessage();
+            assertThat("Unsafe conversion between signed and unsigned scalars for field: in.i()",
+                    is(message));
+        }
+    }
+
+    @Test
     public void ArrayFoo() {
         hidl2aidl.test.ArrayFoo dest;
         hidl2aidl.test.V1_2.ArrayFoo source = new hidl2aidl.test.V1_2.ArrayFoo();
