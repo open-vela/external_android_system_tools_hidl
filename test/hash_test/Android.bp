@@ -42,4 +42,5 @@ cc_test_host {
         "-Werror",
     ],
     generated_sources: ["hidl_hash_test_gen"],
+    gtest: false,
 }

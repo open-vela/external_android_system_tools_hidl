@@ -15,4 +15,5 @@ cc_test_host {
     name: "hidl_error_test",
     cflags: ["-Wall", "-Werror"],
     generated_sources: ["hidl_error_test_gen"],
+    gtest: false,
 }
