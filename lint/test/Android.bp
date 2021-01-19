@@ -31,4 +31,8 @@ cc_test_host {
         "liblog",
     ],
     whole_static_libs: ["libhidl-lint"],
+    test_options: {
+        // These tests currently require the source tree to run properly.
+        unit_test: false,
+    },
 }
