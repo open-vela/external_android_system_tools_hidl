@@ -17,6 +17,7 @@ cc_test {
     defaults: ["hidl-gen-defaults"],
     host_supported: true,
     shared_libs: ["libhidl-gen-utils"],
+    static_libs: ["libgmock"],
     srcs: ["main.cpp"],
     test_suites: ["general-tests"],
 }
