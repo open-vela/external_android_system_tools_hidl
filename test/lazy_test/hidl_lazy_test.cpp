@@ -151,7 +151,7 @@ TEST_F(HidlLazyTest, GetWithWaitConcurrent) {
     }
 }
 
-TEST_F(HidlLazyTest, ActiveServicesCountCallbackTest) {
+TEST_F(HidlLazyTest, ActiveServicesCallbackTest) {
     sp<ILazy> lazy;
 
     for (const auto& instance : gInstances) {
@@ -162,7 +162,7 @@ TEST_F(HidlLazyTest, ActiveServicesCountCallbackTest) {
     }
     if (!lazy) GTEST_SKIP() << "Services under test do not include ILazy";
 
-    ASSERT_TRUE(lazy->setCustomActiveServicesCountCallback().isOk());
+    ASSERT_TRUE(lazy->setCustomActiveServicesCallback().isOk());
 }
 
 int main(int argc, char** argv) {
