@@ -27,13 +27,13 @@ using android::hardware::tests::lazy::V1_1::ILazy;
 
 class Lazy : public ILazy {
   public:
-    ::android::hardware::Return<void> setCustomActiveServicesCountCallback();
+    ::android::hardware::Return<void> setCustomActiveServicesCallback();
 };
 
-::android::hardware::Return<void> Lazy::setCustomActiveServicesCountCallback() {
+::android::hardware::Return<void> Lazy::setCustomActiveServicesCallback() {
     auto lazyRegistrar = android::hardware::LazyServiceRegistrar::getInstance();
-    lazyRegistrar.setActiveServicesCountCallback([lazyRegistrar](int count) mutable -> bool {
-        if (count != 0) {
+    lazyRegistrar.setActiveServicesCallback([lazyRegistrar](bool hasClients) mutable -> bool {
+        if (hasClients) {
             return false;
         }
 
