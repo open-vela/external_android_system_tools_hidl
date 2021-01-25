@@ -522,16 +522,16 @@ bool isVndkCoreLib(const FQName& fqName) {
     return std::find(vndkLibs.begin(), vndkLibs.end(), fqName.string()) != vndkLibs.end();
 }
 
-status_t isSystemExtPackage(const FQName& fqName, const Coordinator* coordinator,
-                            bool* isSystemExt) {
+status_t hasVariantFile(const FQName& fqName, const Coordinator* coordinator,
+                        const std::string& fileName, bool* isVariant) {
     const auto fileExists = [](const std::string& file) {
         struct stat buf;
         return stat(file.c_str(), &buf) == 0;
     };
 
     std::string path;
-    status_t err = coordinator->getFilepath(fqName, Coordinator::Location::PACKAGE_ROOT,
-                                            ".hidl_for_system_ext", &path);
+    status_t err =
+            coordinator->getFilepath(fqName, Coordinator::Location::PACKAGE_ROOT, fileName, &path);
     if (err != OK) return err;
 
     const bool exists = fileExists(path);
@@ -540,8 +540,17 @@ status_t isSystemExtPackage(const FQName& fqName, const Coordinator* coordinator
         coordinator->onFileAccess(path, "r");
     }
 
-    *isSystemExt = exists;
+    *isVariant = exists;
     return OK;
+}
+
+status_t isSystemExtPackage(const FQName& fqName, const Coordinator* coordinator,
+                            bool* isSystemExt) {
+    return hasVariantFile(fqName, coordinator, ".hidl_for_system_ext", isSystemExt);
+}
+
+status_t isOdmPackage(const FQName& fqName, const Coordinator* coordinator, bool* isOdm) {
+    return hasVariantFile(fqName, coordinator, ".hidl_for_odm", isOdm);
 }
 
 static status_t generateAdapterMainSource(const FQName& packageFQName,
@@ -653,6 +662,10 @@ static status_t generateAndroidBpForPackage(const FQName& packageFQName,
     if (err != OK) return err;
     bool isSystemExt = isSystemExtHidl || !isCoreAndroid;
 
+    bool isForOdm;
+    err = isOdmPackage(packageFQName, coordinator, &isForOdm);
+    if (err != OK) return err;
+
     std::string packageRoot;
     err = coordinator->getPackageRoot(packageFQName, &packageRoot);
     if (err != OK) return err;
@@ -682,6 +695,9 @@ static status_t generateAndroidBpForPackage(const FQName& packageFQName,
         }
         if (isSystemExt) {
             out << "system_ext_specific: true,\n";
+        }
+        if (isForOdm) {
+            out << "odm_available: true,\n";
         }
         (out << "srcs: [\n").indent([&] {
            for (const auto& fqName : packageInterfaces) {

@@ -517,6 +517,10 @@ type hidlInterfaceProperties struct {
 	// does  not apply to VTS targets/adapter targets/fuzzers since these components
 	// should not be shipped on device.
 	Apex_available []string
+
+	// Installs the vendor variant of the module to the /odm partition instead of
+	// the /vendor partition.
+	Odm_available *bool
 }
 
 type hidlInterface struct {
@@ -636,6 +640,11 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		productAvailable = proptools.BoolPtr(true)
 	}
 
+	var vendorAvailable *bool
+	if !proptools.Bool(i.properties.Odm_available) {
+		vendorAvailable = proptools.BoolPtr(true)
+	}
+
 	var libraryIfExists []string
 	if shouldGenerateLibrary {
 		libraryIfExists = []string{name.string()}
@@ -679,7 +688,8 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			Name:               proptools.StringPtr(name.string()),
 			Host_supported:     proptools.BoolPtr(true),
 			Recovery_available: proptools.BoolPtr(true),
-			Vendor_available:   proptools.BoolPtr(true),
+			Vendor_available:   vendorAvailable,
+			Odm_available:      i.properties.Odm_available,
 			Product_available:  productAvailable,
 			Double_loadable:    proptools.BoolPtr(isDoubleLoadable(name.string())),
 			Defaults:           []string{"hidl-module-defaults"},
@@ -780,7 +790,8 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 
 	mctx.CreateModule(cc.LibraryFactory, &ccProperties{
 		Name:              proptools.StringPtr(name.adapterHelperName()),
-		Vendor_available:  proptools.BoolPtr(true),
+		Vendor_available:  vendorAvailable,
+		Odm_available:     i.properties.Odm_available,
 		Product_available: productAvailable,
 		Defaults:          []string{"hidl-module-defaults"},
 		Generated_sources: []string{name.adapterHelperSourcesName()},
