@@ -42,9 +42,12 @@ See update-makefiles-helper.sh and update-all-google-makefiles.sh for examples
 of how to generate HIDL makefiles (using the -Landroidbp option).
 
 > **_NOTE:_**  When using the -Landroidbp option, you can force generated
-> modules to be installed in `/system_ext` rather than other parition by putting a
+> modules to be installed in `/system_ext` rather than other partition by putting a
 > marker file `.hidl_for_system_ext` alongside `*.hal` files.
 
+> **_NOTE:_**  You can also install the vendor variant of the generated modules
+> to be installed in `/odm` rather than `/vendor` by putting a marker file
+> `.hidl_for_odm` alongside `*.hal` files.
 
 # c2hal
 
