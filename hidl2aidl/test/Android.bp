@@ -119,8 +119,8 @@ cc_test_library {
         "ndk_test_compile.cpp",
     ],
     shared_libs: [
-        "hidl2aidl_test_gen-cpp",
-        "hidl2aidl_test_gen-ndk_platform",
+        "hidl2aidl_test_gen-V1-cpp",
+        "hidl2aidl_test_gen-V1-ndk_platform",
         "libbinder",
         "libbinder_ndk",
         "libutils",
@@ -151,7 +151,7 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "hidl2aidl_test_gen-ndk_platform",
+        "hidl2aidl_test_gen-V1-ndk_platform",
         "hidl2aidl.test@1.0",
         "hidl2aidl.test@1.1",
         "hidl2aidl.test@1.2",
@@ -185,7 +185,7 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "hidl2aidl_test_gen-cpp",
+        "hidl2aidl_test_gen-V1-cpp",
         "hidl2aidl.test@1.0",
         "hidl2aidl.test@1.1",
         "hidl2aidl.test@1.2",
@@ -212,7 +212,7 @@ android_test {
     static_libs: [
         "androidx.test.core",
         "androidx.test.runner",
-        "hidl2aidl_test_gen-java",
+        "hidl2aidl_test_gen-V1-java",
         "hidl2aidl.test-V1.0-java",
         "hidl2aidl.test-V1.1-java",
         "hidl2aidl.test-V1.2-java",
@@ -227,7 +227,7 @@ phony {
     name: "hidl2aidl_test",
     required: [
         "hidl2aidl_test_comp_cc",
-        "hidl2aidl_test_gen-java",
+        "hidl2aidl_test_gen-V1-java",
         "hidl2aidl_translate_ndk_test",
         "hidl2aidl_translate_cpp_test",
     ],
