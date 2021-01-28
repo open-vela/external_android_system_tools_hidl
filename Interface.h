@@ -37,7 +37,6 @@ extern const FQName gIManagerFqName;
 
 struct Interface : public Scope {
     const static std::unique_ptr<ConstantExpression> FLAG_ONE_WAY;
-    const static std::unique_ptr<ConstantExpression> FLAG_CLEAR_BUF;
 
     Interface(const std::string& localName, const FQName& fullName, const Location& location,
               Scope* parent, const Reference<Type>& superType, const Hash* fileHash);
@@ -51,8 +50,6 @@ struct Interface : public Scope {
     bool isInterface() const override;
     bool isIBase() const { return fqName() == gIBaseFqName; }
     std::string typeName() const override;
-
-    bool hasSensitiveDataAnnotation() const;
 
     const Interface* superType() const;
 
@@ -106,7 +103,7 @@ struct Interface : public Scope {
     status_t resolveInheritance() override;
     status_t validate() const override;
     status_t validateUniqueNames() const;
-    status_t validateAnnotations() const override;
+    status_t validateAnnotations() const;
 
     void emitReaderWriter(
             Formatter &out,

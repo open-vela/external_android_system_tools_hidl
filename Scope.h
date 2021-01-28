@@ -40,9 +40,6 @@ struct Scope : public NamedType {
 
     void addType(NamedType* type);
 
-    status_t validate() const override;
-    virtual status_t validateAnnotations() const;
-
     status_t validateUniqueNames() const;
 
     // lookup a type given an FQName.

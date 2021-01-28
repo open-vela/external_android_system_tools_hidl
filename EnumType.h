@@ -74,7 +74,6 @@ struct EnumType : public Scope {
 
     status_t resolveInheritance() override;
     status_t validate() const override;
-    status_t validateAnnotations() const override;
     status_t validateUniqueNames() const;
 
     void emitJavaFieldInitializer(Formatter&, const std::string&) const override;
