@@ -732,9 +732,10 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			// to build framework, which is used to build system_current.  Use core_current
 			// plus hwbinder.stubs, which together form a subset of system_current that does
 			// not depend on framework.
-			Sdk_version:    proptools.StringPtr("core_current"),
-			Libs:           []string{"hwbinder.stubs"},
-			Apex_available: i.properties.Apex_available,
+			Sdk_version:     proptools.StringPtr("core_current"),
+			Libs:            []string{"hwbinder.stubs"},
+			Apex_available:  i.properties.Apex_available,
+			Min_sdk_version: getMinSdkVersion(name.string()),
 		}
 
 		mctx.CreateModule(java.LibraryFactory, &javaProperties{
@@ -759,11 +760,12 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			Outputs:    []string{name.sanitizedDir() + "Constants.java"},
 		})
 		mctx.CreateModule(java.LibraryFactory, &javaProperties{
-			Name:           proptools.StringPtr(name.javaConstantsName()),
-			Defaults:       []string{"hidl-java-module-defaults"},
-			Sdk_version:    proptools.StringPtr("core_current"),
-			Srcs:           []string{":" + name.javaConstantsSourcesName()},
-			Apex_available: i.properties.Apex_available,
+			Name:            proptools.StringPtr(name.javaConstantsName()),
+			Defaults:        []string{"hidl-java-module-defaults"},
+			Sdk_version:     proptools.StringPtr("core_current"),
+			Srcs:            []string{":" + name.javaConstantsSourcesName()},
+			Apex_available:  i.properties.Apex_available,
+			Min_sdk_version: getMinSdkVersion(name.string()),
 		})
 	}
 
