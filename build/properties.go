@@ -48,16 +48,15 @@ type ccProperties struct {
 }
 
 type javaProperties struct {
-	Name            *string
-	Owner           *string
-	Defaults        []string
-	Installable     *bool
-	Sdk_version     *string
-	Srcs            []string
-	Libs            []string
-	Static_libs     []string
-	Apex_available  []string
-	Min_sdk_version *string
+	Name           *string
+	Owner          *string
+	Defaults       []string
+	Installable    *bool
+	Sdk_version    *string
+	Srcs           []string
+	Libs           []string
+	Static_libs    []string
+	Apex_available []string
 }
 
 type fuzzConfig struct {
