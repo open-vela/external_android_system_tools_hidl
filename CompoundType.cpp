@@ -296,7 +296,7 @@ void CompoundType::emitSafeUnionReaderWriterForInterfaces(
                       emitSafeUnionUnknownDiscriminatorError(out, "_hidl_d_primitive",
                                                              !isReader /*fatal*/);
                       if (isReader) {
-                          out << "_hidl_err = BAD_VALUE;\n";
+                          out << "_hidl_err = ::android::BAD_VALUE;\n";
                           handleError(out, mode);
                       }
                   }).endl();

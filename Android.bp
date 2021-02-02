@@ -61,9 +61,6 @@ java_defaults {
 cc_library_host_static {
     name: "libhidl-gen",
     defaults: ["hidl-gen-defaults"],
-    cflags: [
-        "-Wno-bool-operation", // found in ConstantExpression.cpp:105
-    ],
     srcs: [
         "Annotation.cpp",
         "ArrayType.cpp",
@@ -88,6 +85,7 @@ cc_library_host_static {
         "TypeDef.cpp",
         "VectorType.cpp",
     ],
+    header_libs: ["libhwbinder_headers"],  // for constants
     shared_libs: [
         "libbase",
         "liblog",
