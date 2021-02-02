@@ -19,9 +19,7 @@ java_genrule {
     tools: [
         "hidl-gen",
     ],
-    required: [
-        "android.hardware.tests.baz-V1.0-java",
-    ],
+    srcs: [":android.hardware.tests.baz@1.0_hal"],
     cmd: "$(location hidl-gen) -o $(genDir) -Ljava-impl android.hardware.tests.baz@1.0",
     out: [
         "Base.java",

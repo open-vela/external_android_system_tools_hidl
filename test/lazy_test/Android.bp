@@ -4,6 +4,7 @@ cc_test {
     srcs: ["hidl_lazy_test.cpp"],
 
     shared_libs: [
+        "android.hardware.tests.lazy@1.1",
         "libbase",
         "libhidl-gen-utils",
         "libhidlbase",
@@ -25,7 +26,7 @@ cc_binary {
     srcs: ["hidl_lazy_test_server.cpp"],
 
     shared_libs: [
-        "android.hardware.tests.lazy@1.0",
+        "android.hardware.tests.lazy@1.1",
         "libbase",
         "libhidlbase",
         "libutils",
