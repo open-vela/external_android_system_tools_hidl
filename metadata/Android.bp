@@ -19,14 +19,10 @@ cc_library_headers {
 cc_test_host {
     name: "hidl_metadata_test",
     srcs: ["test.cpp"],
-    test_options: {
-        unit_test: true,
-    },
     static_libs: [
         "libhidlmetadata",
         "libgmock",
     ],
-    test_suites: ["general-tests"],
 }
 
 prebuilt_hidl_interfaces {
