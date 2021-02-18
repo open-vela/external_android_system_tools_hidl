@@ -891,7 +891,11 @@ FileGenerator::GenerationFunction generateExportHeaderForPackage(bool forJava) {
         }
 
         if (exportedTypes.empty()) {
-            return OK;
+            fprintf(stderr,
+                    "ERROR: -Ljava-constants (Android.bp: gen_java_constants) requested for %s, "
+                    "but no types declare @export.",
+                    packageFQName.string().c_str());
+            return UNKNOWN_ERROR;
         }
 
         Formatter out = getFormatter();
