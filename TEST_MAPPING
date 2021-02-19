@@ -7,10 +7,6 @@
       "name": "hidl_test_java"
     },
     {
-      "name": "libhidl-gen-utils_test",
-      "host": true
-    },
-    {
       "name": "libhidl-gen-utils_test"
     },
     {
