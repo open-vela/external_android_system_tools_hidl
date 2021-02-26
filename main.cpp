@@ -859,6 +859,52 @@ bool validateForSource(const FQName& fqName, const Coordinator* coordinator,
     return true;
 }
 
+bool validateForFormat(const FQName& fqName, const Coordinator* coordinator,
+                       const std::string& format) {
+    CHECK_EQ(format, "format");
+
+    if (!validateForSource(fqName, coordinator, format)) return false;
+
+    std::vector<FQName> packageInterfaces;
+
+    if (fqName.isFullyQualified()) {
+        packageInterfaces.push_back(fqName);
+    } else {
+        status_t err = coordinator->appendPackageInterfacesToVector(fqName, &packageInterfaces);
+        if (err != OK) return err;
+    }
+
+    bool destroysInformation = false;
+
+    for (const auto& fqName : packageInterfaces) {
+        AST* ast = coordinator->parse(fqName);
+
+        if (ast->getUnhandledComments().size() > 0) {
+            destroysInformation = true;
+            for (const auto& i : ast->getUnhandledComments()) {
+                std::cerr << "Unrecognized comment at " << i->location() << std::endl;
+                Formatter err(stderr);
+                err.indent();
+                i->emit(err);
+                err.unindent();
+                err.endl();
+            }
+        }
+    }
+
+    if (destroysInformation) {
+        std::cerr << "\nhidl-gen does not support comments at these locations, and formatting "
+                     "the file would destroy them. HIDL doc comments need to be multiline comments "
+                     "(/*...*/) before specific elements. This will also cause them to be emitted "
+                     "in output files in the correct locations so that IDE users or people "
+                     "inspecting generated source can see them in the correct location. Formatting "
+                     "the file would destroy these comments.\n";
+        return false;
+    }
+
+    return true;
+}
+
 FileGenerator::GenerationFunction generateExportHeaderForPackage(bool forJava) {
     return [forJava](const FQName& packageFQName, const Coordinator* coordinator,
                      const FileGenerator::GetFormatter& getFormatter) -> status_t {
@@ -1355,7 +1401,7 @@ static const std::vector<OutputHandler> kFormats = {
         OutputMode::NEEDS_SRC,
         Coordinator::Location::PACKAGE_ROOT,
         GenerationGranularity::PER_FILE,
-        validateForSource,
+        validateForFormat,
         {
             {
                 FileGenerator::alwaysGenerate,
@@ -1537,8 +1583,7 @@ int main(int argc, char **argv) {
         }
 
         if (!outputFormat->validate(fqName, &coordinator, outputFormat->name())) {
-            fprintf(stderr,
-                    "ERROR: output handler failed.\n");
+            fprintf(stderr, "ERROR: Validation failed.\n");
             exit(1);
         }
 
