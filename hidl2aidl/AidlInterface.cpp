@@ -61,9 +61,18 @@ static void emitAidlMethodParams(WrappedOutput* wrappedOutput,
     }
 }
 
-std::vector<const Method*> AidlHelper::getUserDefinedMethods(const Interface& interface) {
+std::vector<const Method*> AidlHelper::getUserDefinedMethods(Formatter& out,
+                                                             const Interface& interface) {
     std::vector<const Method*> methods;
     for (const Interface* iface : interface.typeChain()) {
+        if (!AidlHelper::shouldBeExpanded(interface.fqName(), iface->fqName()) &&
+            iface->fqName() != gIBaseFqName) {
+            out << "// Types from " << iface->fqName().string()
+                << " are not included because it is in a separate package, and it is expected to "
+                   "be a separate AIDL interface. To include these methods, use the '-e' argument. "
+                   "\n";
+            break;
+        }
         const std::vector<Method*> userDefined = iface->userDefinedMethods();
         methods.insert(methods.end(), userDefined.begin(), userDefined.end());
     }
@@ -160,26 +169,29 @@ void AidlHelper::emitAidl(
         std::vector<const NodeWithVersion<NamedType>> supersededNamedTypes;
         std::map<std::string, NodeWithVersion<Method>> latestMethodForBaseName;
         std::vector<const NodeWithVersion<Method>> supersededMethods;
-        std::vector<const Interface*> typeChain = interface.typeChain();
-        for (auto iface = typeChain.rbegin(); iface != typeChain.rend(); ++iface) {
-            for (const Method* method : (*iface)->userDefinedMethods()) {
-                pushVersionedNodeOntoMap({(*iface)->fqName().getPackageMajorVersion(),
-                                          (*iface)->fqName().getPackageMinorVersion(), method,
+        for (const Interface* iface : interface.typeChain()) {
+            if (!AidlHelper::shouldBeExpanded(interface.fqName(), iface->fqName())) {
+                // Stop traversing extended interfaces once they leave this package
+                break;
+            }
+            for (const Method* method : iface->userDefinedMethods()) {
+                pushVersionedNodeOntoMap({iface->fqName().getPackageMajorVersion(),
+                                          iface->fqName().getPackageMinorVersion(), method,
                                           getBaseName(method->name())},
                                          &latestMethodForBaseName, &supersededMethods);
             }
             // Types from other interfaces will be handled while those interfaces
             // are being emitted.
-            if ((*iface)->getBaseName() != interface.getBaseName()) {
+            if (iface->getBaseName() != interface.getBaseName()) {
                 continue;
             }
-            for (const NamedType* type : (*iface)->getSubTypes()) {
+            for (const NamedType* type : iface->getSubTypes()) {
                 // The baseName for types is not being stripped of the version
                 // numbers like that of the methods. If a type was named
                 // BigStruct_1_1 and the previous version was named BigStruct,
                 // they will be treated as two different types.
-                pushVersionedNodeOntoMap({(*iface)->fqName().getPackageMajorVersion(),
-                                          (*iface)->fqName().getPackageMinorVersion(), type,
+                pushVersionedNodeOntoMap({iface->fqName().getPackageMajorVersion(),
+                                          iface->fqName().getPackageMinorVersion(), type,
                                           getAidlName(type->fqName())},
                                          &latestTypeForBaseName, &supersededNamedTypes);
             }
