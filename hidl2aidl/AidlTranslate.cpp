@@ -75,11 +75,21 @@ static const std::string aidlTypePackage(const NamedType& type, AidlBackend back
 static void emitEnumStaticAssert(Formatter& out, const NamedType& namedType, AidlBackend backend) {
     CHECK(namedType.isEnum());
     const auto& enumType = static_cast<const EnumType&>(namedType);
-    enumType.forEachValueFromRoot([&](const EnumValue* value) {
-        out << "static_assert(" << aidlTypePackage(namedType, backend) << "::" << value->name()
+
+    std::vector<const EnumValue*> values;
+    for (const EnumType* type : enumType.typeChain()) {
+        if (!AidlHelper::shouldBeExpanded(enumType.fqName(), type->fqName())) {
+            break;
+        }
+        values.insert(values.end(), type->values().rbegin(), type->values().rend());
+    }
+
+    for (auto it = values.rbegin(); it != values.rend(); ++it) {
+        out << "static_assert(" << aidlTypePackage(namedType, backend) << "::" << (*it)->name()
             << " == static_cast<" << aidlTypePackage(namedType, backend) << ">("
-            << namedType.fullName() << "::" << value->name() << "));\n";
-    });
+            << namedType.fullName() << "::" << (*it)->name() << "));\n";
+    };
+
     out << "\n";
 }
 
@@ -109,7 +119,9 @@ static void namedTypeTranslation(Formatter& out, const std::set<const NamedType*
         } else {
             AidlHelper::notes() << "An unknown named type was found in translation: "
                                 << type->fqName().string() + "\n";
-            out << "#error FIXME Unknown type: " << type->fqName().string() << "\n";
+            out << "// FIXME Unknown type: " << type->fqName().string() << "\n";
+            out << "// That type's package needs to be converted separately and the corresponding "
+                   "translate function should be added here.\n";
         }
     } else {
         if (parent->style() == CompoundType::STYLE_STRUCT) {
