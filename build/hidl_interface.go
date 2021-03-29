@@ -1021,7 +1021,6 @@ var minSdkVersion = map[string]string{
 	"android.hardware.media.bufferpool@2.0":     "29",
 	"android.hardware.media.c2@1.0":             "29",
 	"android.hardware.media.c2@1.1":             "29",
-	"android.hardware.media.c2@1.2":             "29",
 	"android.hardware.media.omx@1.0":            "29",
 	"android.hardware.media@1.0":                "29",
 	"android.hardware.neuralnetworks@1.0":       "30",
@@ -1155,6 +1154,10 @@ func makeVarsProvider(ctx android.MakeVarsContext) {
 
 func canInterfaceExist(name string) bool {
 	if strings.HasPrefix(name, "android.") {
+		// TODO(b/183995233): stop using this name
+		if strings.HasPrefix(name, "android.vendor.samsung_slsi.telephony.hardware.radio") {
+			return true
+		}
 		return allAospHidlInterfaces[name]
 	}
 
