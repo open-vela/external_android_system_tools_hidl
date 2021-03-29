@@ -122,9 +122,8 @@ struct EnumType : public Scope {
 
     void emitExportedHeader(Formatter& out, bool forJava) const override;
 
+   private:
     std::vector<const EnumType*> typeChain() const;
-
-  private:
     std::vector<const EnumType*> superTypeChain() const;
 
     const Annotation *findExportAnnotation() const;
