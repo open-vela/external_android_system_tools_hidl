@@ -39,7 +39,6 @@ namespace android {
 
 Formatter* AidlHelper::notesFormatter = nullptr;
 std::string AidlHelper::fileHeader = "";
-bool AidlHelper::expandExtended = false;
 
 Formatter& AidlHelper::notes() {
     CHECK(notesFormatter != nullptr);
@@ -124,7 +123,7 @@ void AidlHelper::emitFileHeader(
         // This is a separate case because getReferences doesn't traverse all the superTypes and
         // sometimes includes references to types that would not exist on AIDL
         const std::vector<const Method*>& methods =
-                getUserDefinedMethods(out, static_cast<const Interface&>(type));
+                getUserDefinedMethods(static_cast<const Interface&>(type));
         for (const Method* method : methods) {
             for (const Reference<Type>* ref : method->getReferences()) {
                 importLocallyReferencedType(*ref->get(), &imports);
@@ -184,17 +183,10 @@ void AidlHelper::processCompoundType(const CompoundType& compoundType,
                                                 ? compoundType.fqName().getVersion()
                                                 : std::pair<size_t, size_t>{0, 0};
     for (const NamedReference<Type>* field : compoundType.getFields()) {
-        // Check for references to another version of itself
+        // Check for references to an older version of itself
         if (field->get()->typeName() == compoundType.typeName()) {
-            if (AidlHelper::shouldBeExpanded(
-                        static_cast<const CompoundType&>(*field->get()).fqName(),
-                        compoundType.fqName())) {
-                processCompoundType(static_cast<const CompoundType&>(*field->get()), processedType,
-                                    fieldNamePrefix + field->name() + ".");
-            } else {
-                // Keep this field as is
-                processedType->fields.push_back({field, fieldNamePrefix + field->name(), version});
-            }
+            processCompoundType(static_cast<const CompoundType&>(*field->get()), processedType,
+                                fieldNamePrefix + field->name() + ".");
         } else {
             // Handle duplicate field names. Keep only the most recent definitions.
             auto it = std::find_if(processedType->fields.begin(), processedType->fields.end(),
@@ -246,10 +238,6 @@ void AidlHelper::emitFileHeader(Formatter& out) {
     } else {
         out << fileHeader << "\n";
     }
-}
-
-bool AidlHelper::shouldBeExpanded(const FQName& a, const FQName& b) {
-    return a.package() == b.package() || expandExtended;
 }
 
 }  // namespace android
