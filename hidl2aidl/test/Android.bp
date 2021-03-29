@@ -119,6 +119,7 @@ aidl_interface {
             sdk_version: "module_current",
         },
     },
+    flags: ["-Werror", "-Wno-mixed-oneway"],
 }
 
 cc_test_library {
