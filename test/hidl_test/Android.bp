@@ -17,6 +17,9 @@ python_test_host {
         "hidl_test_servers",
     ],
     test_suites: ["general-tests"],
+    test_options: {
+        unit_test: false,
+    },
 }
 
 cc_defaults {
