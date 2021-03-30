@@ -352,7 +352,7 @@ static const std::string declareAidlFunctionSignature(const NamedType* type, Aid
     }
 }
 
-static const std::string getPackageFilePath(const NamedType* type) {
+static const std::string getHidlPackagePath(const NamedType* type) {
     return base::Join(base::Split(type->fqName().package(), "."), "/");
 }
 
@@ -370,17 +370,17 @@ static std::optional<const Interface*> getParentInterface(const NamedType* type)
 static const std::string hidlIncludeFile(const NamedType* type) {
     std::optional<const Interface*> parent = getParentInterface(type);
     if (parent) {
-        return "#include \"" + getPackageFilePath(type) + "/" + type->fqName().version() + "/" +
+        return "#include \"" + getHidlPackagePath(type) + "/" + type->fqName().version() + "/" +
                parent.value()->fqName().getInterfaceName() + ".h\"\n";
     } else {
-        return "#include \"" + getPackageFilePath(type) + "/" + type->fqName().version() +
+        return "#include \"" + getHidlPackagePath(type) + "/" + type->fqName().version() +
                "/types.h\"\n";
     }
 }
 
 static const std::string aidlIncludeFile(const NamedType* type, AidlBackend backend) {
     const std::string prefix = (backend == AidlBackend::NDK) ? "aidl/" : std::string();
-    return "#include \"" + prefix + getPackageFilePath(type) + "/" +
+    return "#include \"" + prefix + AidlHelper::getAidlPackagePath(type->fqName()) + "/" +
            AidlHelper::getAidlType(*type, type->fqName()) + ".h\"\n";
 }
 
