@@ -17,4 +17,9 @@
 package hidl2aidl.test@3.0;
 
 // minimal file for run_build_file_test.sh
-interface IFoo { };
+interface IFoo {
+    // minimal type to get translate libraries to generate and build
+    struct BuildThis {
+        int32_t a;
+    };
+};
