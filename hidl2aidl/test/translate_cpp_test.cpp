@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <hidl2aidl/test/extension/translate-cpp.h>
 #include <hidl2aidl/test/translate-cpp.h>
 
 #include <gtest/gtest.h>
@@ -276,6 +277,16 @@ TEST_F(Hidl2aidlTranslateTest, VectorFooString) {
     ASSERT_TRUE(h2a::translate(source, &dest));
     EXPECT_EQ(source.d[0], String8(dest.d[0]).c_str());
     EXPECT_EQ(source.d[1], String8(dest.d[1]).c_str());
+}
+
+TEST_F(Hidl2aidlTranslateTest, ExtensionArrayFoo) {
+    hidl2aidl::test::extension::ArrayFoo dest;
+    hidl2aidl::test::extension::V1_2::ArrayFoo source;
+    source.e[0] = 12;
+    source.e[1] = 2;
+    ASSERT_TRUE(h2a::translate(source, &dest));
+    EXPECT_EQ(source.e[0], dest.e[0]);
+    EXPECT_EQ(source.e[1], dest.e[1]);
 }
 
 }  // namespace android

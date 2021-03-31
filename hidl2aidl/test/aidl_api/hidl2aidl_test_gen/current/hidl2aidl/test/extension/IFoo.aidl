@@ -17,8 +17,8 @@
 // with such a backward incompatible change, it has a high risk of breaking
 // later when a module using the interface is updated, e.g., Mainline modules.
 
-package hidl2aidl.test;
+package hidl2aidl.test.extension;
 @VintfStability
-parcelable OverrideMe {
-  String a;
+interface IFoo {
+  int doCoolThings();
 }
