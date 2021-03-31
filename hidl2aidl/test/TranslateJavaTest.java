@@ -331,4 +331,16 @@ public class TranslateJavaTest {
         assertThat(source.d.get(0), is(dest.d[0]));
         assertThat(source.d.get(1), is(dest.d[1]));
     }
+
+    @Test
+    public void ExtensionArrayFoo() {
+        hidl2aidl.test.extension.ArrayFoo dest;
+        hidl2aidl.test.extension.V1_2.ArrayFoo source =
+                new hidl2aidl.test.extension.V1_2.ArrayFoo();
+        source.e[0] = 12;
+        source.e[1] = 2;
+        dest = hidl2aidl.test.extension.Translate.h2aTranslate(source);
+        assertThat(source.e[0], is(dest.e[0]));
+        assertThat(source.e[1], is(dest.e[1]));
+    }
 }
