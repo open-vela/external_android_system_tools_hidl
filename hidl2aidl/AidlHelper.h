@@ -100,7 +100,8 @@ struct AidlHelper {
     static void emitAidl(const Interface& interface, const Coordinator& coordinator,
                          const std::map<const NamedType*, const ProcessedCompoundType>&);
     // Returns all methods that would exist in an AIDL equivalent interface
-    static std::vector<const Method*> getUserDefinedMethods(const Interface& interface);
+    static std::vector<const Method*> getUserDefinedMethods(Formatter& out,
+                                                            const Interface& interface);
 
     static void processCompoundType(const CompoundType& compoundType,
                                     ProcessedCompoundType* processedType,
@@ -119,11 +120,15 @@ struct AidlHelper {
             const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
     static void setFileHeader(const std::string& file);
     static void emitFileHeader(Formatter& out);
+    static void setExpandExtended(bool expand) { expandExtended = expand; };
+    static bool isExpandExtended() { return expandExtended; };
+    static bool shouldBeExpanded(const FQName& source, const FQName& extended);
 
   private:
     // This is the formatter to use for additional conversion output
     static Formatter* notesFormatter;
     static std::string fileHeader;
+    static bool expandExtended;
 };
 
 }  // namespace android
