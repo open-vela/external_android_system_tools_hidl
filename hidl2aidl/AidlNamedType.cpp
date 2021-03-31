@@ -46,15 +46,29 @@ static void emitEnumAidlDefinition(Formatter& out, const EnumType& enumType) {
     out << "@VintfStability\n";
     out << "@Backing(type=\"" << AidlHelper::getAidlType(*scalar, enumType.fqName()) << "\")\n";
     out << "enum " << AidlHelper::getAidlType(enumType, enumType.fqName()) << " ";
+
+    std::vector<const EnumValue*> values;
+    const EnumType* skippedType = nullptr;
+    for (const EnumType* type : enumType.typeChain()) {
+        if (!AidlHelper::shouldBeExpanded(enumType.fqName(), type->fqName())) {
+            skippedType = type;
+            break;
+        }
+        values.insert(values.end(), type->values().rbegin(), type->values().rend());
+    }
     out.block([&] {
-        enumType.forEachValueFromRoot([&](const EnumValue* value) {
-            value->emitDocComment(out);
-            out << value->name();
-            if (!value->isAutoFill()) {
-                out << " = " << value->constExpr()->expression();
+        if (skippedType != nullptr) {
+            out << "// Not expanding values from " << skippedType->fqName().string()
+                << ". See \'-e\' argument.\n";
+        }
+        for (auto it = values.rbegin(); it != values.rend(); ++it) {
+            (*it)->emitDocComment(out);
+            out << (*it)->name();
+            if (!(*it)->isAutoFill()) {
+                out << " = " << (*it)->constExpr()->expression();
             }
             out << ",\n";
-        });
+        };
     });
 }
 
