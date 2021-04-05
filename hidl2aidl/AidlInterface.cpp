@@ -151,6 +151,25 @@ static bool shouldWarnStatusType(const std::string& typeName) {
     return false;
 }
 
+static bool shouldWarnOutParam(const std::string& typeName) {
+    static const std::vector<std::string> kNoOutParamTypes = {"ParcelFileDescriptor",
+                                                              "FileDescriptor",
+                                                              "ParcelableHolder",
+                                                              "IBinder",
+                                                              "String",
+                                                              "CharacterSequence",
+                                                              "void",
+                                                              "boolean",
+                                                              "byte",
+                                                              "char",
+                                                              "int",
+                                                              "long",
+                                                              "float",
+                                                              "double"};
+    return std::find(kNoOutParamTypes.begin(), kNoOutParamTypes.end(), typeName) !=
+           kNoOutParamTypes.end();
+}
+
 void AidlHelper::emitAidl(
         const Interface& interface, const Coordinator& coordinator,
         const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes) {
@@ -229,8 +248,12 @@ void AidlHelper::emitAidl(
 
                          if (shouldWarnStatusType(aidlType)) {
                              out << "// FIXME: AIDL has built-in status types. Do we need the "
-                                    "status type "
-                                    "here?\n";
+                                    "status type here?\n";
+                         }
+                         if (method->results().size() > 1 && shouldWarnOutParam(aidlType)) {
+                             out << "// FIXME: AIDL does not allow " << aidlType
+                                 << " to be an out parameter.\n";
+                             out << "// Move it to return, or add it to a Parcelable.\n";
                          }
                          results.push_back(res);
                      }
@@ -309,7 +332,6 @@ void AidlHelper::emitAidl(
                          }
                          wrappedOutput.group([&] {
                              if (emitArgs) wrappedOutput.printUnlessWrapped(" ");
-                             // TODO: Emit warning if a primitive is given as a out param.
                              emitAidlMethodParams(&wrappedOutput, results, /* prefix */ "out ",
                                                   /* attachToLast */ ");\n", interface);
                          });
