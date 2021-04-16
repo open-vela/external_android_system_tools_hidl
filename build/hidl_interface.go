@@ -1154,10 +1154,6 @@ func makeVarsProvider(ctx android.MakeVarsContext) {
 
 func canInterfaceExist(name string) bool {
 	if strings.HasPrefix(name, "android.") {
-		// TODO(b/183995233): stop using this name
-		if strings.HasPrefix(name, "android.vendor.samsung_slsi.telephony.hardware.radio") {
-			return true
-		}
 		return allAospHidlInterfaces[name]
 	}
 
