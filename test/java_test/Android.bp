@@ -20,6 +20,9 @@ python_test_host {
         "general-tests",
         "vts",
     ],
+    test_options: {
+        unit_test: false,
+    },
 }
 
 cc_test {
