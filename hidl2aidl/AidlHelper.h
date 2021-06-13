@@ -83,7 +83,7 @@ struct AidlHelper {
     static void emitFileHeader(
             Formatter& out, const NamedType& type,
             const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
-    static void importLocallyReferencedType(const Type& type, std::set<std::string>* imports);
+    static void importLocallyReferencedType(const Type& type, std::set<FQName>* imports);
     static Formatter getFileWithHeader(
             const NamedType& namedType, const Coordinator& coordinator,
             const std::map<const NamedType*, const ProcessedCompoundType>& processedTypes);
