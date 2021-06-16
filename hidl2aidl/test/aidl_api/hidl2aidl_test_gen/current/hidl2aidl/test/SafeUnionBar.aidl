@@ -31,4 +31,7 @@ union SafeUnionBar {
   hidl2aidl.test.FooFlag g;
   hidl2aidl.test.Value h;
   char i;
+  byte[] j;
+  hidl2aidl.test.Value[] k;
+  byte[] l;
 }
