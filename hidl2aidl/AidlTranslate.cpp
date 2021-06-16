@@ -242,16 +242,18 @@ static void containerTranslation(Formatter& out, const FieldWithVersion& field,
     std::string javaSizeAccess;
     std::string javaElementAccess;
     std::string cppSize;
+    const std::string inputAccess = "in." + field.fullName +
+                                    (parent->style() == CompoundType::STYLE_SAFE_UNION ? "()" : "");
     if (field.field->type().isArray()) {
         elementType = static_cast<const ArrayType*>(field.field->get())->getElementType();
-        javaSizeAccess = ".length";
+        javaSizeAccess = inputAccess + ".length";
         javaElementAccess = "[i]";
-        cppSize = "sizeof(in." + field.fullName + ")/sizeof(in." + field.fullName + "[0])";
+        cppSize = "sizeof(" + inputAccess + ")/sizeof(" + inputAccess + "[0])";
     } else if (field.field->type().isVector()) {
         elementType = static_cast<const VectorType*>(field.field->get())->getElementType();
-        javaSizeAccess = ".size()";
+        javaSizeAccess = inputAccess + ".size()";
         javaElementAccess = ".get(i)";
-        cppSize = "in." + field.fullName + ".size()";
+        cppSize = inputAccess + ".size()";
     } else {
         LOG(FATAL) << "Unexpected container type for field: " << field.field->name();
         return;
@@ -269,29 +271,49 @@ static void containerTranslation(Formatter& out, const FieldWithVersion& field,
         return;
     }
     if (backend == AidlBackend::JAVA) {
-        const std::string inputAccess = "in." + field.fullName;
         out << "if (" << inputAccess << " != null) {\n";
         out.indent([&] {
-            out << "out." << field.field->name() << " = new " << elementType->getJavaType(true)
-                << "[" << inputAccess << javaSizeAccess << "];\n";
-            out << "for (int i = 0; i < " << inputAccess << javaSizeAccess << "; i++) {\n";
+            if (parent->style() == CompoundType::STYLE_SAFE_UNION) {
+                out << "out.set" << StringHelper::Capitalize(field.field->name()) << "(new "
+                    << elementType->getJavaType(true) << "[" << javaSizeAccess << "]);\n";
+            } else {
+                out << "out." << field.field->name() << " = new " << elementType->getJavaType(true)
+                    << "[" << javaSizeAccess << "];\n";
+            }
+            out << "for (int i = 0; i < " << javaSizeAccess << "; i++) {\n";
             out.indent([&] {
                 h2aScalarChecks(out, *elementType, inputAccess + javaElementAccess, backend);
-                out << "out." << field.field->name() << "[i] = " << inputAccess << javaElementAccess
-                    << ";\n";
+                if (parent->style() == CompoundType::STYLE_SAFE_UNION) {
+                    out << "out.get" << StringHelper::Capitalize(field.field->name()) << "()";
+                } else {
+                    out << "out." << field.field->name();
+                }
+                out << "[i] = " << inputAccess << javaElementAccess << ";\n";
             });
             out << "}\n";
         });
         out << "}\n";
     } else {
-        const std::string inputAccessElement = "in." + field.fullName + "[i]";
+        const std::string inputAccessElement = inputAccess + "[i]";
         out << "{\n";
         out.indent([&] {
+            if (parent->style() == CompoundType::STYLE_SAFE_UNION) {
+                out << "out->set<" << aidlTypePackage(*parent, backend)
+                    << "::" << field.field->name() << ">();\n";
+            }
             out << "size_t size = " << cppSize << ";\n";
             out << "for (size_t i = 0; i < size; i++) {\n";
             out.indent([&] {
                 h2aScalarChecks(out, *elementType, inputAccessElement, backend);
-                out << "out->" << field.field->name() << ".push_back("
+                out << "out->";
+                if (parent->style() == CompoundType::STYLE_SAFE_UNION) {
+                    out << "get<" << aidlTypePackage(*parent, backend)
+                        << "::" << field.field->name() << ">()";
+                } else {
+                    out << field.field->name();
+                }
+
+                out << ".push_back("
                     << wrapCppSource(inputAccessElement, *elementType, parent->fqName(), backend)
                     << ");\n";
             });
