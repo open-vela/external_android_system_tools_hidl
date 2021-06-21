@@ -19,16 +19,8 @@
 
 package hidl2aidl.test;
 @VintfStability
-union SafeUnionBar {
-  boolean noInit;
-  byte a;
-  long b;
-  hidl2aidl.test.SafeUnionBarInnerStructBar innerStructBar;
-  hidl2aidl.test.OnlyIn11 c;
-  String d;
-  float e;
-  double f;
-  hidl2aidl.test.FooFlag g;
-  hidl2aidl.test.Value h;
-  char i;
+interface IBar {
+  void extraMethod(in hidl2aidl.test.IBarInner inner);
+  String someBar(in String a, in byte b);
+  oneway void someFoo(in byte a);
 }

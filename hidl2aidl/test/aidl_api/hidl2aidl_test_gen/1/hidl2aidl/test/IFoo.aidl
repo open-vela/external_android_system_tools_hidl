@@ -19,16 +19,16 @@
 
 package hidl2aidl.test;
 @VintfStability
-union SafeUnionBar {
-  boolean noInit;
-  byte a;
-  long b;
-  hidl2aidl.test.SafeUnionBarInnerStructBar innerStructBar;
-  hidl2aidl.test.OnlyIn11 c;
-  String d;
-  float e;
-  double f;
-  hidl2aidl.test.FooFlag g;
-  hidl2aidl.test.Value h;
-  char i;
+interface IFoo {
+  void multipleInputs(in String in1, in String in2);
+  void multipleInputsAndOutputs(in String in1, in String in2, out hidl2aidl.test.IFooBigStruct out1, out hidl2aidl.test.IFooBigStruct out2);
+  void multipleOutputs(out hidl2aidl.test.IFooBigStruct out1, out hidl2aidl.test.IFooBigStruct out2);
+  String oneOutput();
+  String removedOutput();
+  void someBar(in String a, in String b);
+  oneway void someFoo(in byte a);
+  void useImportedStruct(in hidl2aidl.test.Outer outer);
+  hidl2aidl.test.IFooBigStruct useStruct();
+  void versionTest_(in String a);
+  boolean versionTest_two_(in String a);
 }
