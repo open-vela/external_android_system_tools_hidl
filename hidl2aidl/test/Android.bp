@@ -138,7 +138,6 @@ aidl_interface {
         "-Werror",
         "-Wno-mixed-oneway",
     ],
-    versions: ["1"],
 }
 
 cc_test_library {
