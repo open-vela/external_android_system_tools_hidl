@@ -19,16 +19,9 @@
 
 package hidl2aidl.test;
 @VintfStability
-union SafeUnionBar {
-  boolean noInit;
+parcelable NameCollision {
+  String b;
   byte a;
-  long b;
-  hidl2aidl.test.SafeUnionBarInnerStructBar innerStructBar;
-  hidl2aidl.test.OnlyIn11 c;
-  String d;
-  float e;
-  double f;
-  hidl2aidl.test.FooFlag g;
-  hidl2aidl.test.Value h;
-  char i;
+  String c;
+  char d;
 }
