@@ -127,6 +127,7 @@ genrule {
 
 aidl_interface {
     name: "hidl2aidl_test_gen",
+    owner: "test",
     stability: "vintf",
     srcs: [":hidl2aidl_test_gen_aidl"],
     backend: {
@@ -138,7 +139,6 @@ aidl_interface {
         "-Werror",
         "-Wno-mixed-oneway",
     ],
-    versions: ["1"],
 }
 
 cc_test_library {
