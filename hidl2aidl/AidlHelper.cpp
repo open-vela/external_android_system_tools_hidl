@@ -80,7 +80,7 @@ std::optional<std::string> AidlHelper::getAidlFQName(const FQName& fqName) {
     return getAidlPackage(fqName) + "." + getAidlName(fqName);
 }
 
-void AidlHelper::importLocallyReferencedType(const Type& type, std::set<std::string>* imports) {
+void AidlHelper::importLocallyReferencedType(const Type& type, std::set<FQName>* imports) {
     if (type.isArray()) {
         return importLocallyReferencedType(*static_cast<const ArrayType*>(&type)->getElementType(),
                                            imports);
@@ -92,11 +92,7 @@ void AidlHelper::importLocallyReferencedType(const Type& type, std::set<std::str
 
     if (!type.isNamedType()) return;
     const NamedType& namedType = *static_cast<const NamedType*>(&type);
-
-    std::optional<std::string> import = AidlHelper::getAidlFQName(namedType.fqName());
-    if (import) {
-        imports->insert(import.value());
-    }
+    imports->insert(namedType.fqName());
 }
 
 // This tries iterating over the HIDL AST which is a bit messy because
@@ -109,7 +105,7 @@ void AidlHelper::emitFileHeader(
     AidlHelper::emitFileHeader(out);
     out << "package " << getAidlPackage(type.fqName()) << ";\n\n";
 
-    std::set<std::string> imports;
+    std::set<FQName> imports;
 
     // Import all the defined types since they will now be in a different file
     if (type.isScope()) {
@@ -153,8 +149,17 @@ void AidlHelper::emitFileHeader(
         }
     }
 
-    for (const std::string& import : imports) {
-        out << "import " << import << ";\n";
+    const FQName& relativeTo = type.fqName();
+    for (const auto& fqName : imports) {
+        // Import all the defined types since they will now be in a different file.
+        // No need to import types from different packages because they're referenced with FQName.
+        // See AidlHelper::getAidlType()
+        if (getAidlPackage(relativeTo) != getAidlPackage(fqName)) continue;
+
+        std::optional<std::string> import = AidlHelper::getAidlFQName(fqName);
+        if (import) {
+            out << "import " << import.value() << ";\n";
+        }
     }
 
     if (imports.size() > 0) {
