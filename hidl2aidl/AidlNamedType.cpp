@@ -70,6 +70,7 @@ static void emitEnumAidlDefinition(Formatter& out, const EnumType& enumType) {
             out << ",\n";
         };
     });
+    out << "\n";
 }
 
 static void emitCompoundTypeAidlDefinition(
@@ -101,7 +102,7 @@ static void emitCompoundTypeAidlDefinition(
             out << aidlType << " " << fieldWithVersion.field->name() << ";\n";
         }
     });
-    out << "\n\n";
+    out << "\n";
 }
 
 // TODO: Enum/Typedef should just emit to hidl-error.log or similar
