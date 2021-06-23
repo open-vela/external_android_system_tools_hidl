@@ -135,6 +135,8 @@ aidl_interface {
             sdk_version: "module_current",
         },
     },
+    // This interface is only for use with tests.
+    owner: "test",
     flags: [
         "-Werror",
         "-Wno-mixed-oneway",
