@@ -1340,6 +1340,7 @@ var allAospHidlInterfaces = map[string]bool{
 	"android.hardware.tests.inheritance@1.0":            true,
 	"android.hardware.tests.lazy@1.0":                   true,
 	"android.hardware.tests.lazy@1.1":                   true,
+	"android.hardware.tests.lazy_cb@1.0":                true,
 	"android.hardware.tests.libhwbinder@1.0":            true,
 	"android.hardware.tests.memory@1.0":                 true,
 	"android.hardware.tests.memory@2.0":                 true,
