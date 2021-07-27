@@ -149,7 +149,7 @@ cc_test_library {
     ],
     shared_libs: [
         "hidl2aidl_test_gen-V1-cpp",
-        "hidl2aidl_test_gen-V1-ndk_platform",
+        "hidl2aidl_test_gen-V1-ndk",
         "libbinder",
         "libbinder_ndk",
         "libutils",
@@ -180,7 +180,7 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "hidl2aidl_test_gen-V1-ndk_platform",
+        "hidl2aidl_test_gen-V1-ndk",
         "hidl2aidl.test@1.0",
         "hidl2aidl.test@1.1",
         "hidl2aidl.test@1.2",
