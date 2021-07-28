@@ -18,6 +18,7 @@
 import os
 import subprocess
 import unittest
+import time
 
 def run_cmd(cmd, ignore_error=False):
     print("Running command:", cmd)
@@ -42,6 +43,7 @@ def make_test(client, server):
             cleanup(client)
             cleanup(server)
             run_cmd("adb shell \"( %s %s -s ) </dev/null >/dev/null 2>&1 &\"" % (env, server))
+            time.sleep(2)
             run_cmd("adb shell %s %s -c" % (env, client))
         finally:
             cleanup(client)
