@@ -340,7 +340,6 @@ void AidlHelper::emitAidl(
                      out << wrappedOutput;
                  });
     });
-    out << "\n";
 }
 
 }  // namespace android
