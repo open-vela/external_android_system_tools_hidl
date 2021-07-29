@@ -127,7 +127,6 @@ genrule {
 
 aidl_interface {
     name: "hidl2aidl_test_gen",
-    owner: "test",
     stability: "vintf",
     srcs: [":hidl2aidl_test_gen_aidl"],
     backend: {
@@ -135,6 +134,8 @@ aidl_interface {
             sdk_version: "module_current",
         },
     },
+    // This interface is only for use with tests.
+    owner: "test",
     flags: [
         "-Werror",
         "-Wno-mixed-oneway",
@@ -149,7 +150,7 @@ cc_test_library {
     ],
     shared_libs: [
         "hidl2aidl_test_gen-V1-cpp",
-        "hidl2aidl_test_gen-V1-ndk_platform",
+        "hidl2aidl_test_gen-V1-ndk",
         "libbinder",
         "libbinder_ndk",
         "libutils",
@@ -180,7 +181,7 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "hidl2aidl_test_gen-V1-ndk_platform",
+        "hidl2aidl_test_gen-V1-ndk",
         "hidl2aidl.test@1.0",
         "hidl2aidl.test@1.1",
         "hidl2aidl.test@1.2",

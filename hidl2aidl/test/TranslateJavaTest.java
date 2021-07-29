@@ -21,6 +21,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 
 import hidl2aidl.test.Translate;
+import java.util.ArrayList;
 import org.junit.Test;
 import org.junit.runners.JUnit4;
 
@@ -232,6 +233,51 @@ public class TranslateJavaTest {
             assertThat("Unsafe conversion between signed and unsigned scalars for field: in.i()",
                     is(message));
         }
+    }
+
+    @Test
+    public void SafeUnionBarVecByte() {
+        hidl2aidl.test.SafeUnionBar dest;
+        hidl2aidl.test.V1_2.SafeUnionBar source = new hidl2aidl.test.V1_2.SafeUnionBar();
+        source.j(new ArrayList<Byte>());
+        source.j().add((byte) 12);
+        source.j().add((byte) 6);
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.j().get(0), is((byte) dest.getJ()[0]));
+        assertThat(source.j().get(1), is((byte) dest.getJ()[1]));
+    }
+
+    @Test
+    public void SafeUnionBarVecLong() {
+        hidl2aidl.test.SafeUnionBar dest;
+        hidl2aidl.test.V1_2.SafeUnionBar source = new hidl2aidl.test.V1_2.SafeUnionBar();
+        source.k(new ArrayList<Integer>());
+        source.k().add(hidl2aidl.test.Value.A);
+        source.k().add(hidl2aidl.test.Value.B);
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.k().get(0), is(dest.getK()[0]));
+        assertThat(source.k().get(1), is(dest.getK()[1]));
+    }
+
+    @Test
+    public void SafeUnionBarArrayByte() {
+        hidl2aidl.test.SafeUnionBar dest;
+        hidl2aidl.test.V1_2.SafeUnionBar source = new hidl2aidl.test.V1_2.SafeUnionBar();
+        source.l(new byte[2]);
+        source.l()[0] = (byte) 12;
+        source.l()[1] = (byte) 6;
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.l()[0], is(dest.getL()[0]));
+        assertThat(source.l()[1], is(dest.getL()[1]));
+    }
+
+    @Test
+    public void SafeUnionBarRepeatedFloat() {
+        hidl2aidl.test.SafeUnionBar dest;
+        hidl2aidl.test.V1_2.SafeUnionBar source = new hidl2aidl.test.V1_2.SafeUnionBar();
+        source.m(3.5f);
+        dest = Translate.h2aTranslate(source);
+        assertThat(source.m(), is(dest.getM()));
     }
 
     @Test
