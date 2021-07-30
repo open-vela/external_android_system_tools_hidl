@@ -226,6 +226,8 @@ static void emitBuildFile(Formatter& out, const FQName& fqName, std::vector<FQNa
     out << "        cpp: {\n";
     out << "            // FIXME should this be disabled?\n";
     out << "            // prefer NDK backend which can be used anywhere\n";
+    out << "            // If you disable this, you also need to delete the C++\n";
+    out << "            // translate code.\n";
     out << "            enabled: true,\n";
     out << "        },\n";
     out << "        java: {\n";
