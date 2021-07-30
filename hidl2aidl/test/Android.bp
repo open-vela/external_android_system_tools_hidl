@@ -127,6 +127,7 @@ genrule {
 
 aidl_interface {
     name: "hidl2aidl_test_gen",
+    owner: "test",
     stability: "vintf",
     srcs: [":hidl2aidl_test_gen_aidl"],
     backend: {
@@ -134,8 +135,6 @@ aidl_interface {
             sdk_version: "module_current",
         },
     },
-    // This interface is only for use with tests.
-    owner: "test",
     flags: [
         "-Werror",
         "-Wno-mixed-oneway",

@@ -23,7 +23,6 @@
 #include <regex>
 #include <sstream>
 
-#include <android-base/hex.h>
 #include <android-base/logging.h>
 #include <openssl/sha.h>
 
@@ -66,8 +65,17 @@ static std::vector<uint8_t> sha256File(const std::string& path) {
 
 Hash::Hash(const std::string& path) : mPath(path), mHash(sha256File(path)) {}
 
+std::string Hash::hexString(const std::vector<uint8_t>& hash) {
+    std::ostringstream s;
+    s << std::hex << std::setfill('0');
+    for (uint8_t i : hash) {
+        s << std::setw(2) << static_cast<int>(i);
+    }
+    return s.str();
+}
+
 std::string Hash::hexString() const {
-    return android::base::HexString(mHash.data(), mHash.size());
+    return hexString(mHash);
 }
 
 const std::vector<uint8_t>& Hash::raw() const {
