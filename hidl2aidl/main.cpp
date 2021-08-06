@@ -173,7 +173,7 @@ static void emitAidlSharedLibs(Formatter& out, FQName fqName, AidlBackend backen
     if (backend == AidlBackend::NDK) {
         out << "        \"libbinder_ndk\",\n";
         out << "        \"libhidlbase\",\n";
-        out << "        \"" << AidlHelper::getAidlPackage(fqName) << "-V1-ndk_platform\",\n";
+        out << "        \"" << AidlHelper::getAidlPackage(fqName) << "-V1-ndk\",\n";
     } else if (backend == AidlBackend::CPP) {
         out << "        \"libbinder\",\n";
         out << "        \"libhidlbase\",\n";
