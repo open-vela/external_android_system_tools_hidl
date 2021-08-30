@@ -820,7 +820,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			"libhidladapter",
 		}, wrap("", dependencies, "-adapter-helper"), cppDependencies, libraryIfExists),
 		Export_generated_headers: []string{name.adapterHelperHeadersName()},
-		Group_static_libs:        proptools.BoolPtr(true),
 	})
 	mctx.CreateModule(hidlGenFactory, &nameProperties{
 		Name: proptools.StringPtr(name.adapterSourcesName()),
@@ -846,7 +845,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			"libhidladapter",
 			name.adapterHelperName(),
 		}, wrap("", dependencies, "-adapter-helper"), cppDependencies, libraryIfExists),
-		Group_static_libs: proptools.BoolPtr(true),
 	})
 
 	if shouldGenerateVts {

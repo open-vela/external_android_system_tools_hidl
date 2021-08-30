@@ -35,7 +35,6 @@ type ccProperties struct {
 	Recovery_available        *bool
 	Generated_sources         []string
 	Generated_headers         []string
-	Group_static_libs         *bool
 	Shared_libs               []string
 	Static_libs               []string
 	Export_shared_lib_headers []string
