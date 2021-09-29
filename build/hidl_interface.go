@@ -1161,6 +1161,9 @@ var allAospHidlInterfaces = map[string]bool{
 	"android.hardware.camera.metadata@3.4":              true,
 	"android.hardware.camera.metadata@3.5":              true,
 	"android.hardware.camera.metadata@3.6":              true,
+        // TODO: Remove metadata@3.8 after AIDL migration b/196432585
+	"android.hardware.camera.metadata@3.7":              true,
+	"android.hardware.camera.metadata@3.8":              true,
 	"android.hardware.camera.provider@2.4":              true,
 	"android.hardware.camera.provider@2.5":              true,
 	"android.hardware.camera.provider@2.6":              true,
