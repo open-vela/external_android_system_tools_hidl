@@ -69,7 +69,7 @@ static const std::string aidlTypePackage(const NamedType& type, AidlBackend back
     const std::string separator = (backend == AidlBackend::JAVA) ? "." : "::";
     return prefix +
            base::Join(base::Split(AidlHelper::getAidlPackage(type.fqName()), "."), separator) +
-           separator + AidlHelper::getAidlType(type, type.fqName());
+           separator + AidlHelper::getAidlType(type, type.fqName(), backend);
 }
 
 static void emitEnumStaticAssert(Formatter& out, const NamedType& namedType, AidlBackend backend) {
@@ -439,7 +439,7 @@ static void emitCppTranslateHeader(
         if (it == processedTypes.end() && !type->isEnum()) {
             continue;
         }
-        includes.insert(aidlIncludeFile(type, backend));
+        includes.insert(aidlIncludeFile(AidlHelper::getTopLevelType(type), backend));
         includes.insert(hidlIncludeFile(type));
     }
     out << base::Join(includes, "") << "\n\n";

@@ -58,7 +58,7 @@ TEST_F(Hidl2aidlTranslateTest, Outer) {
 }
 
 TEST_F(Hidl2aidlTranslateTest, OuterInner) {
-    aidl::hidl2aidl::test::OuterInner dest;
+    aidl::hidl2aidl::test::Outer::Inner dest;
     hidl2aidl::test::V1_0::Outer::Inner source;
     source.a = 12;
     ASSERT_TRUE(h2a::translate(source, &dest));
@@ -78,7 +78,7 @@ TEST_F(Hidl2aidlTranslateTest, NameCollision) {
 }
 
 TEST_F(Hidl2aidlTranslateTest, IFooBigStruct) {
-    aidl::hidl2aidl::test::IFooBigStruct dest;
+    aidl::hidl2aidl::test::IFoo::BigStruct dest;
     hidl2aidl::test::V1_1::IFoo::BigStruct source;
     source.type = 12;
     source.value = 16;
@@ -88,7 +88,7 @@ TEST_F(Hidl2aidlTranslateTest, IFooBigStruct) {
 }
 
 TEST_F(Hidl2aidlTranslateTest, IBarInner) {
-    aidl::hidl2aidl::test::IBarInner dest;
+    aidl::hidl2aidl::test::IBar::Inner dest;
     hidl2aidl::test::V1_0::IBar::Inner source;
     source.a = 0x70000000;
     ASSERT_TRUE(h2a::translate(source, &dest));
@@ -96,7 +96,7 @@ TEST_F(Hidl2aidlTranslateTest, IBarInner) {
 }
 
 TEST_F(Hidl2aidlTranslateTest, UnsignedToSignedTooLarge) {
-    aidl::hidl2aidl::test::IBarInner dest;
+    aidl::hidl2aidl::test::IBar::Inner dest;
     hidl2aidl::test::V1_0::IBar::Inner source;
     // source.a is uint32_t, dest.a is int32_t
     source.a = 0xf0000000;

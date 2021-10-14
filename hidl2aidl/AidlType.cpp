@@ -46,7 +46,8 @@ std::optional<const ReplacedTypeInfo> AidlHelper::getAidlReplacedType(const FQNa
     return std::nullopt;
 }
 
-std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo) {
+std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo,
+                                    AidlBackend backend) {
     if (type.isVector()) {
         const VectorType& vec = static_cast<const VectorType&>(type);
         return getAidlType(*vec.getElementType(), relativeTo) + "[]";
@@ -56,7 +57,7 @@ std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo) 
     } else if (type.isNamedType()) {
         const NamedType& namedType = static_cast<const NamedType&>(type);
         if (getAidlPackage(relativeTo) == getAidlPackage(namedType.fqName())) {
-            return getAidlName(namedType.fqName());
+            return getAidlName(namedType.fqName(), backend);
         } else {
             std::optional<const ReplacedTypeInfo> type = getAidlReplacedType(namedType.fqName());
             if (type) {
