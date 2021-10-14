@@ -372,7 +372,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    // This is the list of all types which should be converted
+    // This is the list of all targets which should be converted
     std::vector<FQName> targets;
     for (FQName version = getLowestExistingFqName(coordinator, fqName);
          version.getPackageMinorVersion() <= fqName.getPackageMinorVersion();
@@ -459,7 +459,11 @@ int main(int argc, char** argv) {
     // emitAidl. The interfaces are consolidating methods from their typechains
     // and the composite types are being flattened.
     for (const auto& namedType : namedTypesInPackage) {
-        AidlHelper::emitAidl(*namedType, coordinator, processedTypesInPackage);
+        // Nested types do not get their own files
+        if (namedType->fqName().names().size() > 1) continue;
+        Formatter out =
+                AidlHelper::getFileWithHeader(*namedType, coordinator, processedTypesInPackage);
+        AidlHelper::emitAidl(*namedType, out, processedTypesInPackage);
     }
 
     err << "END OF LOG\n";

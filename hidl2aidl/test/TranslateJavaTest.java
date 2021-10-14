@@ -65,7 +65,7 @@ public class TranslateJavaTest {
 
     @Test
     public void OuterInner() {
-        hidl2aidl.test.OuterInner dest;
+        hidl2aidl.test.Outer.Inner dest;
         hidl2aidl.test.V1_0.Outer.Inner source = new hidl2aidl.test.V1_0.Outer.Inner();
         source.a = 12;
         dest = Translate.h2aTranslate(source);
@@ -87,7 +87,7 @@ public class TranslateJavaTest {
 
     @Test
     public void IFooBigStruct() {
-        hidl2aidl.test.IFooBigStruct dest;
+        hidl2aidl.test.IFoo.BigStruct dest;
         hidl2aidl.test.V1_1.IFoo.BigStruct source = new hidl2aidl.test.V1_1.IFoo.BigStruct();
         source.type = 12;
         source.value = 16;
@@ -98,7 +98,7 @@ public class TranslateJavaTest {
 
     @Test
     public void IBarInner() {
-        hidl2aidl.test.IBarInner dest;
+        hidl2aidl.test.IBar.Inner dest;
         hidl2aidl.test.V1_0.IBar.Inner source = new hidl2aidl.test.V1_0.IBar.Inner();
         source.a = 0x70000000;
         dest = Translate.h2aTranslate(source);
@@ -107,7 +107,7 @@ public class TranslateJavaTest {
 
     @Test
     public void UnsignedToSignedTooLarge() {
-        hidl2aidl.test.IBarInner dest;
+        hidl2aidl.test.IBar.Inner dest;
         hidl2aidl.test.V1_0.IBar.Inner source = new hidl2aidl.test.V1_0.IBar.Inner();
         // source.a is uint32_t, dest.a is int32_t
         source.a = -1;
