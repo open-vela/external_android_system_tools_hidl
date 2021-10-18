@@ -1227,7 +1227,6 @@ var allAospHidlInterfaces = map[string]bool{
 	"android.hardware.camera.device@3.5":                true,
 	"android.hardware.camera.device@3.6":                true,
 	"android.hardware.camera.device@3.7":                true,
-	"android.hardware.camera.device@3.8":                true,
 	"android.hardware.camera.metadata@3.2":              true,
 	"android.hardware.camera.metadata@3.3":              true,
 	"android.hardware.camera.metadata@3.4":              true,
