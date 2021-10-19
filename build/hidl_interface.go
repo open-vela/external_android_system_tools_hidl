@@ -1213,6 +1213,7 @@ var allAospHidlInterfaces = map[string]bool{
 	"android.hardware.bluetooth.a2dp@1.0":               true,
 	"android.hardware.bluetooth.audio@2.0":              true,
 	"android.hardware.bluetooth.audio@2.1":              true,
+	"android.hardware.bluetooth.audio@2.2":              true,
 	"android.hardware.boot@1.0":                         true,
 	"android.hardware.boot@1.1":                         true,
 	"android.hardware.boot@1.2":                         true,
