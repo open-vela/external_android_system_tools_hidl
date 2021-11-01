@@ -112,21 +112,6 @@ func (f *fqName) javaConstantsName() string {
 func (f *fqName) javaConstantsSourcesName() string {
 	return f.sanitizedString() + "-java-constants_gen_java"
 }
-func (f *fqName) adapterName() string {
-	return f.string() + "-adapter"
-}
-func (f *fqName) adapterSourcesName() string {
-	return f.string() + "-adapter_genc++"
-}
-func (f *fqName) adapterHelperName() string {
-	return f.string() + "-adapter-helper"
-}
-func (f *fqName) adapterHelperSourcesName() string {
-	return f.string() + "-adapter-helper_genc++"
-}
-func (f *fqName) adapterHelperHeadersName() string {
-	return f.string() + "-adapter-helper_genc++_headers"
-}
 
 func (f *fqName) vtsSpecName() string {
 	return f.string() + "-vts.spec"

@@ -514,7 +514,7 @@ type hidlInterfaceProperties struct {
 	// "//apex_available:platform" refers to non-APEX partitions like "system.img"
 	//
 	// Note, this only applies to C++ libs, Java libs, and Java constant libs. It
-	// does  not apply to VTS targets/adapter targets/fuzzers since these components
+	// does  not apply to VTS targets targets/fuzzers since these components
 	// should not be shipped on device.
 	Apex_available []string
 
@@ -773,79 +773,6 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 			Min_sdk_version: getMinSdkVersion(name.string()),
 		})
 	}
-
-	mctx.CreateModule(hidlGenFactory, &nameProperties{
-		Name: proptools.StringPtr(name.adapterHelperSourcesName()),
-	}, &hidlGenProperties{
-		Language:   "c++-adapter-sources",
-		FqName:     name.string(),
-		Root:       i.properties.Root,
-		Interfaces: i.properties.Interfaces,
-		Inputs:     i.properties.Srcs,
-		Outputs:    wrap(name.dir()+"A", concat(interfaces, types), ".cpp"),
-	})
-	mctx.CreateModule(hidlGenFactory, &nameProperties{
-		Name: proptools.StringPtr(name.adapterHelperHeadersName()),
-	}, &hidlGenProperties{
-		Language:   "c++-adapter-headers",
-		FqName:     name.string(),
-		Root:       i.properties.Root,
-		Interfaces: i.properties.Interfaces,
-		Inputs:     i.properties.Srcs,
-		Outputs:    wrap(name.dir()+"A", concat(interfaces, types), ".h"),
-	})
-
-	mctx.CreateModule(cc.LibraryFactory, &ccProperties{
-		Name:              proptools.StringPtr(name.adapterHelperName()),
-		Vendor_available:  vendorAvailable,
-		Odm_available:     i.properties.Odm_available,
-		Product_available: productAvailable,
-		Defaults:          []string{"hidl-module-defaults"},
-		Generated_sources: []string{name.adapterHelperSourcesName()},
-		Generated_headers: []string{name.adapterHelperHeadersName()},
-		Shared_libs: []string{
-			"libbase",
-			"libcutils",
-			"libhidlbase",
-			"liblog",
-			"libutils",
-		},
-		Static_libs: concat([]string{
-			"libhidladapter",
-		}, wrap("", dependencies, "-adapter-helper"), cppDependencies, libraryIfExists),
-		Export_shared_lib_headers: []string{
-			"libhidlbase",
-		},
-		Export_static_lib_headers: concat([]string{
-			"libhidladapter",
-		}, wrap("", dependencies, "-adapter-helper"), cppDependencies, libraryIfExists),
-		Export_generated_headers: []string{name.adapterHelperHeadersName()},
-	})
-	mctx.CreateModule(hidlGenFactory, &nameProperties{
-		Name: proptools.StringPtr(name.adapterSourcesName()),
-	}, &hidlGenProperties{
-		Language:   "c++-adapter-main",
-		FqName:     name.string(),
-		Root:       i.properties.Root,
-		Interfaces: i.properties.Interfaces,
-		Inputs:     i.properties.Srcs,
-		Outputs:    []string{"main.cpp"},
-	})
-	mctx.CreateModule(cc.TestFactory, &ccProperties{
-		Name:              proptools.StringPtr(name.adapterName()),
-		Generated_sources: []string{name.adapterSourcesName()},
-		Shared_libs: []string{
-			"libbase",
-			"libcutils",
-			"libhidlbase",
-			"liblog",
-			"libutils",
-		},
-		Static_libs: concat([]string{
-			"libhidladapter",
-			name.adapterHelperName(),
-		}, wrap("", dependencies, "-adapter-helper"), cppDependencies, libraryIfExists),
-	})
 
 	if shouldGenerateVts {
 		vtsSpecs := concat(wrap(name.dir(), interfaces, ".vts"), wrap(name.dir(), types, ".vts"))
