@@ -551,6 +551,11 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		vendorAvailable = proptools.BoolPtr(true)
 	}
 
+	var libraryIfExists []string
+	if shouldGenerateLibrary {
+		libraryIfExists = []string{name.string()}
+	}
+
 	// TODO(b/69002743): remove filegroups
 	mctx.CreateModule(android.FileGroupFactory, &fileGroupProperties{
 		Name: proptools.StringPtr(name.fileGroupName()),
@@ -922,15 +927,11 @@ var allAospHidlInterfaces = map[string]bool{
 	"android.hardware.camera.device@3.5":                true,
 	"android.hardware.camera.device@3.6":                true,
 	"android.hardware.camera.device@3.7":                true,
-	"android.hardware.camera.device@3.8":                true,
 	"android.hardware.camera.metadata@3.2":              true,
 	"android.hardware.camera.metadata@3.3":              true,
 	"android.hardware.camera.metadata@3.4":              true,
 	"android.hardware.camera.metadata@3.5":              true,
 	"android.hardware.camera.metadata@3.6":              true,
-        // TODO: Remove metadata@3.8 after AIDL migration b/196432585
-	"android.hardware.camera.metadata@3.7":              true,
-	"android.hardware.camera.metadata@3.8":              true,
 	"android.hardware.camera.provider@2.4":              true,
 	"android.hardware.camera.provider@2.5":              true,
 	"android.hardware.camera.provider@2.6":              true,
