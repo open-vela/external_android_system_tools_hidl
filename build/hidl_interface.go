@@ -551,6 +551,11 @@ This corresponds to the "-r%s:<some path>" option that would be passed into hidl
 		vendorAvailable = proptools.BoolPtr(true)
 	}
 
+	var libraryIfExists []string
+	if shouldGenerateLibrary {
+		libraryIfExists = []string{name.string()}
+	}
+
 	// TODO(b/69002743): remove filegroups
 	mctx.CreateModule(android.FileGroupFactory, &fileGroupProperties{
 		Name: proptools.StringPtr(name.fileGroupName()),
