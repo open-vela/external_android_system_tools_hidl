@@ -53,11 +53,11 @@ std::string AidlHelper::translateHeaderFile(const FQName& fqName, AidlBackend ba
 std::string AidlHelper::translateSourceFile(const FQName& fqName, AidlBackend backend) {
     switch (backend) {
         case AidlBackend::NDK:
-            return AidlHelper::getAidlPackagePath(fqName) + "/translate-ndk.cpp";
+            return "translate/" + AidlHelper::getAidlPackagePath(fqName) + "/translate-ndk.cpp";
         case AidlBackend::CPP:
-            return AidlHelper::getAidlPackagePath(fqName) + "/translate-cpp.cpp";
+            return "translate/" + AidlHelper::getAidlPackagePath(fqName) + "/translate-cpp.cpp";
         case AidlBackend::JAVA:
-            return AidlHelper::getAidlPackagePath(fqName) + "/Translate.java";
+            return "translate/" + AidlHelper::getAidlPackagePath(fqName) + "/Translate.java";
         default:
             LOG(FATAL) << "Unexpected AidlBackend value";
             return "";
