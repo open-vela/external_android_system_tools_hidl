@@ -80,8 +80,8 @@ genrule {
     name: "hidl2aidl_translate_ndk_test_gen_src",
     defaults: ["hidl2aidl_test_gen_defaults"],
     out: [
-        "hidl2aidl/test/translate-ndk.cpp",
-        "hidl2aidl/test/extension/translate-ndk.cpp",
+        "translate/hidl2aidl/test/translate-ndk.cpp",
+        "translate/hidl2aidl/test/extension/translate-ndk.cpp",
     ],
 }
 
@@ -98,8 +98,8 @@ genrule {
     name: "hidl2aidl_translate_cpp_test_gen_src",
     defaults: ["hidl2aidl_test_gen_defaults"],
     out: [
-        "hidl2aidl/test/translate-cpp.cpp",
-        "hidl2aidl/test/extension/translate-cpp.cpp",
+        "translate/hidl2aidl/test/translate-cpp.cpp",
+        "translate/hidl2aidl/test/extension/translate-cpp.cpp",
     ],
 }
 
@@ -116,8 +116,8 @@ genrule {
     name: "hidl2aidl_translate_java_test_gen_src",
     defaults: ["hidl2aidl_test_gen_defaults"],
     out: [
-        "hidl2aidl/test/Translate.java",
-        "hidl2aidl/test/extension/Translate.java",
+        "translate/hidl2aidl/test/Translate.java",
+        "translate/hidl2aidl/test/extension/Translate.java",
     ],
 }
 
