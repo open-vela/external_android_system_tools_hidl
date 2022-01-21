@@ -20,10 +20,8 @@
 package hidl2aidl.test;
 @VintfStability
 parcelable ArrayFoo {
-  byte[12] a;
-  int[12] b;
-  hidl2aidl.test.Value[12] c;
-  String[2] d;
-  byte[0] e;
-  byte[28] f;
+  byte[] a;
+  int[] b;
+  hidl2aidl.test.Value[] c;
+  String[] d;
 }
