@@ -245,12 +245,7 @@ static void containerTranslation(Formatter& out, const FieldWithVersion& field,
     const std::string inputAccess = "in." + field.fullName +
                                     (parent->style() == CompoundType::STYLE_SAFE_UNION ? "()" : "");
     if (field.field->type().isArray()) {
-        auto fieldArray = static_cast<const ArrayType*>(field.field->get());
-        if (fieldArray->getConstantExpressions()[0]->castSizeT() == 0) {
-            // Nothing to translate for 0 sized arrays!
-            return;
-        }
-        elementType = fieldArray->getElementType();
+        elementType = static_cast<const ArrayType*>(field.field->get())->getElementType();
         javaSizeAccess = inputAccess + ".length";
         javaElementAccess = "[i]";
         cppSize = "sizeof(" + inputAccess + ")/sizeof(" + inputAccess + "[0])";
@@ -317,21 +312,10 @@ static void containerTranslation(Formatter& out, const FieldWithVersion& field,
                 } else {
                     out << field.field->name();
                 }
-                // Arrays with explicit size use std::array instead of std::vector
-                if (field.field->type().isArray() &&
-                    static_cast<const ArrayType*>(field.field->get())
-                                    ->getConstantExpressions()
-                                    .size() > 0) {
-                    out << "[i] = "
-                        << wrapCppSource(inputAccessElement, *elementType, parent->fqName(),
-                                         backend)
-                        << ";\n";
-                } else {
-                    out << ".push_back("
-                        << wrapCppSource(inputAccessElement, *elementType, parent->fqName(),
-                                         backend)
-                        << ");\n";
-                }
+
+                out << ".push_back("
+                    << wrapCppSource(inputAccessElement, *elementType, parent->fqName(), backend)
+                    << ");\n";
             });
             out << "}\n";
         });
