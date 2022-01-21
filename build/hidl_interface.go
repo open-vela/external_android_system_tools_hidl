@@ -881,6 +881,7 @@ var allAospHidlInterfaces = map[string]bool{
 	"android.hardware.audio@5.0":                        true,
 	"android.hardware.audio@6.0":                        true,
 	"android.hardware.audio@7.0":                        true,
+	"android.hardware.audio@7.1":                        true,
 	"android.hardware.audio.common@2.0":                 true,
 	"android.hardware.audio.common@4.0":                 true,
 	"android.hardware.audio.common@5.0":                 true,
