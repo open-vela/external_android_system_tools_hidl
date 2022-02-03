@@ -33,7 +33,7 @@ union SafeUnionBar {
   char i;
   byte[] j;
   hidl2aidl.test.Value[] k;
-  byte[] l;
+  byte[2] l;
   float m;
   @VintfStability
   parcelable InnerStructBar {
