@@ -241,6 +241,7 @@ TEST_F(Hidl2aidlTranslateTest, ArrayFoo) {
     hidl2aidl::test::V1_2::ArrayFoo source;
     source.a[0] = 42;
     source.a[1] = 8;
+    ASSERT_EQ(sizeof(source.e), 0u);
     ASSERT_TRUE(h2a::translate(source, &dest));
     ASSERT_EQ(12u, dest.a.size());
     EXPECT_EQ(source.a[0], dest.a[0]);
