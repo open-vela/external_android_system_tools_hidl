@@ -286,6 +286,7 @@ public class TranslateJavaTest {
         hidl2aidl.test.V1_2.ArrayFoo source = new hidl2aidl.test.V1_2.ArrayFoo();
         source.a[0] = 42;
         source.a[0] = 42;
+        assertThat(source.e.length, is(0));
         dest = Translate.h2aTranslate(source);
         assertThat(source.a[0], is(dest.a[0]));
     }

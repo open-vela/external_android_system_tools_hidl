@@ -53,7 +53,13 @@ std::string AidlHelper::getAidlType(const Type& type, const FQName& relativeTo,
         return getAidlType(*vec.getElementType(), relativeTo) + "[]";
     } else if (type.isArray()) {
         const ArrayType& arr = static_cast<const ArrayType&>(type);
-        return getAidlType(*arr.getElementType(), relativeTo) + "[]";
+        auto sizes = arr.getConstantExpressions();
+        CHECK(sizes.size() > 0) << "Failed to get array dimensions for " << arr.definedName();
+        std::string typeStr = getAidlType(*arr.getElementType(), relativeTo);
+        for (const auto& size : sizes) {
+            typeStr += "[" + size->value() + "]";
+        }
+        return typeStr;
     } else if (type.isNamedType()) {
         const NamedType& namedType = static_cast<const NamedType&>(type);
         if (getAidlPackage(relativeTo) == getAidlPackage(namedType.fqName())) {
