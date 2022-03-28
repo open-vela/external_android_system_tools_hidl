@@ -25,6 +25,7 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
+#include <android-base/properties.h>
 #include <android-base/unique_fd.h>
 #include <android/hardware/tests/lazy/1.1/ILazy.h>
 #include <android/hardware/tests/lazy_cb/1.0/ILazyCb.h>
@@ -101,7 +102,8 @@ class HidlLazyTest : public HidlLazyTestBase {
         std::cout << "Waiting " << SHUTDOWN_WAIT_TIME << " seconds before checking that the "
                   << "service has shut down." << std::endl;
         IPCThreadState::self()->flushCommands();
-        sleep(SHUTDOWN_WAIT_TIME);
+        int timeout_multiplier = android::base::GetIntProperty("ro.hw_timeout_multiplier", 1);
+        sleep(SHUTDOWN_WAIT_TIME * timeout_multiplier);
         for (const auto& instance : gInstances) {
             ASSERT_FALSE(isServiceRunning(instance))
                     << "Service failed to shutdown " << instance.string();
@@ -143,7 +145,8 @@ static void testWithTimes(const std::vector<size_t>& waitTimes, const FqInstance
         IPCThreadState::self()->flushCommands();
         std::cout << "Thread for " << instance.string() << " waiting " << sleepTime
                   << " while not holding HAL." << std::endl;
-        sleep(sleepTime);
+        int timeout_multiplier = android::base::GetIntProperty("ro.hw_timeout_multiplier", 1);
+        sleep(sleepTime * timeout_multiplier);
         sp<IBase> hal = getHal(instance);
         ASSERT_NE(hal.get(), nullptr);
         ASSERT_TRUE(hal->ping().isOk());
@@ -230,7 +233,8 @@ TEST_F(HidlLazyCbTest, ActiveServicesCallbackTest) {
               << " seconds before checking whether the "
               << "service is still running." << std::endl;
 
-    sleep(CALLBACK_SHUTDOWN_WAIT_TIME);
+    int timeout_multiplier = android::base::GetIntProperty("ro.hw_timeout_multiplier", 1);
+    sleep(CALLBACK_SHUTDOWN_WAIT_TIME * timeout_multiplier);
 
     ASSERT_FALSE(isServiceRunning(fqInstance)) << "Service failed to shut down.";
 }
