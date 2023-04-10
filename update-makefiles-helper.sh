@@ -108,8 +108,8 @@ function do_makefiles_update() {
     local root_arguments="$2"
     local package="$3"
     echo "Updating $package"
-    hidl-gen -O "$owner" -Landroidbp $root_arguments $package || {
-      echo "Command failed: hidl-gen -O \"$owner\" -Landroidbp $root_arguments $package";
+    hidl-gen -O "$owner" -o$(pwd) -Lc++-headers $root_arguments $package || {
+      echo "Command failed: hidl-gen -O \"$owner\" -Lc++-headers $root_arguments $package";
       return 1;
     }
   }
