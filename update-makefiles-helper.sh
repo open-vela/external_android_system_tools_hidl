@@ -91,6 +91,12 @@ function do_makefiles_update() {
     shift 2
   fi
 
+  local output_dir=$(pwd)
+  if [[ "$1" = "-o" ]]; then
+    output_dir="$2"
+    shift 2
+  fi
+
   local root_or_cwd=${ANDROID_BUILD_TOP%%/}${ANDROID_BUILD_TOP:+/}
 
   local current_package=$(package_root_to_package $1)
@@ -107,8 +113,9 @@ function do_makefiles_update() {
     local owner="$1"
     local root_arguments="$2"
     local package="$3"
+    local output_dir="$4"
     echo "Updating $package"
-    hidl-gen -O "$owner" -o$(pwd) -Lc++-headers $root_arguments $package || {
+    hidl-gen -O "$owner" -o$output_dir -Lc++-headers $root_arguments $package || {
       echo "Command failed: hidl-gen -O \"$owner\" -Lc++-headers $root_arguments $package";
       return 1;
     }
@@ -117,5 +124,5 @@ function do_makefiles_update() {
 
   echo "$packages" |\
       xargs -P $(get_num_processors) -I {} \
-      bash -c "__update_internal \"$owner\" \"$root_arguments\" \"{}\"" || return 1
+      bash -c "__update_internal \"$owner\" \"$root_arguments\" \"{}\" \"$output_dir\"" || return 1
 }
