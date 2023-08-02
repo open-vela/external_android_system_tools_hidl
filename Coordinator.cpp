@@ -958,7 +958,7 @@ bool Coordinator::MakeParentHierarchy(const std::string &path) {
             }
 
             int res = mkdir(partial.c_str(), kMode);
-            if (res < 0) {
+            if (res < 0 && errno != EEXIST) {
                 return false;
             }
         } else if (!S_ISDIR(st.st_mode)) {
