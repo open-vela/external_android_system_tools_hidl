@@ -47,7 +47,8 @@ CXXFLAGS += -Wall -Wextra
 CXXFLAGS += -O2
 CXXFLAGS += -pthread
 
-LDFLAGS = -static-libstdc++ -lc++abi -lssl -lcrypto
+LDFLAGS = -static-libstdc++ -lc++abi
+OPENSSLLIBS = -l:libcrypto.a -ldl
 
 CXXFLAGS += -I./
 CXXFLAGS += -Ihashing/include
@@ -144,7 +145,7 @@ OBJS = $(patsubst %.cpp,%.o,$(patsubst %.cc,%.o,$(CXXSRCS)))
 all: $(PROGNAME)
 
 $(PROGNAME): $(OBJS)
-	$(CC) $(CXXFLAGS) $(LDFLAGS) -o $(PROGNAME) $(OBJS)
+	$(CC) $(CXXFLAGS) $(LDFLAGS) -o $(PROGNAME) $(OBJS) $(OPENSSLLIBS)
 
 %.o: %.cpp
 	$(CC) $(CXXFLAGS) -c $< -o $@
